@@ -289,5 +289,5 @@ echo ""
 if [ "$AI_INIT" = true ]; then
   echo -e "${BLUE}Running AI-assisted configuration...${NC}"
   echo ""
-  "$PROJECT_ROOT/scripts/ralph/ralph-init.sh" --ai
+  "$PROJECT_ROOT/scripts/ralph/ralph-init.sh" --ai --force
 fi
