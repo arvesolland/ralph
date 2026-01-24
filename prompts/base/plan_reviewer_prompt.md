@@ -45,36 +45,70 @@ Then read the plan file at that path.
 Plans MUST follow this structure:
 
 ```markdown
-# [Plan Title]
+# Plan: [Plan Name]
 
-## Overview
-Brief description of what this plan accomplishes.
+## Context
+[Background, constraints, goals - everything needed to understand this work]
+
+---
+
+## Rules
+1. **Pick task:** First task (by number) where status ≠ `complete` and all `Requires` are `complete`
+2. **Subtasks are sequential.** Complete 1 before 2.
+3. **Task complete when:** All "Done when" + all subtasks checked → set Status: `complete`
+4. **Update file after each checkbox.**
+5. **New work found?** Add to Discovered section, continue current task.
+
+---
 
 ## Tasks
-- [ ] Task 1 (atomic, single commit)
-- [ ] Task 2 (atomic, single commit)
+
+### T1: [Task Title]
+> [One-line summary of why this task exists]
+
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] [Specific, testable criterion]
+
+**Subtasks:**
+1. [ ] [First subtask]
+2. [ ] [Second subtask]
+
+---
+
+## Discovered
+<!-- Add with D1, D2, etc. -->
 ```
 
 ### Task Requirements
-- Each task starts with `- [ ]`
-- Each task is atomic (one commit worth of work)
-- Each task is specific and actionable
-- NO vague tasks like "implement the feature" or "make it work"
-- NO compound tasks like "add X, Y, and Z"
+- Each task has T[n] numbering (T1, T2, T3...)
+- **Requires:** lists dependencies (— for none, or T1, T2, etc.)
+- **Status:** must be one of: `open`, `in_progress`, `blocked`, `complete`
+- **Done when:** specific, testable acceptance criteria
+- **Subtasks:** numbered for explicit ordering (1, 2, 3...)
+- Each subtask is atomic (one commit worth of work)
+- NO vague subtasks like "implement the feature" or "make it work"
+- NO compound subtasks like "add X, Y, and Z"
 
-### Optional but Recommended
-- `## Context` - Background info
-- `## Acceptance Criteria` - Testable outcomes
-- `## References` - Related files/specs
+### Required Sections
+- `## Context` - Background, constraints, goals
+- `## Rules` - Embedded rules for task selection
+- `## Tasks` - Task definitions with dependencies
+- `## Discovered` - Place for newly found work
 
 ## Your Review Process
 
 ### Step 0: Validate Plan Structure
 
 First, check if the plan follows the required structure:
-- Has a title (`# ...`)
-- Has `## Tasks` section with `- [ ]` checkboxes
-- Tasks are atomic and actionable
+- Has a title (`# Plan: ...`)
+- Has `## Context` section with background info
+- Has `## Rules` section with embedded task selection rules
+- Has `## Tasks` section with T1, T2, etc. task definitions
+- Each task has: Requires, Status, Done when, Subtasks
+- Has `## Discovered` section for newly found work
 
 If structure is wrong, **fix it first** before other review steps.
 
@@ -136,10 +170,13 @@ Red flags to look for:
 
 **Edit the plan file directly** with your improvements:
 
-- **Fix structure** - Ensure proper `## Tasks` section with `- [ ]` format
-- **Break down compound tasks** - One task = one commit
-- **Make vague tasks specific** - "Build auth" → "Add login endpoint with JWT"
-- **Simplify overly complex sections**
+- **Fix structure** - Ensure proper T1, T2 tasks with Requires, Status, Done when, Subtasks
+- **Set correct Status** - Use `blocked` if Requires has incomplete dependencies
+- **Break down compound subtasks** - One subtask = one commit
+- **Make vague subtasks specific** - "Build auth" → "Add login endpoint with JWT"
+- **Add missing Done when criteria** - Each task needs testable acceptance criteria
+- **Fix dependency ordering** - Ensure Requires fields are correct
+- **Simplify overly complex tasks**
 - **Remove unnecessary abstractions**
 - **Add missing security considerations**
 - **Align with codebase patterns**
