@@ -41,6 +41,7 @@ ACTION="work"
 LOOP_MODE=false
 ADD_FILE=""
 MAX_ITERATIONS=30
+CREATE_PR=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -69,6 +70,10 @@ while [[ $# -gt 0 ]]; do
       ACTION="next"
       shift
       ;;
+    --create-pr|--pr)
+      CREATE_PR=true
+      shift
+      ;;
     --help|-h)
       echo "Ralph Worker - File-based task queue"
       echo ""
@@ -87,6 +92,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --next, -n         Activate next pending plan"
       echo "  --loop, -l         Keep processing until no more plans"
       echo "  --max, -m N        Max iterations per plan (default: 30)"
+      echo "  --create-pr, --pr  Create PR via Claude Code after plan completion"
       echo "  --help, -h         Show this help"
       echo ""
       echo "Folder structure:"
@@ -286,6 +292,30 @@ do_work() {
   fi
 }
 
+# Create PR via Claude Code
+create_pr_with_claude() {
+  local plan_file="$1"
+
+  echo -e "${BLUE}Creating PR via Claude Code...${NC}"
+  echo ""
+
+  # Build prompt for Claude Code
+  local prompt="Create a pull request for the work completed in this branch.
+
+Read the completed plan file at: $plan_file
+
+Use the plan's Context section and completed tasks to write a clear PR description.
+The PR title should reflect the main goal from the plan.
+Include a summary of what was implemented based on the completed tasks.
+
+Create the PR targeting the base branch this feature branch was created from."
+
+  # Run Claude Code to create PR
+  echo "$prompt" | claude -p --dangerously-skip-permissions 2>&1 | tee /dev/stderr
+
+  echo ""
+}
+
 # Complete current plan and activate next
 do_complete() {
   ensure_dirs
@@ -297,9 +327,18 @@ do_complete() {
     return 1
   fi
 
+  # Store plan path before moving (for PR creation)
+  local plan_for_pr="$current_plan"
+
   echo -e "${GREEN}Completing:${NC} $(basename "$current_plan")"
   local completed_dir=$(complete_plan "$current_plan")
   echo "  Archived to: $completed_dir"
+
+  # Create PR if flag is set
+  if [ "$CREATE_PR" = true ]; then
+    echo ""
+    create_pr_with_claude "$completed_dir/plan.md"
+  fi
 
   # Check for next plan
   local pending_count=$(count_files "$PENDING_DIR")

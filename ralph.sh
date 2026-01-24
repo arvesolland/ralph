@@ -23,6 +23,7 @@ PLAN_FILE=""
 MAX_ITERATIONS=30
 REVIEW_PLAN=false
 REVIEW_PASSES=2
+CREATE_PR=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -39,6 +40,10 @@ while [[ $# -gt 0 ]]; do
       MAX_ITERATIONS="$2"
       shift 2
       ;;
+    --create-pr|--pr)
+      CREATE_PR=true
+      shift
+      ;;
     --help|-h)
       echo "Ralph - AI Agent for implementing plans"
       echo ""
@@ -52,6 +57,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --review-plan, -r      Run plan reviewer first to optimize the plan"
       echo "  --review-passes N      Number of review passes (default: 2)"
       echo "  --max, -m N            Max worker iterations (default: 30)"
+      echo "  --create-pr, --pr      Create PR via Claude Code after completion"
       echo "  --help, -h             Show this help message"
       echo ""
       echo "Examples:"
@@ -208,7 +214,11 @@ EOF
     if [[ "$PLAN_PATH" == *"/.ralph/plans/current/"* ]]; then
       echo ""
       echo "Plan is in queue - triggering completion workflow..."
-      "$SCRIPT_DIR/ralph-worker.sh" --complete
+      if [ "$CREATE_PR" = true ]; then
+        "$SCRIPT_DIR/ralph-worker.sh" --complete --create-pr
+      else
+        "$SCRIPT_DIR/ralph-worker.sh" --complete
+      fi
     fi
 
     exit 0
