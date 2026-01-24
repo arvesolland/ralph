@@ -26,6 +26,7 @@ NC='\033[0m'
 # Parse arguments
 AI_INIT=false
 LOCAL_INSTALL=false
+FORCE_INSTALL=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -37,6 +38,10 @@ while [[ $# -gt 0 ]]; do
       LOCAL_INSTALL=true
       shift
       ;;
+    --force|-f)
+      FORCE_INSTALL=true
+      shift
+      ;;
     --help|-h)
       echo "Ralph Installer"
       echo ""
@@ -46,6 +51,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  --ai       Run AI-assisted configuration after install"
       echo "  --local    Install from local directory (for development)"
+      echo "  --force    Overwrite existing config files"
       echo "  --help     Show this help message"
       exit 0
       ;;
@@ -133,7 +139,7 @@ done
 # Create config stubs if they don't exist
 echo -e "${BLUE}Creating configuration files...${NC}"
 
-if [ ! -f "$PROJECT_ROOT/.ralph/config.yaml" ]; then
+if [ ! -f "$PROJECT_ROOT/.ralph/config.yaml" ] || [ "$FORCE_INSTALL" = true ]; then
   cat > "$PROJECT_ROOT/.ralph/config.yaml" << 'EOF'
 # Ralph Configuration
 # Edit this file to customize Ralph for your project
@@ -158,7 +164,7 @@ else
   echo "  - .ralph/config.yaml (exists, skipped)"
 fi
 
-if [ ! -f "$PROJECT_ROOT/.ralph/principles.md" ]; then
+if [ ! -f "$PROJECT_ROOT/.ralph/principles.md" ] || [ "$FORCE_INSTALL" = true ]; then
   cat > "$PROJECT_ROOT/.ralph/principles.md" << 'EOF'
 # Project Principles
 
@@ -176,7 +182,7 @@ else
   echo "  - .ralph/principles.md (exists, skipped)"
 fi
 
-if [ ! -f "$PROJECT_ROOT/.ralph/patterns.md" ]; then
+if [ ! -f "$PROJECT_ROOT/.ralph/patterns.md" ] || [ "$FORCE_INSTALL" = true ]; then
   cat > "$PROJECT_ROOT/.ralph/patterns.md" << 'EOF'
 # Code Patterns
 
@@ -193,7 +199,7 @@ else
   echo "  - .ralph/patterns.md (exists, skipped)"
 fi
 
-if [ ! -f "$PROJECT_ROOT/.ralph/boundaries.md" ]; then
+if [ ! -f "$PROJECT_ROOT/.ralph/boundaries.md" ] || [ "$FORCE_INSTALL" = true ]; then
   cat > "$PROJECT_ROOT/.ralph/boundaries.md" << 'EOF'
 # Boundaries
 
@@ -211,7 +217,7 @@ else
   echo "  - .ralph/boundaries.md (exists, skipped)"
 fi
 
-if [ ! -f "$PROJECT_ROOT/.ralph/tech-stack.md" ]; then
+if [ ! -f "$PROJECT_ROOT/.ralph/tech-stack.md" ] || [ "$FORCE_INSTALL" = true ]; then
   cat > "$PROJECT_ROOT/.ralph/tech-stack.md" << 'EOF'
 # Tech Stack
 
