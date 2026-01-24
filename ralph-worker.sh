@@ -61,6 +61,14 @@ while [[ $# -gt 0 ]]; do
       MAX_ITERATIONS="$2"
       shift 2
       ;;
+    --complete|-c)
+      ACTION="complete"
+      shift
+      ;;
+    --next|-n)
+      ACTION="next"
+      shift
+      ;;
     --help|-h)
       echo "Ralph Worker - File-based task queue"
       echo ""
@@ -68,11 +76,15 @@ while [[ $# -gt 0 ]]; do
       echo "  ./ralph-worker.sh              Process current or next plan"
       echo "  ./ralph-worker.sh --status     Show queue status"
       echo "  ./ralph-worker.sh --add FILE   Add plan to pending queue"
+      echo "  ./ralph-worker.sh --complete   Mark current plan complete, activate next"
+      echo "  ./ralph-worker.sh --next       Activate next pending plan"
       echo "  ./ralph-worker.sh --loop       Process until queue empty"
       echo ""
       echo "Options:"
       echo "  --status, -s       Show queue status"
       echo "  --add, -a FILE     Add a plan file to pending queue"
+      echo "  --complete, -c     Complete current plan and activate next"
+      echo "  --next, -n         Activate next pending plan"
       echo "  --loop, -l         Keep processing until no more plans"
       echo "  --max, -m N        Max iterations per plan (default: 30)"
       echo "  --help, -h         Show this help"
@@ -115,10 +127,10 @@ get_current_plan() {
   fi
 }
 
-# Check if a plan has incomplete tasks
+# Check if a plan has incomplete tasks (used for status display only)
 has_incomplete_tasks() {
   local plan_file="$1"
-  # Look for unchecked markdown checkboxes
+  # Look for unchecked markdown checkboxes - best effort for status
   grep -q '^\s*-\s*\[ \]' "$plan_file" 2>/dev/null
 }
 
@@ -223,26 +235,14 @@ process_plan() {
   echo ""
 
   # Run ralph.sh on the plan
+  # ralph.sh will call ralph-worker.sh --complete when it catches <promise>COMPLETE</promise>
   "$SCRIPT_DIR/ralph.sh" "$plan_file" --max "$MAX_ITERATIONS"
   local exit_code=$?
 
-  # Check if plan is complete
-  if ! has_incomplete_tasks "$plan_file"; then
-    echo ""
-    echo -e "${GREEN}Plan complete!${NC} Moving to completed..."
-    local completed_dir=$(complete_plan "$plan_file")
-    echo "  Archived to: $completed_dir"
-    return 0
-  elif [ $exit_code -eq 0 ]; then
-    # Ralph said complete but there are still tasks - might be a marker issue
-    echo ""
-    echo -e "${YELLOW}Ralph finished but tasks remain.${NC}"
-    return 1
-  else
-    echo ""
-    echo -e "${YELLOW}Plan not yet complete.${NC} Will continue next run."
-    return 1
-  fi
+  # ralph.sh handles completion detection via COMPLETE marker
+  # If it returns 0, plan was completed and moved by the completion hook
+  # If it returns 1, max iterations reached - plan still in current/
+  return $exit_code
 }
 
 # Main work function
@@ -260,35 +260,85 @@ do_work() {
   local current_plan=$(get_current_plan)
 
   if [ -n "$current_plan" ]; then
-    if has_incomplete_tasks "$current_plan"; then
-      echo -e "${BLUE}Resuming current plan...${NC}"
-      process_plan "$current_plan"
-      return $?
-    else
-      echo -e "${GREEN}Current plan complete!${NC} Archiving..."
-      complete_plan "$current_plan"
-      current_plan=""
-    fi
+    echo -e "${BLUE}Processing current plan...${NC}"
+    process_plan "$current_plan"
+    # Note: if plan completes, ralph.sh calls --complete which moves it
+    # and activates next. So after this returns, check state again.
+    return $?
   fi
 
-  # No current plan or it was just completed - check pending
+  # No current plan - check pending
+  local pending_count=$(count_files "$PENDING_DIR")
+
+  if [ "$pending_count" -eq 0 ]; then
+    echo -e "${GREEN}Queue empty.${NC} No plans to process."
+    return 0
+  fi
+
+  echo -e "${BLUE}Activating next plan from queue...${NC}"
+  current_plan=$(activate_next_plan)
+
+  if [ -n "$current_plan" ]; then
+    echo "  Activated: $(basename "$current_plan")"
+    echo ""
+    process_plan "$current_plan"
+    return $?
+  fi
+}
+
+# Complete current plan and activate next
+do_complete() {
+  ensure_dirs
+
+  local current_plan=$(get_current_plan)
+
   if [ -z "$current_plan" ]; then
-    local pending_count=$(count_files "$PENDING_DIR")
+    echo -e "${YELLOW}No current plan to complete.${NC}"
+    return 1
+  fi
 
-    if [ "$pending_count" -eq 0 ]; then
-      echo -e "${GREEN}Queue empty.${NC} No plans to process."
-      return 0
-    fi
+  echo -e "${GREEN}Completing:${NC} $(basename "$current_plan")"
+  local completed_dir=$(complete_plan "$current_plan")
+  echo "  Archived to: $completed_dir"
 
-    echo -e "${BLUE}Activating next plan from queue...${NC}"
-    current_plan=$(activate_next_plan)
-
-    if [ -n "$current_plan" ]; then
-      echo "  Activated: $(basename "$current_plan")"
+  # Check for next plan
+  local pending_count=$(count_files "$PENDING_DIR")
+  if [ "$pending_count" -gt 0 ]; then
+    echo ""
+    echo -e "${BLUE}Activating next plan...${NC}"
+    local next=$(activate_next_plan)
+    if [ -n "$next" ]; then
+      echo "  Activated: $(basename "$next")"
       echo ""
-      process_plan "$current_plan"
-      return $?
+      echo "Run 'ralph-worker' or 'ralph \$(cat .ralph/plans/current/*.md)' to continue."
     fi
+  else
+    echo ""
+    echo -e "${GREEN}Queue empty.${NC} No more plans."
+  fi
+}
+
+# Activate next pending plan
+do_next() {
+  ensure_dirs
+
+  local current_plan=$(get_current_plan)
+  if [ -n "$current_plan" ]; then
+    echo -e "${YELLOW}Current plan still active:${NC} $(basename "$current_plan")"
+    echo "Use --complete to finish it first, or remove it manually."
+    return 1
+  fi
+
+  local pending_count=$(count_files "$PENDING_DIR")
+  if [ "$pending_count" -eq 0 ]; then
+    echo -e "${GREEN}Queue empty.${NC} No pending plans."
+    return 0
+  fi
+
+  echo -e "${BLUE}Activating next plan...${NC}"
+  local next=$(activate_next_plan)
+  if [ -n "$next" ]; then
+    echo "  Activated: $(basename "$next")"
   fi
 }
 
@@ -299,6 +349,12 @@ case "$ACTION" in
     ;;
   add)
     add_plan "$ADD_FILE"
+    ;;
+  complete)
+    do_complete
+    ;;
+  next)
+    do_next
     ;;
   work)
     if [ "$LOOP_MODE" = true ]; then

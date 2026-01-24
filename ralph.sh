@@ -203,6 +203,14 @@ EOF
     echo "Ralph finished successfully"
     echo "Plan file: $PLAN_FILE"
     rm -f "$SCRIPT_DIR/context.json"
+
+    # If plan is in the queue (current folder), trigger completion workflow
+    if [[ "$PLAN_PATH" == *"/.ralph/plans/current/"* ]]; then
+      echo ""
+      echo "Plan is in queue - triggering completion workflow..."
+      "$SCRIPT_DIR/ralph-worker.sh" --complete
+    fi
+
     exit 0
   fi
 
