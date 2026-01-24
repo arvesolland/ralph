@@ -44,6 +44,10 @@ while [[ $# -gt 0 ]]; do
       CREATE_PR=true
       shift
       ;;
+    --version|-v)
+      echo "Ralph v$(get_ralph_version "$SCRIPT_DIR")"
+      exit 0
+      ;;
     --help|-h)
       echo "Ralph - AI Agent for implementing plans"
       echo ""
@@ -58,6 +62,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --review-passes N      Number of review passes (default: 2)"
       echo "  --max, -m N            Max worker iterations (default: 30)"
       echo "  --create-pr, --pr      Create PR via Claude Code after completion"
+      echo "  --version, -v          Show version"
       echo "  --help, -h             Show this help message"
       echo ""
       echo "Examples:"

@@ -2,6 +2,18 @@
 # Ralph Configuration Library
 # Shared functions for loading config and building prompts
 
+# Get Ralph version
+get_ralph_version() {
+  local script_dir="$1"
+  local version_file="$script_dir/VERSION"
+
+  if [ -f "$version_file" ]; then
+    cat "$version_file" | tr -d '\n'
+  else
+    echo "unknown"
+  fi
+}
+
 # Find project root (git root or current dir)
 find_project_root() {
   git rev-parse --show-toplevel 2>/dev/null || pwd

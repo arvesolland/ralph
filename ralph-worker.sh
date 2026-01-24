@@ -74,6 +74,10 @@ while [[ $# -gt 0 ]]; do
       CREATE_PR=true
       shift
       ;;
+    --version|-v)
+      echo "Ralph Worker v$(get_ralph_version "$SCRIPT_DIR" 2>/dev/null || echo "unknown")"
+      exit 0
+      ;;
     --help|-h)
       echo "Ralph Worker - File-based task queue"
       echo ""
@@ -93,6 +97,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --loop, -l         Keep processing until no more plans"
       echo "  --max, -m N        Max iterations per plan (default: 30)"
       echo "  --create-pr, --pr  Create PR via Claude Code after plan completion"
+      echo "  --version, -v      Show version"
       echo "  --help, -h         Show this help"
       echo ""
       echo "Folder structure:"
