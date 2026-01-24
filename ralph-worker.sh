@@ -1,72 +1,86 @@
 #!/bin/bash
 set -e
 
-# Ralph Worker Loop
-# Picks up epics from Beads and implements all their tasks, creating one PR per epic
+# Ralph Worker - File-based task queue
+# Works through plans in a structured folder system
 #
-# Designed to run every 15 minutes on a server via cron:
-#   */15 * * * * /path/to/ralph-worker.sh >> /var/log/ralph-worker.log 2>&1
+# Folder structure:
+#   .ralph/plans/
+#   ├── pending/      # Plans waiting to be processed (oldest first)
+#   ├── current/      # Plan currently being worked on (0 or 1 file)
+#   └── completed/    # Finished plans with their progress logs
 #
 # Usage:
-#   ./ralph-worker.sh              # Process one epic
-#   ./ralph-worker.sh --max 3      # Process up to 3 epics
-#   ./ralph-worker.sh --epic bd-a1b2  # Process specific epic
-#   ./ralph-worker.sh --dry-run    # Preview without implementing
+#   ./ralph-worker.sh              # Process current or next pending plan
+#   ./ralph-worker.sh --status     # Show queue status
+#   ./ralph-worker.sh --add file   # Add a plan to pending queue
+#   ./ralph-worker.sh --loop       # Keep processing until queue empty
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Load shared config library
-source "$SCRIPT_DIR/lib/config.sh"
+if [ -f "$SCRIPT_DIR/lib/config.sh" ]; then
+  source "$SCRIPT_DIR/lib/config.sh"
+else
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[1;33m'
+  BLUE='\033[0;34m'
+  NC='\033[0m'
+fi
 
-# Find project root
-PROJECT_ROOT=$(find_project_root)
-CONFIG_DIR=$(find_config_dir "$PROJECT_ROOT")
-
-LOCK_FILE="$SCRIPT_DIR/.worker.lock"
-LOG_FILE="$SCRIPT_DIR/worker.log"
+PROJECT_ROOT=$(find_project_root 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
+CONFIG_DIR="$PROJECT_ROOT/.ralph"
+PLANS_DIR="$CONFIG_DIR/plans"
+PENDING_DIR="$PLANS_DIR/pending"
+CURRENT_DIR="$PLANS_DIR/current"
+COMPLETED_DIR="$PLANS_DIR/completed"
 
 # Parse arguments
-MAX_EPICS=1
-SPECIFIC_EPIC=""
-DRY_RUN=false
-MAX_ITERATIONS_PER_TASK=10
-BASE_BRANCH=""
+ACTION="work"
+LOOP_MODE=false
+ADD_FILE=""
+MAX_ITERATIONS=30
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --max)
-      MAX_EPICS="$2"
-      shift 2
-      ;;
-    --epic)
-      SPECIFIC_EPIC="$2"
-      shift 2
-      ;;
-    --dry-run)
-      DRY_RUN=true
+    --status|-s)
+      ACTION="status"
       shift
       ;;
-    --max-iterations)
-      MAX_ITERATIONS_PER_TASK="$2"
+    --add|-a)
+      ACTION="add"
+      ADD_FILE="$2"
       shift 2
       ;;
-    --base-branch)
-      BASE_BRANCH="$2"
+    --loop|-l)
+      LOOP_MODE=true
+      shift
+      ;;
+    --max|-m)
+      MAX_ITERATIONS="$2"
       shift 2
       ;;
     --help|-h)
-      echo "Ralph Worker - Epic/Task implementation loop"
+      echo "Ralph Worker - File-based task queue"
       echo ""
       echo "Usage:"
-      echo "  ./ralph-worker.sh [options]"
+      echo "  ./ralph-worker.sh              Process current or next plan"
+      echo "  ./ralph-worker.sh --status     Show queue status"
+      echo "  ./ralph-worker.sh --add FILE   Add plan to pending queue"
+      echo "  ./ralph-worker.sh --loop       Process until queue empty"
       echo ""
       echo "Options:"
-      echo "  --max N              Process up to N epics (default: 1)"
-      echo "  --epic ID            Process specific epic by ID"
-      echo "  --dry-run            Preview without implementing"
-      echo "  --max-iterations N   Max iterations per task (default: 10)"
-      echo "  --base-branch NAME   Base branch to merge into (default: from config or 'main')"
-      echo "  --help, -h           Show this help message"
+      echo "  --status, -s       Show queue status"
+      echo "  --add, -a FILE     Add a plan file to pending queue"
+      echo "  --loop, -l         Keep processing until no more plans"
+      echo "  --max, -m N        Max iterations per plan (default: 30)"
+      echo "  --help, -h         Show this help"
+      echo ""
+      echo "Folder structure:"
+      echo "  .ralph/plans/pending/    Plans waiting to be processed"
+      echo "  .ralph/plans/current/    Currently active plan (0-1 files)"
+      echo "  .ralph/plans/completed/  Finished plans with logs"
       exit 0
       ;;
     *)
@@ -76,365 +90,238 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Check dependencies
-if ! check_dependencies; then
-  exit 1
-fi
+# Ensure directories exist
+ensure_dirs() {
+  mkdir -p "$PENDING_DIR" "$CURRENT_DIR" "$COMPLETED_DIR"
+}
 
-# Worker-specific dependencies
-if ! command -v bd &> /dev/null; then
-  log_error "Error: Beads (bd) is not installed"
-  echo "Install via: npm install -g @beads/bd"
-  exit 1
-fi
+# Get count of files in a directory
+count_files() {
+  local dir="$1"
+  find "$dir" -maxdepth 1 -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' '
+}
 
-if ! command -v gh &> /dev/null; then
-  log_error "Error: GitHub CLI (gh) is not installed"
-  exit 1
-fi
+# Get oldest file in a directory
+get_oldest_file() {
+  local dir="$1"
+  ls -t "$dir"/*.md 2>/dev/null | tail -1
+}
 
-if ! command -v jq &> /dev/null; then
-  log_error "Error: jq is not installed"
-  exit 1
-fi
-
-# Setup colors
-setup_colors
-
-# Check for existing lock (prevent concurrent workers)
-if [ -f "$LOCK_FILE" ]; then
-  LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
-  if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-    log "Worker already running (PID: $LOCK_PID). Exiting."
-    exit 0
-  else
-    log "Stale lock file found. Removing."
-    rm -f "$LOCK_FILE"
+# Get the current plan file (if any)
+get_current_plan() {
+  local files=($(ls "$CURRENT_DIR"/*.md 2>/dev/null))
+  if [ ${#files[@]} -gt 0 ]; then
+    echo "${files[0]}"
   fi
-fi
-
-# Create lock file
-echo $$ > "$LOCK_FILE"
-trap "rm -f '$LOCK_FILE'" EXIT
-
-# Get config values
-PROJECT_NAME=$(config_get "project.name" "$CONFIG_DIR/config.yaml")
-PROJECT_NAME=${PROJECT_NAME:-"Project"}
-
-# Default base branch from config or 'main'
-if [ -z "$BASE_BRANCH" ]; then
-  BASE_BRANCH=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml")
-  BASE_BRANCH=${BASE_BRANCH:-"main"}
-fi
-
-echo -e "${GREEN}========================================"
-echo -e "Ralph Worker"
-echo -e "========================================${NC}"
-echo ""
-log "Project: $PROJECT_NAME"
-log "Project root: $PROJECT_ROOT"
-log "Base branch: $BASE_BRANCH"
-log "Max epics: $MAX_EPICS"
-log "Max iterations per task: $MAX_ITERATIONS_PER_TASK"
-log "Dry run: $DRY_RUN"
-if [ -n "$SPECIFIC_EPIC" ]; then
-  log "Specific epic: $SPECIFIC_EPIC"
-fi
-echo ""
-
-cd "$PROJECT_ROOT"
-
-# Ensure we're on base branch and up to date
-log "Syncing with remote..."
-git fetch origin
-git checkout "$BASE_BRANCH" 2>/dev/null || git checkout -b "$BASE_BRANCH" "origin/$BASE_BRANCH"
-git pull origin "$BASE_BRANCH"
-
-# Initialize Beads if needed
-if [ ! -d ".beads" ]; then
-  log_warn "Beads not initialized. Run ralph-discover.sh first."
-  exit 0
-fi
-
-# Get ready epics (tasks with pr-ready label)
-get_ready_epics() {
-  bd ready --json 2>/dev/null | jq -r '.[] | select(.labels | contains(["pr-ready"])) | .id' | head -n "$MAX_EPICS"
 }
 
-# Get child tasks of an epic
-get_epic_tasks() {
-  local epic_id=$1
-  bd show "$epic_id" --json 2>/dev/null | jq -r '.children[]?.id // empty'
+# Check if a plan has incomplete tasks
+has_incomplete_tasks() {
+  local plan_file="$1"
+  # Look for unchecked markdown checkboxes
+  grep -q '^\s*-\s*\[ \]' "$plan_file" 2>/dev/null
 }
 
-if [ -n "$SPECIFIC_EPIC" ]; then
-  EPICS="$SPECIFIC_EPIC"
-  EPIC_COUNT=1
-else
-  EPICS=$(get_ready_epics)
-  EPIC_COUNT=$(echo "$EPICS" | grep -c . 2>/dev/null || echo 0)
-fi
+# Move plan to completed with progress snapshot
+complete_plan() {
+  local plan_file="$1"
+  local plan_name=$(basename "$plan_file" .md)
+  local timestamp=$(date +%Y%m%d-%H%M%S)
+  local completed_subdir="$COMPLETED_DIR/${timestamp}-${plan_name}"
 
-if [ "$EPIC_COUNT" -eq 0 ] || [ -z "$EPICS" ]; then
-  log "No ready epics found. Worker complete."
-  exit 0
-fi
+  mkdir -p "$completed_subdir"
 
-log "Found $EPIC_COUNT ready epic(s)"
-echo ""
+  # Move the plan
+  mv "$plan_file" "$completed_subdir/plan.md"
 
-# Process each epic
-EPICS_COMPLETED=0
-EPICS_FAILED=0
-
-for EPIC_ID in $EPICS; do
-  echo -e "${BLUE}========================================${NC}"
-  log "Processing epic: $EPIC_ID"
-  echo -e "${BLUE}========================================${NC}"
-
-  # Get epic details
-  EPIC_JSON=$(bd show "$EPIC_ID" --json 2>/dev/null)
-  EPIC_TITLE=$(echo "$EPIC_JSON" | jq -r '.title' 2>/dev/null)
-  EPIC_BODY=$(echo "$EPIC_JSON" | jq -r '.body' 2>/dev/null)
-  EPIC_LABELS=$(echo "$EPIC_JSON" | jq -r '.labels | join(",")' 2>/dev/null)
-
-  log "Epic: $EPIC_TITLE"
-  log "Labels: $EPIC_LABELS"
-
-  # Get child tasks
-  TASKS=$(get_epic_tasks "$EPIC_ID")
-  TASK_COUNT=$(echo "$TASKS" | grep -c . 2>/dev/null || echo 0)
-
-  # If no child tasks, treat epic itself as the task
-  if [ "$TASK_COUNT" -eq 0 ]; then
-    log "Epic has no child tasks - treating epic as single task"
-    TASKS="$EPIC_ID"
-    TASK_COUNT=1
-  else
-    log "Found $TASK_COUNT child task(s)"
+  # Copy relevant progress entries
+  if [ -f "$SCRIPT_DIR/progress.txt" ]; then
+    # Extract entries related to this plan (if tagged) or just copy recent
+    cp "$SCRIPT_DIR/progress.txt" "$completed_subdir/progress-snapshot.txt"
   fi
 
-  if [ "$DRY_RUN" = true ]; then
-    log "[DRY RUN] Would process epic with $TASK_COUNT task(s)"
-    echo "$TASKS" | while read -r task_id; do
-      [ -n "$task_id" ] && log "  - Task: $task_id"
-    done
-    continue
+  echo "$completed_subdir"
+}
+
+# Move next pending plan to current
+activate_next_plan() {
+  local next_plan=$(get_oldest_file "$PENDING_DIR")
+  if [ -n "$next_plan" ] && [ -f "$next_plan" ]; then
+    mv "$next_plan" "$CURRENT_DIR/"
+    echo "$CURRENT_DIR/$(basename "$next_plan")"
   fi
-
-  # Create feature branch for the epic
-  BRANCH_NAME="ralph/${EPIC_ID}"
-  log "Creating branch: $BRANCH_NAME"
-  git checkout "$BASE_BRANCH"
-  git pull origin "$BASE_BRANCH"
-  git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
-
-  # Track completed tasks for this epic
-  TASKS_COMPLETED_IN_EPIC=0
-  TASKS_FAILED_IN_EPIC=0
-  COMMIT_MESSAGES=""
-
-  # Process each task in the epic
-  for TASK_ID in $TASKS; do
-    [ -z "$TASK_ID" ] && continue
-
-    echo ""
-    log "Processing task: $TASK_ID"
-
-    # Get task details
-    TASK_JSON=$(bd show "$TASK_ID" --json 2>/dev/null)
-    TASK_TITLE=$(echo "$TASK_JSON" | jq -r '.title' 2>/dev/null)
-    TASK_BODY=$(echo "$TASK_JSON" | jq -r '.body' 2>/dev/null)
-
-    log "Task: $TASK_TITLE"
-
-    # Write context file for Claude
-    cat > "$SCRIPT_DIR/context.json" << EOF
-{
-  "mode": "worker",
-  "epicId": "$EPIC_ID",
-  "epicTitle": "$EPIC_TITLE",
-  "taskId": "$TASK_ID",
-  "taskTitle": "$TASK_TITLE",
-  "branchName": "$BRANCH_NAME",
-  "projectRoot": "$PROJECT_ROOT",
-  "maxIterations": $MAX_ITERATIONS_PER_TASK,
-  "iteration": 0,
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
-EOF
 
-    # Write task details for Claude to read
-    cat > "$SCRIPT_DIR/.current_task.md" << EOF
-# Epic: $EPIC_TITLE
+# Show queue status
+show_status() {
+  ensure_dirs
 
-$EPIC_BODY
-
----
-
-# Current Task: $TASK_TITLE
-
-$TASK_BODY
-EOF
-
-    # Run implementation loop for this task
-    TASK_COMPLETE=false
-    for i in $(seq 1 $MAX_ITERATIONS_PER_TASK); do
-      log "  Iteration $i of $MAX_ITERATIONS_PER_TASK"
-
-      # Update iteration in context
-      cat > "$SCRIPT_DIR/context.json" << EOF
-{
-  "mode": "worker",
-  "epicId": "$EPIC_ID",
-  "epicTitle": "$EPIC_TITLE",
-  "taskId": "$TASK_ID",
-  "taskTitle": "$TASK_TITLE",
-  "branchName": "$BRANCH_NAME",
-  "projectRoot": "$PROJECT_ROOT",
-  "maxIterations": $MAX_ITERATIONS_PER_TASK,
-  "iteration": $i,
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-}
-EOF
-
-      # Build and run prompt
-      PROMPT=$(build_prompt "$SCRIPT_DIR/prompts/base/worker_prompt.md" "$CONFIG_DIR")
-      OUTPUT=$(echo "$PROMPT" | claude -p --dangerously-skip-permissions 2>&1 | tee /dev/stderr) || true
-
-      # Check for task completion
-      if echo "$OUTPUT" | grep -q "<promise>TASK_COMPLETE</promise>"; then
-        TASK_COMPLETE=true
-        break
-      fi
-
-      # Check for failure
-      if echo "$OUTPUT" | grep -q "<promise>TASK_FAILED</promise>"; then
-        log "  Task marked as failed"
-        break
-      fi
-
-      sleep 2
-    done
-
-    if [ "$TASK_COMPLETE" = true ]; then
-      log "  Task completed!"
-      TASKS_COMPLETED_IN_EPIC=$((TASKS_COMPLETED_IN_EPIC + 1))
-      COMMIT_MESSAGES="${COMMIT_MESSAGES}\n- ${TASK_TITLE}"
-
-      # Mark task done in Beads
-      bd done "$TASK_ID" --comment "Completed as part of epic $EPIC_ID"
-    else
-      log "  Task failed or timed out"
-      TASKS_FAILED_IN_EPIC=$((TASKS_FAILED_IN_EPIC + 1))
-
-      # Add comment to task
-      bd comment "$TASK_ID" "Worker failed after $MAX_ITERATIONS_PER_TASK iterations"
-    fi
-  done
-
-  # Clean up task file
-  rm -f "$SCRIPT_DIR/.current_task.md"
-
+  echo -e "${GREEN}========================================"
+  echo -e "Ralph Worker Queue Status"
+  echo -e "========================================${NC}"
   echo ""
-  log "Epic task summary: $TASKS_COMPLETED_IN_EPIC completed, $TASKS_FAILED_IN_EPIC failed"
 
-  # Only create PR if at least one task completed
-  if [ "$TASKS_COMPLETED_IN_EPIC" -gt 0 ]; then
-    # Check if there are actual commits
-    COMMIT_COUNT=$(git log "$BASE_BRANCH".."$BRANCH_NAME" --oneline 2>/dev/null | wc -l | tr -d ' ')
+  local pending_count=$(count_files "$PENDING_DIR")
+  local current_plan=$(get_current_plan)
+  local completed_count=$(ls -d "$COMPLETED_DIR"/*/ 2>/dev/null | wc -l | tr -d ' ')
 
-    if [ "$COMMIT_COUNT" -gt 0 ]; then
-      log "Creating PR with $COMMIT_COUNT commit(s)..."
+  echo -e "${BLUE}Pending:${NC} $pending_count plan(s)"
+  if [ "$pending_count" -gt 0 ]; then
+    for f in "$PENDING_DIR"/*.md; do
+      [ -f "$f" ] && echo "  - $(basename "$f")"
+    done
+  fi
+  echo ""
 
-      # Push branch
-      git push -u origin "$BRANCH_NAME"
+  echo -e "${BLUE}Current:${NC}"
+  if [ -n "$current_plan" ]; then
+    local task_count=$(grep -c '^\s*-\s*\[ \]' "$current_plan" 2>/dev/null || echo "0")
+    local done_count=$(grep -c '^\s*-\s*\[x\]' "$current_plan" 2>/dev/null || echo "0")
+    echo "  - $(basename "$current_plan") ($done_count done, $task_count remaining)"
+  else
+    echo "  (none)"
+  fi
+  echo ""
 
-      # Create PR
-      PR_BODY=$(cat <<EOF
-## Epic: $EPIC_TITLE
+  echo -e "${BLUE}Completed:${NC} $completed_count plan(s)"
+  if [ "$completed_count" -gt 0 ]; then
+    ls -d "$COMPLETED_DIR"/*/ 2>/dev/null | tail -5 | while read dir; do
+      echo "  - $(basename "$dir")"
+    done
+    [ "$completed_count" -gt 5 ] && echo "  ... and $((completed_count - 5)) more"
+  fi
+}
 
-$EPIC_BODY
+# Add a plan to the queue
+add_plan() {
+  local file="$1"
 
----
+  if [ ! -f "$file" ]; then
+    echo -e "${RED}Error: File not found: $file${NC}"
+    exit 1
+  fi
 
-## Changes Made
-$(git log "$BASE_BRANCH".."$BRANCH_NAME" --oneline | sed 's/^/- /')
+  ensure_dirs
 
-## Tasks Completed
-$(echo -e "$COMMIT_MESSAGES")
+  # Add timestamp prefix for ordering
+  local timestamp=$(date +%Y%m%d-%H%M%S)
+  local basename=$(basename "$file")
+  local dest="$PENDING_DIR/${timestamp}-${basename}"
 
-## Validation
-- [ ] Tests pass
-- [ ] Lint passes
-- [ ] Manual review complete
+  cp "$file" "$dest"
+  echo -e "${GREEN}Added to queue:${NC} $dest"
 
----
+  show_status
+}
 
-Implemented by Ralph Worker
+# Process a single plan
+process_plan() {
+  local plan_file="$1"
+  local plan_name=$(basename "$plan_file")
 
-Epic: \`$EPIC_ID\`
-Tasks completed: $TASKS_COMPLETED_IN_EPIC / $TASK_COUNT
+  echo -e "${BLUE}Processing:${NC} $plan_name"
+  echo ""
 
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)
+  # Run ralph.sh on the plan
+  "$SCRIPT_DIR/ralph.sh" "$plan_file" --max "$MAX_ITERATIONS"
+  local exit_code=$?
 
-      PR_URL=$(gh pr create \
-        --base "$BASE_BRANCH" \
-        --head "$BRANCH_NAME" \
-        --title "[$EPIC_ID] $EPIC_TITLE" \
-        --body "$PR_BODY" 2>&1) || true
+  # Check if plan is complete
+  if ! has_incomplete_tasks "$plan_file"; then
+    echo ""
+    echo -e "${GREEN}Plan complete!${NC} Moving to completed..."
+    local completed_dir=$(complete_plan "$plan_file")
+    echo "  Archived to: $completed_dir"
+    return 0
+  elif [ $exit_code -eq 0 ]; then
+    # Ralph said complete but there are still tasks - might be a marker issue
+    echo ""
+    echo -e "${YELLOW}Ralph finished but tasks remain.${NC}"
+    return 1
+  else
+    echo ""
+    echo -e "${YELLOW}Plan not yet complete.${NC} Will continue next run."
+    return 1
+  fi
+}
 
-      if [ -n "$PR_URL" ] && [[ "$PR_URL" == http* ]]; then
-        log "PR created: $PR_URL"
+# Main work function
+do_work() {
+  ensure_dirs
 
-        # Mark epic as done (if all tasks completed)
-        if [ "$TASKS_FAILED_IN_EPIC" -eq 0 ]; then
-          bd done "$EPIC_ID" --comment "PR created: $PR_URL"
-        else
-          bd comment "$EPIC_ID" "Partial PR created: $PR_URL ($TASKS_FAILED_IN_EPIC tasks failed)"
+  echo -e "${GREEN}========================================"
+  echo -e "Ralph Worker"
+  echo -e "========================================${NC}"
+  echo ""
+  echo "Project: $PROJECT_ROOT"
+  echo ""
+
+  # Check for current plan
+  local current_plan=$(get_current_plan)
+
+  if [ -n "$current_plan" ]; then
+    if has_incomplete_tasks "$current_plan"; then
+      echo -e "${BLUE}Resuming current plan...${NC}"
+      process_plan "$current_plan"
+      return $?
+    else
+      echo -e "${GREEN}Current plan complete!${NC} Archiving..."
+      complete_plan "$current_plan"
+      current_plan=""
+    fi
+  fi
+
+  # No current plan or it was just completed - check pending
+  if [ -z "$current_plan" ]; then
+    local pending_count=$(count_files "$PENDING_DIR")
+
+    if [ "$pending_count" -eq 0 ]; then
+      echo -e "${GREEN}Queue empty.${NC} No plans to process."
+      return 0
+    fi
+
+    echo -e "${BLUE}Activating next plan from queue...${NC}"
+    current_plan=$(activate_next_plan)
+
+    if [ -n "$current_plan" ]; then
+      echo "  Activated: $(basename "$current_plan")"
+      echo ""
+      process_plan "$current_plan"
+      return $?
+    fi
+  fi
+}
+
+# Main
+case "$ACTION" in
+  status)
+    show_status
+    ;;
+  add)
+    add_plan "$ADD_FILE"
+    ;;
+  work)
+    if [ "$LOOP_MODE" = true ]; then
+      while true; do
+        do_work
+
+        # Check if more work to do
+        current=$(get_current_plan)
+        pending=$(count_files "$PENDING_DIR")
+
+        if [ -z "$current" ] && [ "$pending" -eq 0 ]; then
+          echo ""
+          echo -e "${GREEN}All plans processed!${NC}"
+          break
         fi
 
-        EPICS_COMPLETED=$((EPICS_COMPLETED + 1))
-      else
-        log_warn "PR creation may have failed: $PR_URL"
-        EPICS_FAILED=$((EPICS_FAILED + 1))
-      fi
+        echo ""
+        echo "Continuing to next plan..."
+        echo ""
+        sleep 2
+      done
     else
-      log "No commits made - skipping PR creation"
-      EPICS_FAILED=$((EPICS_FAILED + 1))
+      do_work
     fi
-  else
-    log "No tasks completed - skipping PR creation"
-    EPICS_FAILED=$((EPICS_FAILED + 1))
-
-    # Clean up empty branch
-    git checkout "$BASE_BRANCH"
-    git branch -D "$BRANCH_NAME" 2>/dev/null || true
-  fi
-
-  # Return to base branch
-  git checkout "$BASE_BRANCH"
-
-  echo ""
-done
-
-# Cleanup
-rm -f "$SCRIPT_DIR/context.json"
-
-echo -e "${GREEN}========================================${NC}"
-log "Worker Summary"
-echo -e "${GREEN}========================================${NC}"
-log "Epics processed: $((EPICS_COMPLETED + EPICS_FAILED))"
-log "PRs created: $EPICS_COMPLETED"
-log "Failed: $EPICS_FAILED"
-
-# Log to file
-{
-  echo "---"
-  echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "Epics processed: $((EPICS_COMPLETED + EPICS_FAILED))"
-  echo "PRs created: $EPICS_COMPLETED"
-  echo "Failed: $EPICS_FAILED"
-} >> "$LOG_FILE"
+    ;;
+esac

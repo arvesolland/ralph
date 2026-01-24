@@ -103,6 +103,7 @@ get_file() {
 echo -e "${BLUE}Installing core scripts...${NC}"
 SCRIPTS=(
   "ralph.sh"
+  "ralph-worker.sh"
   "ralph-init.sh"
   "ralph-update.sh"
   "lib/config.sh"

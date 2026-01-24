@@ -13,3 +13,9 @@ alias ralph-update='./scripts/ralph/ralph-update.sh'
 # Run Ralph (run from project root)
 alias ralph='./scripts/ralph/ralph.sh'
 alias ralph-init='./scripts/ralph/ralph-init.sh'
+
+# Worker queue commands
+alias ralph-worker='./scripts/ralph/ralph-worker.sh'
+alias ralph-status='./scripts/ralph/ralph-worker.sh --status'
+alias ralph-add='./scripts/ralph/ralph-worker.sh --add'
+alias ralph-loop='./scripts/ralph/ralph-worker.sh --loop'

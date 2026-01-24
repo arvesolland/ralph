@@ -55,6 +55,7 @@ download_file() {
 echo -e "${BLUE}Updating core scripts...${NC}"
 SCRIPTS=(
   "ralph.sh"
+  "ralph-worker.sh"
   "ralph-init.sh"
   "ralph-update.sh"
 )
