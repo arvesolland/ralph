@@ -245,22 +245,22 @@ Analyze this codebase and generate configuration files. Output each file with cl
 
 ## Output Format
 
-Generate EXACTLY these files with the markers shown:
+Generate EXACTLY these files with the markers shown. Output raw content directly after each marker - DO NOT wrap in markdown code blocks.
 
 ---FILE: .ralph/config.yaml---
-(YAML configuration for the project)
+(YAML configuration - raw YAML, no code blocks)
 
 ---FILE: .ralph/principles.md---
-(Core development principles - be specific to THIS codebase)
+(Markdown content - raw markdown, no code blocks)
 
 ---FILE: .ralph/patterns.md---
-(Code patterns used in THIS codebase - with examples)
+(Markdown with code examples - raw markdown, no outer code blocks)
 
 ---FILE: .ralph/boundaries.md---
-(Files/directories that should NEVER be modified)
+(Markdown list - raw markdown, no code blocks)
 
 ---FILE: .ralph/tech-stack.md---
-(Technology stack description)
+(Markdown content - raw markdown, no code blocks)
 
 ## Guidelines
 
@@ -269,6 +269,7 @@ Generate EXACTLY these files with the markers shown:
 - Reference real files and directories
 - Keep each file focused and concise
 - For boundaries, include lock files, vendor directories, env files, etc.
+- Output raw file content directly - NO ```markdown or ```yaml wrappers
 
 Start your analysis now.
 PROMPT_EOF
@@ -287,11 +288,12 @@ PROMPT_EOF
     local output="$2"
 
     # Extract content between marker and next marker (or end)
+    # Also strip markdown code block wrappers if present
     echo "$output" | awk -v marker="$marker" '
       $0 ~ marker { found=1; next }
       found && /^---FILE:/ { exit }
       found { print }
-    '
+    ' | sed '/^```\(markdown\|yaml\|yml\)\?$/d' | sed '/^```$/d'
   }
 
   # Save each file if content was generated
@@ -329,11 +331,6 @@ commands:
   lint: "${LINT_CMD:-npm run lint}"
   build: "${BUILD_CMD:-npm run build}"
   dev: "${DEV_CMD:-npm run dev}"
-
-beads:
-  labels:
-    - "pr-ready"
-  epic_review_time: "15-30 minutes"
 EOF
     echo "  - config.yaml created"
   else

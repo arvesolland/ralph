@@ -202,16 +202,8 @@ check_dependencies() {
 check_optional_dependencies() {
   local warnings=()
 
-  if ! command -v bd &> /dev/null; then
-    warnings+=("bd (Beads) - required for worker/discovery loops")
-  fi
-
   if ! command -v gh &> /dev/null; then
-    warnings+=("gh (GitHub CLI) - required for PR creation")
-  fi
-
-  if ! command -v jq &> /dev/null; then
-    warnings+=("jq - required for worker/discovery loops")
+    warnings+=("gh (GitHub CLI) - useful for PR creation")
   fi
 
   if [ ${#warnings[@]} -gt 0 ]; then

@@ -6,32 +6,30 @@ Ralph orchestrates Claude Code to implement tasks one at a time, with proper com
 
 ## Features
 
-- **Implementation Loop** - Implement tasks from a plan file, one at a time
-- **Worker Loop** - Process Beads epics, create PRs automatically
-- **Discovery Loop** - Analyze codebase for improvements, create tasks
-- **Plan Reviewer** - Optimize plans before implementation
-- **AI-Assisted Setup** - Let Claude analyze your codebase and generate config
-- **Config-Driven** - Customize prompts via config files, not code
+- **Plan-based implementation** - Work through tasks in a markdown plan file
+- **Plan reviewer** - Optimize plans before implementation (catches overengineering)
+- **AI-assisted setup** - Let Claude analyze your codebase and generate config
+- **Config-driven prompts** - Customize via config files, not code
+- **Progress tracking** - Learnings accumulate across iterations
 
 ## Installation
 
 ### Quick Install
 
 ```bash
-# From your project root
-curl -fsSL https://raw.githubusercontent.com/USER/ralph/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/arvesolland/ralph/main/install.sh | bash
 ```
 
 ### With AI-Assisted Configuration
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/USER/ralph/main/install.sh | bash -s -- --ai
+curl -fsSL https://raw.githubusercontent.com/arvesolland/ralph/main/install.sh | bash -s -- --ai
 ```
 
 ### From Local Clone
 
 ```bash
-git clone https://github.com/USER/ralph.git
+git clone https://github.com/arvesolland/ralph.git
 cd your-project
 ../ralph/install.sh --local
 ```
@@ -44,18 +42,18 @@ cd your-project
 # Auto-detect project settings
 ./scripts/ralph/ralph-init.sh --detect
 
-# Or use AI to analyze your codebase
+# Or use AI to analyze your codebase (recommended)
 ./scripts/ralph/ralph-init.sh --ai
 ```
 
-### 2. Edit Configuration
+### 2. Review Configuration
 
 Configuration lives in `.ralph/`:
 
 ```
 .ralph/
-├── config.yaml      # Project settings (name, commands, etc.)
-├── principles.md    # Development principles (injected into prompts)
+├── config.yaml      # Project settings (name, commands)
+├── principles.md    # Development principles
 ├── patterns.md      # Code patterns to follow
 ├── boundaries.md    # Files to never modify
 └── tech-stack.md    # Technology description
@@ -90,50 +88,32 @@ Ralph will:
 6. Mark the task complete
 7. Repeat until done
 
-## Commands
+## Usage
 
-### Implementation Loop
+### Basic Implementation
 
 ```bash
-# Basic usage
 ./scripts/ralph/ralph.sh path/to/plan.md
+```
 
-# With plan review first
+### With Plan Review First
+
+Review optimizes the plan before implementation (catches overengineering):
+
+```bash
 ./scripts/ralph/ralph.sh plan.md --review-plan
-
-# Custom iteration limit
-./scripts/ralph/ralph.sh plan.md --max 50
 ```
 
-### Worker Loop (Beads Integration)
-
-Requires [Beads](https://github.com/beads-project/beads) for task management.
+### Options
 
 ```bash
-# Process one ready epic
-./scripts/ralph/ralph-worker.sh
+./scripts/ralph/ralph.sh plan.md [options]
 
-# Process up to 3 epics
-./scripts/ralph/ralph-worker.sh --max 3
-
-# Process specific epic
-./scripts/ralph/ralph-worker.sh --epic bd-a1b2
-
-# Preview without implementing
-./scripts/ralph/ralph-worker.sh --dry-run
-```
-
-### Discovery Loop
-
-```bash
-# Analyze codebase, create Beads tasks
-./scripts/ralph/ralph-discover.sh
-
-# Preview findings without creating tasks
-./scripts/ralph/ralph-discover.sh --dry-run
-
-# Focus on specific category
-./scripts/ralph/ralph-discover.sh --category tests
+Options:
+  --review-plan, -r      Run plan reviewer first
+  --review-passes N      Number of review passes (default: 2)
+  --max, -m N            Max iterations (default: 30)
+  --help, -h             Show help
 ```
 
 ## Configuration
@@ -143,7 +123,7 @@ Requires [Beads](https://github.com/beads-project/beads) for task management.
 ```yaml
 project:
   name: "My Project"
-  description: "A web application for..."
+  description: "A web application"
 
 git:
   base_branch: "main"
@@ -164,8 +144,7 @@ Development principles injected into all prompts:
 
 - Keep functions small and focused (< 20 lines)
 - Write tests for all new features
-- Never commit secrets or credentials
-- Use TypeScript strict mode
+- Never commit secrets
 ```
 
 ### patterns.md
@@ -176,15 +155,9 @@ Code patterns specific to your project:
 # Code Patterns
 
 ## Error Handling
-Always use the custom `AppError` class:
+Use the custom AppError class:
 \`\`\`typescript
-throw new AppError('User not found', 404);
-\`\`\`
-
-## API Responses
-Use the `sendResponse` helper:
-\`\`\`typescript
-return sendResponse(res, 200, { user });
+throw new AppError('Not found', 404);
 \`\`\`
 ```
 
@@ -198,20 +171,17 @@ Files Ralph should never modify:
 - `*.lock` files
 - `node_modules/`
 - `.env*` files
-- `migrations/` (modify via migration commands only)
 ```
 
 ## How It Works
 
 ### Prompt Injection
 
-Base prompts contain placeholders like `{{PRINCIPLES}}` that get replaced with your config files at runtime:
+Base prompts contain placeholders like `{{PRINCIPLES}}` that get replaced with your config files:
 
 ```
 prompts/base/prompt.md + .ralph/principles.md → Final prompt
 ```
-
-This means you customize Ralph by editing markdown files, not code.
 
 ### Context Files
 
@@ -225,85 +195,52 @@ Ralph uses `context.json` to pass state between iterations:
 }
 ```
 
-Claude reads this file to understand its current task.
-
 ### Completion Markers
 
-Claude signals completion with markers:
-
+Claude signals completion with:
 - `<promise>COMPLETE</promise>` - All tasks done
-- `<promise>TASK_COMPLETE</promise>` - Current task done (worker mode)
-- `<promise>TASK_FAILED</promise>` - Task cannot be completed
 
 ### Progress Tracking
 
-`scripts/ralph/progress.txt` accumulates learnings across iterations:
+`scripts/ralph/progress.txt` accumulates learnings:
 
 ```markdown
 ## Codebase Patterns
-- Use `useQuery` hook for data fetching
-- Error boundaries are in `components/ErrorBoundary.tsx`
+- Use useQuery hook for data fetching
 
 ---
 ## 2024-01-15 - Task 1
 - **Implemented:** User model
-- **Files:** src/models/User.ts
-- **Learnings:** Prisma schema in schema.prisma
-```
-
-## CI/CD Integration
-
-### Cron-Based Worker
-
-Run the worker every 15 minutes:
-
-```bash
-*/15 * * * * cd /path/to/project && ./scripts/ralph/ralph-worker.sh >> /var/log/ralph.log 2>&1
-```
-
-### Daily Discovery
-
-Run discovery daily:
-
-```bash
-0 6 * * * cd /path/to/project && ./scripts/ralph/ralph-discover.sh >> /var/log/ralph-discover.log 2>&1
+- **Learnings:** Schema in schema.prisma
 ```
 
 ## Requirements
 
 - **Claude Code CLI** - `claude` command must be available
-- **Git** - For version control operations
-- **Beads** (optional) - For worker/discovery loops
-- **GitHub CLI** (optional) - For PR creation
+- **Git** - For version control
 
 ## Project Structure
 
 ```
 ralph/
-├── install.sh              # Curl-able installer
+├── install.sh              # Installer
 ├── ralph-init.sh           # Project initialization
 ├── ralph.sh                # Main implementation loop
-├── ralph-worker.sh         # Beads epic processor
-├── ralph-discover.sh       # Codebase analyzer
 ├── lib/
-│   └── config.sh           # Shared configuration library
+│   └── config.sh           # Shared config library
 └── prompts/
     └── base/
         ├── prompt.md           # Implementation prompt
-        ├── worker_prompt.md    # Worker prompt
-        ├── discover_prompt.md  # Discovery prompt
-        └── plan_reviewer_prompt.md  # Plan review prompt
+        └── plan_reviewer_prompt.md
 ```
 
 ## Updating
 
-Re-run the installer to update scripts while preserving your config:
+Re-run the installer to update scripts (config is preserved):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/USER/ralph/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/arvesolland/ralph/main/install.sh | bash
 ```
-
-Your `.ralph/` configuration files are never overwritten.
 
 ## License
 

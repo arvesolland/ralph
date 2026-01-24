@@ -13,7 +13,7 @@ set -e
 #   ./install.sh --ai
 
 # Configuration - update this to your repo URL
-RALPH_REPO="${RALPH_REPO:-https://raw.githubusercontent.com/USER/ralph/main}"
+RALPH_REPO="${RALPH_REPO:-https://raw.githubusercontent.com/arvesolland/ralph/main}"
 RALPH_VERSION="${RALPH_VERSION:-main}"
 
 # Colors
@@ -103,8 +103,6 @@ get_file() {
 echo -e "${BLUE}Installing core scripts...${NC}"
 SCRIPTS=(
   "ralph.sh"
-  "ralph-worker.sh"
-  "ralph-discover.sh"
   "ralph-init.sh"
   "lib/config.sh"
 )
@@ -116,13 +114,12 @@ done
 
 # Make scripts executable
 chmod +x "$PROJECT_ROOT/scripts/ralph/"*.sh
+chmod +x "$PROJECT_ROOT/scripts/ralph/lib/"*.sh 2>/dev/null || true
 
 # Install base prompts
 echo -e "${BLUE}Installing base prompts...${NC}"
 PROMPTS=(
   "prompts/base/prompt.md"
-  "prompts/base/worker_prompt.md"
-  "prompts/base/discover_prompt.md"
   "prompts/base/plan_reviewer_prompt.md"
 )
 
@@ -153,12 +150,6 @@ commands:
   lint: "npm run lint"
   build: "npm run build"
   dev: "npm run dev"
-
-# Beads settings (for worker/discovery)
-beads:
-  labels:
-    - "pr-ready"
-  epic_review_time: "15-30 minutes"
 EOF
   echo "  - .ralph/config.yaml (created)"
 else
