@@ -40,7 +40,43 @@ Read `scripts/ralph/context.json` to get:
 
 Then read the plan file at that path.
 
+## Plan Structure Requirements
+
+Plans MUST follow this structure:
+
+```markdown
+# [Plan Title]
+
+## Overview
+Brief description of what this plan accomplishes.
+
+## Tasks
+- [ ] Task 1 (atomic, single commit)
+- [ ] Task 2 (atomic, single commit)
+```
+
+### Task Requirements
+- Each task starts with `- [ ]`
+- Each task is atomic (one commit worth of work)
+- Each task is specific and actionable
+- NO vague tasks like "implement the feature" or "make it work"
+- NO compound tasks like "add X, Y, and Z"
+
+### Optional but Recommended
+- `## Context` - Background info
+- `## Acceptance Criteria` - Testable outcomes
+- `## References` - Related files/specs
+
 ## Your Review Process
+
+### Step 0: Validate Plan Structure
+
+First, check if the plan follows the required structure:
+- Has a title (`# ...`)
+- Has `## Tasks` section with `- [ ]` checkboxes
+- Tasks are atomic and actionable
+
+If structure is wrong, **fix it first** before other review steps.
 
 ### Step 1: Understand the Codebase
 
@@ -100,13 +136,15 @@ Red flags to look for:
 
 **Edit the plan file directly** with your improvements:
 
-- Simplify overly complex sections
-- Remove unnecessary abstractions
-- Add missing security considerations
-- Align with codebase patterns
-- Fix feasibility issues
-- Tighten up vague requirements
-- Remove speculative features
+- **Fix structure** - Ensure proper `## Tasks` section with `- [ ]` format
+- **Break down compound tasks** - One task = one commit
+- **Make vague tasks specific** - "Build auth" → "Add login endpoint with JWT"
+- **Simplify overly complex sections**
+- **Remove unnecessary abstractions**
+- **Add missing security considerations**
+- **Align with codebase patterns**
+- **Fix feasibility issues**
+- **Remove speculative features**
 
 **Be direct.** Don't add commentary or review notes - just make the plan better.
 
