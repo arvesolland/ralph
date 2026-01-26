@@ -106,6 +106,41 @@ if [[ ! -f "$PLAN_PATH" ]]; then
   exit 1
 fi
 
+# Validate plan structure
+validate_plan() {
+  local plan_file="$1"
+  local errors=()
+
+  # Check for required sections
+  if ! grep -q "^## Context" "$plan_file"; then
+    errors+=("Missing '## Context' section")
+  fi
+  if ! grep -q "^## Rules" "$plan_file"; then
+    errors+=("Missing '## Rules' section")
+  fi
+  if ! grep -q "^## Tasks" "$plan_file"; then
+    errors+=("Missing '## Tasks' section")
+  fi
+  if ! grep -q "^### T1:" "$plan_file"; then
+    errors+=("Missing first task (### T1:)")
+  fi
+
+  if [ ${#errors[@]} -gt 0 ]; then
+    log_error "Plan validation failed:"
+    for err in "${errors[@]}"; do
+      echo "  - $err"
+    done
+    echo ""
+    echo "See plan-spec.md or ralph-plan skill for required format."
+    return 1
+  fi
+  return 0
+}
+
+if ! validate_plan "$PLAN_PATH"; then
+  exit 1
+fi
+
 # Check dependencies
 if ! check_dependencies; then
   exit 1
@@ -140,6 +175,9 @@ if [ "$REVIEW_PLAN" = true ]; then
   echo -e "========================================${NC}"
   echo ""
 
+  # Capture plan before review for diff
+  PLAN_BEFORE_REVIEW=$(cat "$PLAN_PATH")
+
   for i in $(seq 1 $REVIEW_PASSES); do
     echo -e "${YELLOW}--- Review Pass $i of $REVIEW_PASSES ---${NC}"
     echo ""
@@ -171,6 +209,24 @@ EOF
 
   echo ""
   log_success "Plan review complete"
+
+  # Show review summary
+  PLAN_AFTER_REVIEW=$(cat "$PLAN_PATH")
+  if [ "$PLAN_BEFORE_REVIEW" = "$PLAN_AFTER_REVIEW" ]; then
+    echo -e "${YELLOW}No changes made to plan during review.${NC}"
+  else
+    # Count lines changed
+    BEFORE_LINES=$(echo "$PLAN_BEFORE_REVIEW" | wc -l)
+    AFTER_LINES=$(echo "$PLAN_AFTER_REVIEW" | wc -l)
+    BEFORE_TASKS=$(echo "$PLAN_BEFORE_REVIEW" | grep -c "^### T" || echo "0")
+    AFTER_TASKS=$(echo "$PLAN_AFTER_REVIEW" | grep -c "^### T" || echo "0")
+
+    echo -e "${GREEN}Plan modified during review:${NC}"
+    echo "  Lines: $BEFORE_LINES → $AFTER_LINES"
+    echo "  Tasks: $BEFORE_TASKS → $AFTER_TASKS"
+    echo ""
+    echo "Run 'git diff $PLAN_FILE' to see full changes."
+  fi
   echo ""
 fi
 

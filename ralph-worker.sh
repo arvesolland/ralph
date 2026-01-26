@@ -5,10 +5,10 @@ set -e
 # Works through plans in a structured folder system
 #
 # Folder structure:
-#   .ralph/plans/
-#   ├── pending/      # Plans waiting to be processed (oldest first)
+#   plans/
+#   ├── pending/      # Plans waiting to be processed (FIFO - oldest first)
 #   ├── current/      # Plan currently being worked on (0 or 1 file)
-#   └── completed/    # Finished plans with their progress logs
+#   └── complete/     # Finished plans with their progress logs
 #
 # Usage:
 #   ./ralph-worker.sh              # Process current or next pending plan
@@ -124,17 +124,20 @@ count_files() {
   find "$dir" -maxdepth 1 -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' '
 }
 
-# Get oldest file in a directory
+# Get oldest file in a directory (FIFO queue order)
 get_oldest_file() {
   local dir="$1"
-  ls -t "$dir"/*.md 2>/dev/null | tail -1
+  # ls -tr sorts by time, oldest first; head -1 gets the oldest
+  ls -tr "$dir"/*.md 2>/dev/null | head -1
 }
 
 # Get the current plan file (if any)
 get_current_plan() {
-  local files=($(ls "$CURRENT_DIR"/*.md 2>/dev/null))
-  if [ ${#files[@]} -gt 0 ]; then
-    echo "${files[0]}"
+  # Use glob directly to avoid word-splitting issues with spaces in filenames
+  local first_file
+  first_file=$(ls "$CURRENT_DIR"/*.md 2>/dev/null | head -1)
+  if [ -n "$first_file" ] && [ -f "$first_file" ]; then
+    echo "$first_file"
   fi
 }
 
@@ -150,7 +153,9 @@ complete_plan() {
   local plan_file="$1"
   local plan_name=$(basename "$plan_file" .md)
   local timestamp=$(date +%Y%m%d-%H%M%S)
-  local completed_subdir="$COMPLETED_DIR/${timestamp}-${plan_name}"
+  # Add short UUID suffix to prevent collisions if two plans complete in same second
+  local uuid_suffix=$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  local completed_subdir="$COMPLETED_DIR/${timestamp}-${uuid_suffix}-${plan_name}"
 
   mkdir -p "$completed_subdir"
 
