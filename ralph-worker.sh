@@ -31,10 +31,10 @@ fi
 
 PROJECT_ROOT=$(find_project_root 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
 CONFIG_DIR="$PROJECT_ROOT/.ralph"
-PLANS_DIR="$CONFIG_DIR/plans"
+PLANS_DIR="$PROJECT_ROOT/plans"
 PENDING_DIR="$PLANS_DIR/pending"
 CURRENT_DIR="$PLANS_DIR/current"
-COMPLETED_DIR="$PLANS_DIR/completed"
+COMPLETED_DIR="$PLANS_DIR/complete"
 
 # Parse arguments
 ACTION="work"
@@ -101,9 +101,9 @@ while [[ $# -gt 0 ]]; do
       echo "  --help, -h         Show this help"
       echo ""
       echo "Folder structure:"
-      echo "  .ralph/plans/pending/    Plans waiting to be processed"
-      echo "  .ralph/plans/current/    Currently active plan (0-1 files)"
-      echo "  .ralph/plans/completed/  Finished plans with logs"
+      echo "  plans/pending/    Plans waiting to be processed"
+      echo "  plans/current/    Currently active plan (0-1 files)"
+      echo "  plans/complete/   Finished plans with logs"
       exit 0
       ;;
     *)
@@ -354,7 +354,7 @@ do_complete() {
     if [ -n "$next" ]; then
       echo "  Activated: $(basename "$next")"
       echo ""
-      echo "Run 'ralph-worker' or 'ralph \$(cat .ralph/plans/current/*.md)' to continue."
+      echo "Run 'ralph-worker' or 'ralph plans/current/*.md' to continue."
     fi
   else
     echo ""

@@ -185,10 +185,10 @@ For processing multiple plans:
 
 Queue folder structure:
 ```
-.ralph/plans/
+plans/
 ├── pending/      # Plans waiting to be processed
 ├── current/      # Currently active plan (0-1 files)
-└── completed/    # Finished plans with logs
+└── complete/     # Finished plans with logs
 ```
 
 ## Plan File Format
@@ -223,19 +223,31 @@ Within that task, find first unchecked subtask.
 
 ## Configuration
 
-Configuration lives in `.ralph/`:
+Configuration lives in `.ralph/`, with specs and plans at repo root:
 
 ```
-.ralph/
+# Repo root
+specs/               # Feature specifications (see ralph-spec skill)
+├── INDEX.md         # Lookup table for all features
+└── feature/
+    └── SPEC.md
+
+plans/               # Task execution (see ralph-plan skill)
+├── pending/         # Plans waiting to be processed
+├── current/         # Currently active plan (0-1 files)
+└── complete/        # Finished plans with logs
+
+.ralph/              # Ralph configuration
 ├── config.yaml      # Project settings
 ├── principles.md    # Development principles
 ├── patterns.md      # Code patterns to follow
 ├── boundaries.md    # Files to never modify
-├── tech-stack.md    # Technology description
-└── plans/           # Plan queue folders
-    ├── pending/
-    ├── current/
-    └── completed/
+└── tech-stack.md    # Technology description
+
+.claude/skills/      # Claude Code skills
+├── ralph-spec/      # Working with feature specs
+├── ralph-plan/      # Working with task plans
+└── ralph-spec-to-plan/  # Generating plans from specs
 ```
 
 ### config.yaml

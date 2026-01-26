@@ -207,8 +207,10 @@ Replace session-based auth with JWT. Enables stateless auth and microservices re
 
 For queue workflow:
 ```
-.ralph/plans/
+plans/
 ├── pending/    # Waiting to be processed
 ├── current/    # Active plan (0-1 files)
-└── completed/  # Finished with logs
+└── complete/   # Finished with logs
 ```
+
+See the `ralph-plan` skill in `.claude/skills/ralph-plan/SKILL.md` for full documentation.

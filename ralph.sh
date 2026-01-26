@@ -216,7 +216,7 @@ EOF
     rm -f "$SCRIPT_DIR/context.json"
 
     # If plan is in the queue (current folder), trigger completion workflow
-    if [[ "$PLAN_PATH" == *"/.ralph/plans/current/"* ]]; then
+    if [[ "$PLAN_PATH" == *"/plans/current/"* ]]; then
       echo ""
       echo "Plan is in queue - triggering completion workflow..."
       if [ "$CREATE_PR" = true ]; then
