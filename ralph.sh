@@ -231,23 +231,39 @@ EOF
 
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
     echo ""
-    log_success "All tasks complete!"
-    echo "Ralph finished successfully"
-    echo "Plan file: $PLAN_FILE"
-    rm -f "$SCRIPT_DIR/context.json"
+    echo -e "${BLUE}Completion signal detected - verifying plan state...${NC}"
 
-    # If plan is in the queue (current folder), trigger completion workflow
-    if [[ "$PLAN_PATH" == *"/plans/current/"* ]]; then
-      echo ""
-      echo "Plan is in queue - triggering completion workflow..."
-      if [ "$CREATE_PR" = true ]; then
-        "$SCRIPT_DIR/ralph-worker.sh" --complete --create-pr
-      else
-        "$SCRIPT_DIR/ralph-worker.sh" --complete
+    # Verify with haiku to avoid false positives (LLM sometimes mentions the marker without meaning it)
+    VERIFY_PROMPT="Read this plan file and determine if ALL tasks are genuinely complete.
+Look for task statuses, checkboxes, or any indication of remaining work.
+
+Output ONLY one word: COMPLETE or INCOMPLETE
+
+$(cat "$PLAN_PATH")"
+
+    VERIFY_RESULT=$(echo "$VERIFY_PROMPT" | claude --model haiku -p 2>/dev/null | tr -d '[:space:]')
+
+    if [ "$VERIFY_RESULT" = "COMPLETE" ]; then
+      log_success "Verified: All tasks complete!"
+      echo "Ralph finished successfully"
+      echo "Plan file: $PLAN_FILE"
+      rm -f "$SCRIPT_DIR/context.json"
+
+      # If plan is in the queue (current folder), trigger completion workflow
+      if [[ "$PLAN_PATH" == *"/plans/current/"* ]]; then
+        echo ""
+        echo "Plan is in queue - triggering completion workflow..."
+        if [ "$CREATE_PR" = true ]; then
+          "$SCRIPT_DIR/ralph-worker.sh" --complete --create-pr
+        else
+          "$SCRIPT_DIR/ralph-worker.sh" --complete
+        fi
       fi
-    fi
 
-    exit 0
+      exit 0
+    else
+      log_warn "Verification failed: Plan has incomplete tasks. Continuing..."
+    fi
   fi
 
   echo ""
