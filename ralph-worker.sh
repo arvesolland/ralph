@@ -167,6 +167,21 @@ complete_plan() {
     mv "$progress_file" "$completed_subdir/progress.md"
   fi
 
+  # If this is a reverse-specs plan, also archive the discovery document
+  if [[ "$plan_name" == *"reverse-specs"* ]]; then
+    local discovery_file="$plan_dir/reverse-discovery.md"
+    local discovery_progress="$plan_dir/reverse-discovery.progress.md"
+
+    if [ -f "$discovery_file" ]; then
+      mv "$discovery_file" "$completed_subdir/discovery.md"
+      echo "  Archived discovery document" >&2
+    fi
+
+    if [ -f "$discovery_progress" ]; then
+      mv "$discovery_progress" "$completed_subdir/discovery-progress.md"
+    fi
+  fi
+
   echo "$completed_subdir"
 }
 
