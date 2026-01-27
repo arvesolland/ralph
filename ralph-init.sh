@@ -387,15 +387,16 @@ fi
 # Add Ralph section to CLAUDE.md
 echo -e "${BLUE}Updating CLAUDE.md...${NC}"
 
-RALPH_SECTION='## Ralph (AI Development Agent)
+RALPH_SECTION='## Ralph (Autonomous Development)
 
-This project uses Ralph for autonomous feature implementation.
+This project uses Ralph - an implementation of the Ralph Wiggum technique for autonomous AI development. Each iteration runs with a fresh context window, avoiding context pollution while persisting progress in files/git.
 
-- **Specs** (`specs/`) describe WHAT to build and WHY. Use the `ralph-spec` skill to create/manage specs.
-- **Plans** (`plans/`) describe HOW to build it with trackable tasks. Use the `ralph-plan` skill to manage plans.
-- Generate plans from specs with the `ralph-spec-to-plan` skill.
+**External memory architecture:**
+- **Specs** (`specs/`) - Durable knowledge base. WHAT and WHY. Use the `ralph-spec` skill.
+- **Plans** (`plans/`) - Execution state. HOW and STATUS. Use the `ralph-plan` skill.
+- **Progress** (`progress.txt`) - Institutional memory. Gotchas and learnings that compound over time.
 
-Run plans with `./scripts/ralph/ralph.sh <plan-file>`.'
+Generate plans from specs with the `ralph-spec-to-plan` skill. Run with `./scripts/ralph/ralph.sh <plan-file>`.'
 
 CLAUDE_MD="$PROJECT_ROOT/CLAUDE.md"
 

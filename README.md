@@ -1,8 +1,28 @@
 # Ralph
 
-Autonomous AI development loops powered by Claude Code.
+An implementation of the [Ralph Wiggum technique](https://ralph-wiggum.ai) for autonomous AI development.
 
-Ralph orchestrates Claude Code to implement tasks from structured plan files, one subtask at a time, with proper commits, validation, and progress tracking.
+## Why It Works
+
+**Fresh context per iteration.** Like malloc'ing a new array instead of appending - each Claude Code invocation gets a clean context window, avoiding the pollution and degradation that happens when LLMs accumulate conversation history. Progress persists in files and git, not in context.
+
+**External memory architecture.** Agents don't carry state - they read it:
+- **Specs** (`specs/`) - Durable knowledge base. Entry point for understanding what exists and why.
+- **Plans** (`plans/`) - Volatile execution state. What to do next, with dependencies and checkboxes.
+- **Progress** (`progress.txt`) - Institutional memory. Gotchas and learnings that compound over time.
+
+**Collective learning.** Each agent writes learnings back before exiting. Future agents read these gotchas and don't repeat mistakes. The system gets smarter with every iteration.
+
+```
+Fresh context window (clean slate)
+    → Reads specs (understands system)
+    → Reads progress (learns from past gotchas)
+    → Reads plan (knows exactly what to do)
+    → Executes ONE subtask
+    → Writes learnings back
+    → Commits & exits
+    → Next agent picks up smarter
+```
 
 ## Features
 
