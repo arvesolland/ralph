@@ -1,0 +1,27 @@
+# Changelog
+
+All notable changes to Ralph will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.0.0] - 2025-01-28
+
+### Added
+- Initial release of Ralph - AI Agent Implementation Loop
+- `ralph.sh` - Main implementation loop with fresh context per iteration
+- `ralph-worker.sh` - File-based task queue (pending/current/complete)
+- `ralph-init.sh` - Project initialization with --detect and --ai modes
+- `ralph-reverse.sh` - Codebase-to-specs reverse engineering loop
+- Plan review phase with configurable passes
+- Progress files for institutional memory
+- Claude Code skills: ralph-spec, ralph-plan, ralph-spec-to-plan
+- Automatic feature branch management
+- PR creation via Claude Code
+- Iterative discovery with confidence levels for reverse mode
+- Sub-feature support with guidance on when to split features
+
+### Fixed
+- macOS compatibility for grep patterns (removed Perl regex dependency)

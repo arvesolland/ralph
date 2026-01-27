@@ -1,0 +1,142 @@
+#!/bin/bash
+# Ralph commit-msg hook
+# Automatically updates CHANGELOG.md based on conventional commit messages
+#
+# Install: cp hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Get the repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+CHANGELOG="$REPO_ROOT/CHANGELOG.md"
+
+# Skip if this is a merge commit, amend, or release commit
+if echo "$COMMIT_MSG" | grep -qE "^Merge |^Release v|^\[skip changelog\]"; then
+  exit 0
+fi
+
+# Skip if CHANGELOG.md doesn't exist
+if [ ! -f "$CHANGELOG" ]; then
+  exit 0
+fi
+
+# Parse conventional commit type and extract the message
+# Format: type(scope): description  OR  type: description
+if echo "$COMMIT_MSG" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|build|ci)(\(.+\))?!?:"; then
+  # Extract type (with optional ! for breaking)
+  TYPE=$(echo "$COMMIT_MSG" | sed -E 's/^([a-z]+)(\(.+\))?(!)?:.*/\1\3/')
+
+  # Extract the first line (summary)
+  SUMMARY=$(echo "$COMMIT_MSG" | head -1 | sed -E 's/^[a-z]+(\(.+\))?!?:\s*//')
+
+  # Map commit type to changelog section
+  case "$TYPE" in
+    feat|feat!)
+      SECTION="Added"
+      ;;
+    fix|fix!)
+      SECTION="Fixed"
+      ;;
+    docs)
+      SECTION="Documentation"
+      ;;
+    perf)
+      SECTION="Performance"
+      ;;
+    refactor)
+      SECTION="Changed"
+      ;;
+    chore|build|ci|style|test)
+      # Skip these types - they don't need changelog entries
+      exit 0
+      ;;
+    *)
+      SECTION="Changed"
+      ;;
+  esac
+
+  # Check if there's a breaking change
+  if echo "$COMMIT_MSG" | grep -qE "^BREAKING CHANGE:|^[a-z]+(\(.+\))?!:"; then
+    SECTION="Breaking Changes"
+  fi
+
+  # Check if this entry already exists (avoid duplicates on amend)
+  if grep -qF "- $SUMMARY" "$CHANGELOG" 2>/dev/null; then
+    exit 0
+  fi
+
+  # Create a temp file for the new changelog
+  TEMP_CHANGELOG=$(mktemp)
+
+  # Find [Unreleased] section and add entry under appropriate subsection
+  awk -v section="$SECTION" -v summary="$SUMMARY" '
+    BEGIN { found_unreleased=0; found_section=0; added=0 }
+
+    # Found [Unreleased] header
+    /^## \[Unreleased\]/ {
+      print
+      found_unreleased=1
+      next
+    }
+
+    # We are in Unreleased section, looking for our section or next version
+    found_unreleased && !added {
+      # Found next version header - need to add our section before it
+      if (/^## \[/) {
+        print ""
+        print "### " section
+        print "- " summary
+        added=1
+        print
+        next
+      }
+
+      # Found our section header
+      if ($0 == "### " section) {
+        print
+        print "- " summary
+        found_section=1
+        added=1
+        next
+      }
+
+      # Found a different section header while looking
+      if (/^### / && !found_section) {
+        # Continue looking
+        print
+        next
+      }
+    }
+
+    { print }
+
+    END {
+      # If we never added (empty Unreleased), this will be handled
+    }
+  ' "$CHANGELOG" > "$TEMP_CHANGELOG"
+
+  # Check if we actually added something
+  if ! grep -qF "- $SUMMARY" "$TEMP_CHANGELOG"; then
+    # Entry wasn't added - insert it after [Unreleased]
+    awk -v section="$SECTION" -v summary="$SUMMARY" '
+      /^## \[Unreleased\]/ {
+        print
+        print ""
+        print "### " section
+        print "- " summary
+        next
+      }
+      { print }
+    ' "$CHANGELOG" > "$TEMP_CHANGELOG"
+  fi
+
+  # Replace original changelog
+  mv "$TEMP_CHANGELOG" "$CHANGELOG"
+
+  # Stage the changelog update
+  git add "$CHANGELOG"
+
+fi
+
+exit 0
