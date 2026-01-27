@@ -4,6 +4,8 @@ set -e
 # Ralph Installer
 # Downloads and installs Ralph scripts into the current project
 #
+# Note: test/ directory is intentionally NOT installed - it's for Ralph development only
+#
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/USER/ralph/main/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/USER/ralph/main/install.sh | bash -s -- --ai

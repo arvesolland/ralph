@@ -1,0 +1,10 @@
+# Ralph development artifacts
+context.json
+.current_task.md
+.worker.lock
+
+# Test workspaces (created at runtime)
+test/workspaces/
+
+# OS files
+.DS_Store
