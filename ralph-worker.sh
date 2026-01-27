@@ -148,24 +148,23 @@ has_incomplete_tasks() {
   grep -q '^\s*-\s*\[ \]' "$plan_file" 2>/dev/null
 }
 
-# Move plan to completed with progress snapshot
+# Move plan to completed with its progress file
 complete_plan() {
   local plan_file="$1"
   local plan_name=$(basename "$plan_file" .md)
+  local plan_dir=$(dirname "$plan_file")
+  local progress_file="$plan_dir/${plan_name}.progress.md"
   local timestamp=$(date +%Y%m%d-%H%M%S)
-  # Add short UUID suffix to prevent collisions if two plans complete in same second
-  local uuid_suffix=$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n')
-  local completed_subdir="$COMPLETED_DIR/${timestamp}-${uuid_suffix}-${plan_name}"
+  local completed_subdir="$COMPLETED_DIR/${timestamp}-${plan_name}"
 
   mkdir -p "$completed_subdir"
 
   # Move the plan
   mv "$plan_file" "$completed_subdir/plan.md"
 
-  # Copy relevant progress entries
-  if [ -f "$SCRIPT_DIR/progress.txt" ]; then
-    # Extract entries related to this plan (if tagged) or just copy recent
-    cp "$SCRIPT_DIR/progress.txt" "$completed_subdir/progress-snapshot.txt"
+  # Move the progress file if it exists (plan-specific learnings)
+  if [ -f "$progress_file" ]; then
+    mv "$progress_file" "$completed_subdir/progress.md"
   fi
 
   echo "$completed_subdir"

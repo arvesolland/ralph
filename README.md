@@ -9,7 +9,7 @@ An implementation of the [Ralph Wiggum technique](https://ralph-wiggum.ai) for a
 **External memory architecture.** Agents don't carry state - they read it:
 - **Specs** (`specs/`) - Durable knowledge base. Entry point for understanding what exists and why.
 - **Plans** (`plans/`) - Volatile execution state. What to do next, with dependencies and checkboxes.
-- **Progress** (`progress.txt`) - Institutional memory. Gotchas and learnings that compound over time.
+- **Progress** (`<plan>.progress.md`) - Per-plan institutional memory. Gotchas that future iterations read to avoid mistakes.
 
 **Collective learning.** Each agent writes learnings back before exiting. Future agents read these gotchas and don't repeat mistakes. The system gets smarter with every iteration.
 
@@ -32,7 +32,7 @@ Fresh context window (clean slate)
 - **Auto PR Creation** - Create pull requests via Claude Code on completion
 - **AI-Assisted Setup** - Let Claude analyze your codebase and generate config
 - **Config-Driven** - Customize prompts via config files, not code
-- **Progress Tracking** - Learnings accumulate across iterations
+- **Progress Tracking** - Per-plan learnings that future iterations read to avoid repeating mistakes
 
 ## Installation
 
@@ -356,20 +356,18 @@ When running via the worker queue, this triggers:
 2. Create PR (if `--create-pr` flag set)
 3. Activate next pending plan
 
-### Progress Tracking
+### Progress & Learnings
 
-`scripts/ralph/progress.txt` accumulates learnings:
+Each plan has a companion `<plan-name>.progress.md` file that accumulates gotchas:
 
 ```markdown
-## Codebase Patterns
-- Use useQuery hook for data fetching
-
 ---
-## 2024-01-15 - T1.2: Implement validation
-- **Implemented:** Input validation for registration
-- **Files changed:** src/validators/user.ts
-- **Learnings:** Use zod for schema validation
+### T1.2: Implement validation
+**Gotcha:** Tried using Joi but project already uses Zod - use existing patterns
+**Pattern:** Validation schemas live in src/validators/, one per domain
 ```
+
+Future iterations read this file to avoid repeating mistakes. Archived with completed plans.
 
 ## Updating
 

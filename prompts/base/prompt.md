@@ -27,10 +27,9 @@ Read `scripts/ralph/context.json` to get:
 - `iteration` - Current iteration number
 - `maxIterations` - Maximum iterations allowed
 
-Then read the plan file. The plan contains:
-- **Context** - Background and constraints
-- **Rules** - How to select and complete tasks
-- **Tasks** - Work items with dependencies and status
+Then read these files:
+1. **Plan file** - Tasks, dependencies, status, what to do
+2. **Progress file** (if exists) - `<plan-name>.progress.md` next to plan. **Read this to learn from previous iterations' gotchas.**
 
 ## Task Selection
 
@@ -73,17 +72,26 @@ Within that task, find the first unchecked subtask.
 {{TEST_COMMAND}}
 ```
 
-## Progress Tracking
+## Progress & Learnings
 
-Append learnings to `scripts/ralph/progress.txt`:
+**Why this matters:** Future agents read this file to avoid repeating mistakes. Your learnings compound - write them well.
+
+**Location:** Same folder as plan, named `<plan-name>.progress.md` (e.g., `auth.progress.md` next to `auth.md`)
+
+**At iteration start:** Read the progress file if it exists. Learn from previous gotchas.
+
+**At iteration end:** Append learnings - but only if you discovered something non-obvious:
 
 ```markdown
 ---
-## [YYYY-MM-DD] - T1.2: [Subtask description]
-- **Implemented:** What you did
-- **Files changed:** List of files
-- **Learnings:** Patterns or gotchas discovered
+### T1.2: [Subtask description]
+**Gotcha:** [What surprised you, what you tried that didn't work, edge cases found]
+**Pattern:** [Reusable approach that worked, for future reference]
 ```
+
+**Good entries:** "Tried X but Y worked because Z", "Edge case: must handle null", "Use existing FooService not new implementation"
+
+**Skip if:** Nothing notable - don't log "implemented the thing successfully"
 
 ## Rules Reminder
 

@@ -394,7 +394,7 @@ This project uses Ralph - an implementation of the Ralph Wiggum technique for au
 **External memory architecture:**
 - **Specs** (`specs/`) - Durable knowledge base. WHAT and WHY. Use the `ralph-spec` skill.
 - **Plans** (`plans/`) - Execution state. HOW and STATUS. Use the `ralph-plan` skill.
-- **Progress** (`progress.txt`) - Institutional memory. Gotchas and learnings that compound over time.
+- **Progress** (`<plan>.progress.md`) - Institutional memory per plan. Gotchas that future iterations read to avoid repeating mistakes.
 
 Generate plans from specs with the `ralph-spec-to-plan` skill. Run with `./scripts/ralph/ralph.sh <plan-file>`.'
 

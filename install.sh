@@ -253,24 +253,6 @@ else
   echo "  - .ralph/tech-stack.md (exists, skipped)"
 fi
 
-# Create progress.txt if it doesn't exist
-if [ ! -f "$PROJECT_ROOT/scripts/ralph/progress.txt" ]; then
-  cat > "$PROJECT_ROOT/scripts/ralph/progress.txt" << 'EOF'
-# Ralph Progress Log
-
-## Codebase Patterns
-
-(Patterns discovered during implementation will be added here)
-
----
-
-# Task History
-
-(Completed tasks will be logged below)
-EOF
-  echo "  - scripts/ralph/progress.txt (created)"
-fi
-
 # Add Ralph section to CLAUDE.md
 echo -e "${BLUE}Updating CLAUDE.md...${NC}"
 
@@ -281,7 +263,7 @@ This project uses Ralph - an implementation of the Ralph Wiggum technique for au
 **External memory architecture:**
 - **Specs** (`specs/`) - Durable knowledge base. WHAT and WHY. Use the `ralph-spec` skill.
 - **Plans** (`plans/`) - Execution state. HOW and STATUS. Use the `ralph-plan` skill.
-- **Progress** (`progress.txt`) - Institutional memory. Gotchas and learnings that compound over time.
+- **Progress** (`<plan>.progress.md`) - Institutional memory per plan. Gotchas that future iterations read to avoid repeating mistakes.
 
 Generate plans from specs with the `ralph-spec-to-plan` skill. Run with `./scripts/ralph/ralph.sh <plan-file>`.'
 
