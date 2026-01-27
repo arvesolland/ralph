@@ -51,7 +51,7 @@ Read `scripts/ralph/context.json` to get:
 - `iteration` - Current iteration number
 - `maxIterations` - Maximum iterations allowed
 
-**You are already on the feature branch.** All commits go to `featureBranch`. Do not switch branches.
+**Ensure you are on the correct feature branch.** All commits go to `featureBranch`. Do not switch branches.
 
 ### 4. Your Plan
 Read the plan file specified in `context.json`. This contains:
