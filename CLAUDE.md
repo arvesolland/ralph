@@ -135,6 +135,23 @@ Plans automatically get feature branches:
 - `log_error`, `log_warn`, `log_success` for colored output
 - Exit codes: 0 = success, 1 = max iterations or error
 
+## Releasing
+
+```bash
+# Install hooks (one time)
+./hooks/install-hooks.sh
+
+# Commits auto-update CHANGELOG.md based on conventional commit prefix:
+# feat: → Added, fix: → Fixed, refactor: → Changed, chore: → skipped
+
+# Create release (moves [Unreleased] to version, bumps VERSION, tags)
+./ralph-release.sh          # Auto-detect: Breaking→major, Added→minor, else→patch
+./ralph-release.sh minor    # Force minor bump
+
+# Push release
+git push && git push --tags
+```
+
 ## Gotchas
 
 - **stdout pollution**: Worker functions that return values must redirect output to stderr (`>&2`)
