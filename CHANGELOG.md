@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - grep compatibility for summaries containing dashes
 - Improved awk script for changelog section handling
 
+### Changed
+- Use Python for reliable changelog manipulation
+
 ## [1.0.0] - 2025-01-28
 
 ### Added

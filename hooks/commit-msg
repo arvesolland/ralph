@@ -28,8 +28,8 @@ if echo "$COMMIT_MSG" | grep -qE -- "^(feat|fix|docs|style|refactor|perf|test|ch
   # Extract type (with optional ! for breaking)
   TYPE=$(echo "$COMMIT_MSG" | sed -E 's/^([a-z]+)(\(.+\))?(!)?:.*/\1\3/')
 
-  # Extract the first line (summary)
-  SUMMARY=$(echo "$COMMIT_MSG" | head -1 | sed -E 's/^[a-z]+(\(.+\))?!?:\s*//')
+  # Extract the first line (summary) and trim leading/trailing whitespace
+  SUMMARY=$(echo "$COMMIT_MSG" | head -1 | sed -E 's/^[a-z]+(\(.+\))?!?:\s*//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
   # Map commit type to changelog section
   case "$TYPE" in
