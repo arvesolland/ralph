@@ -62,7 +62,7 @@ if echo "$COMMIT_MSG" | grep -qE -- "^(feat|fix|docs|style|refactor|perf|test|ch
   fi
 
   # Check if this entry already exists (avoid duplicates on amend)
-  if grep -qF "- $SUMMARY" "$CHANGELOG" 2>/dev/null; then
+  if grep -qF -- "- $SUMMARY" "$CHANGELOG" 2>/dev/null; then
     exit 0
   fi
 
@@ -117,7 +117,7 @@ if echo "$COMMIT_MSG" | grep -qE -- "^(feat|fix|docs|style|refactor|perf|test|ch
   ' "$CHANGELOG" > "$TEMP_CHANGELOG"
 
   # Check if we actually added something
-  if ! grep -qF "- $SUMMARY" "$TEMP_CHANGELOG"; then
+  if ! grep -qF -- "- $SUMMARY" "$TEMP_CHANGELOG"; then
     # Entry wasn't added - insert it after [Unreleased]
     awk -v section="$SECTION" -v summary="$SUMMARY" '
       /^## \[Unreleased\]/ {
