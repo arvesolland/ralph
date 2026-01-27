@@ -98,6 +98,22 @@ This is the most important section! Look for:
 - What other features does this depend on?
 - What features depend on this?
 
+### Identifying Sub-Features
+
+While analyzing, look for parts that could be logically separated:
+
+| Signal | Action |
+|--------|--------|
+| Distinct user flows (login vs registration) | Consider as sub-features |
+| Optional/pluggable components (Stripe vs PayPal) | Consider as sub-features |
+| Nested subdirectories with clear purpose | Likely sub-features |
+| Tightly coupled, always change together | Keep as one feature |
+
+If you identify sub-features:
+1. Create the parent spec with a **Sub-Features** table
+2. Create nested folders for each sub-feature
+3. Each sub-feature gets its own SPEC.md with `Requires: F[parent]`
+
 ---
 
 ## Step 3: Create the Spec

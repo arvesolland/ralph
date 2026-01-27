@@ -133,6 +133,44 @@ Create or update the discovery document at the path from context.json:
 - Verify dependencies are correct
 - Ensure no overlaps or gaps
 - Finalize groupings
+- Identify features that need sub-feature breakdown
+
+---
+
+## Identifying Sub-Features
+
+Large features should be broken into sub-features when parts can be **logically separated** — meaning they could be understood, discussed, or worked on independently.
+
+### Signals a Feature Needs Sub-Features
+
+| Signal | Example |
+|--------|---------|
+| **Distinct user flows** | Auth has Login, Registration, Password Reset |
+| **Optional/pluggable components** | Payments has Stripe, PayPal, Invoice |
+| **Different integration points** | Notifications has Email, Push, SMS |
+| **Nested directory structure** | `src/auth/oauth/`, `src/auth/mfa/` |
+| **Separable concerns** | Search has Indexing, Query, Ranking |
+
+### How to Record in Discovery Document
+
+When you identify a feature that should have sub-features, record it like this:
+
+```markdown
+| # | Feature | Confidence | Key Paths | Notes |
+|---|---------|------------|-----------|-------|
+| 3 | Authentication | 🟢 High | src/auth/ | **Has sub-features:** OAuth, MFA, Password Reset |
+| 3.1 | ↳ OAuth | 🟢 High | src/auth/oauth/ | Google, GitHub providers |
+| 3.2 | ↳ MFA | 🟡 Medium | src/auth/mfa/ | TOTP implementation |
+| 3.3 | ↳ Password Reset | 🟢 High | src/auth/reset/ | Token-based flow |
+```
+
+### Keep as One Feature When
+
+- Parts are tightly coupled and always change together
+- Splitting would create artificial boundaries
+- Sub-parts don't make sense in isolation
+
+**Rule of thumb:** If you can explain the sub-feature to someone without first explaining the entire parent, it's a good candidate for separation.
 
 ---
 

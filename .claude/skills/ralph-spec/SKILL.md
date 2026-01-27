@@ -152,6 +152,42 @@ plans/
 3. Add to parent's Sub-Features table
 4. Add to `INDEX.md` with hierarchical ID (F1.1)
 
+### When to Create Sub-Features
+
+Break a feature into sub-features when parts can be **logically separated** — meaning they could be understood, discussed, or worked on independently.
+
+**Good candidates for sub-features:**
+
+| Signal | Example |
+|--------|---------|
+| **Distinct user flows** | Auth → Login, Registration, Password Reset |
+| **Optional/pluggable components** | Payments → Stripe, PayPal, Invoice |
+| **Different integration points** | Notifications → Email, Push, SMS |
+| **Separable concerns** | Search → Indexing, Query, Ranking |
+| **Could be enabled/disabled independently** | Auth → MFA, OAuth, SSO |
+
+**Keep as one feature when:**
+
+- Parts are tightly coupled and always change together
+- Splitting would create artificial boundaries
+- Sub-parts don't make sense in isolation
+- It's just "big" but conceptually unified
+
+**Rule of thumb:** If you can explain the sub-feature to someone without first explaining the entire parent, it's a good candidate for separation.
+
+**Example structure:**
+
+```
+specs/auth/
+├── SPEC.md              # Core auth: session management, middleware
+├── oauth/
+│   └── SPEC.md          # F1.1: Google, GitHub OAuth providers
+├── mfa/
+│   └── SPEC.md          # F1.2: TOTP, SMS verification
+└── password-reset/
+    └── SPEC.md          # F1.3: Reset flow, token management
+```
+
 ### Updating a Spec
 
 When implementation changes:
