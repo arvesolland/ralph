@@ -214,7 +214,7 @@ if [ "$MODE" = "discover" ] || [ "$MODE" = "auto" ]; then
   # Check if discovery already in progress
   if [ -f "$DISCOVERY_FILE" ]; then
     # Check status
-    CURRENT_STATUS=$(grep -oP '^\*\*Status:\*\* \K\w+' "$DISCOVERY_FILE" 2>/dev/null || echo "unknown")
+    CURRENT_STATUS=$(grep '^\*\*Status:\*\*' "$DISCOVERY_FILE" 2>/dev/null | sed 's/.*\*\* //' | tr -d '[:space:]' || echo "unknown")
     if [ "$CURRENT_STATUS" = "ready" ]; then
       log_success "Discovery already complete (status: ready)"
       echo "Discovery file: $DISCOVERY_FILE"
@@ -226,7 +226,7 @@ if [ "$MODE" = "discover" ] || [ "$MODE" = "auto" ]; then
       # For auto mode, continue to plan generation
     else
       echo "Resuming existing discovery (status: $CURRENT_STATUS)"
-      CURRENT_ITERATION=$(grep -oP '^\*\*Iteration:\*\* \K\d+' "$DISCOVERY_FILE" 2>/dev/null || echo "0")
+      CURRENT_ITERATION=$(grep '^\*\*Iteration:\*\*' "$DISCOVERY_FILE" 2>/dev/null | sed 's/.*\*\* //' | tr -d '[:space:]' || echo "0")
       echo "Current iteration: $CURRENT_ITERATION"
     fi
   else
@@ -306,7 +306,7 @@ EOF
 
   # Check if we exited loop without completion
   if [ "$MODE" = "discover" ]; then
-    FINAL_STATUS=$(grep -oP '^\*\*Status:\*\* \K\w+' "$DISCOVERY_FILE" 2>/dev/null || echo "unknown")
+    FINAL_STATUS=$(grep '^\*\*Status:\*\*' "$DISCOVERY_FILE" 2>/dev/null | sed 's/.*\*\* //' | tr -d '[:space:]' || echo "unknown")
     if [ "$FINAL_STATUS" != "ready" ]; then
       echo ""
       log_warn "Max iterations ($MAX_ITERATIONS) reached"
@@ -334,7 +334,7 @@ if [ "$MODE" = "generate" ] || [ "$MODE" = "auto" ]; then
     exit 1
   fi
 
-  DISCOVERY_STATUS=$(grep -oP '^\*\*Status:\*\* \K\w+' "$DISCOVERY_FILE" 2>/dev/null || echo "unknown")
+  DISCOVERY_STATUS=$(grep '^\*\*Status:\*\*' "$DISCOVERY_FILE" 2>/dev/null | sed 's/.*\*\* //' | tr -d '[:space:]' || echo "unknown")
   if [ "$DISCOVERY_STATUS" != "ready" ]; then
     log_warn "Discovery status is '$DISCOVERY_STATUS', not 'ready'"
     echo "Continue anyway? (y/N)"
