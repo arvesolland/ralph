@@ -19,6 +19,7 @@ set -e
 #   - scripts/ralph/*.sh (core scripts)
 #   - scripts/ralph/lib/*.sh
 #   - scripts/ralph/prompts/base/*.md
+#   - .claude/skills/ralph-*/ (Claude Code skills)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -90,6 +91,25 @@ PROMPTS=(
 for prompt in "${PROMPTS[@]}"; do
   echo -n "  - $prompt "
   if download_file "$prompt" "$SCRIPT_DIR/$prompt"; then
+    echo -e "${GREEN}✓${NC}"
+  fi
+done
+
+# Update Claude Code skills
+echo -e "${BLUE}Updating Claude Code skills...${NC}"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ralph-spec"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ralph-plan"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ralph-spec-to-plan"
+
+SKILLS=(
+  ".claude/skills/ralph-spec/SKILL.md"
+  ".claude/skills/ralph-plan/SKILL.md"
+  ".claude/skills/ralph-spec-to-plan/SKILL.md"
+)
+
+for skill in "${SKILLS[@]}"; do
+  echo -n "  - $skill "
+  if download_file "$skill" "$PROJECT_ROOT/$skill"; then
     echo -e "${GREEN}✓${NC}"
   fi
 done
