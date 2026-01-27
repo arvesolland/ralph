@@ -58,6 +58,7 @@ SCRIPTS=(
   "ralph-worker.sh"
   "ralph-init.sh"
   "ralph-update.sh"
+  "ralph-reverse.sh"
 )
 
 for script in "${SCRIPTS[@]}"; do
@@ -81,6 +82,9 @@ mkdir -p "$SCRIPT_DIR/prompts/base"
 PROMPTS=(
   "prompts/base/prompt.md"
   "prompts/base/plan_reviewer_prompt.md"
+  "prompts/base/reverse_discover_prompt.md"
+  "prompts/base/reverse_generate_prompt.md"
+  "prompts/base/reverse_spec_prompt.md"
 )
 
 for prompt in "${PROMPTS[@]}"; do
