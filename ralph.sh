@@ -117,12 +117,26 @@ setup_colors
 # Get project name from config
 PROJECT_NAME=$(config_get "project.name" "$CONFIG_DIR/config.yaml")
 PROJECT_NAME=${PROJECT_NAME:-"Project"}
+BASE_BRANCH=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml")
+BASE_BRANCH=${BASE_BRANCH:-"main"}
+
+# Get feature branch name from plan
+get_feature_branch() {
+  local plan_file="$1"
+  local plan_name=$(basename "$plan_file" .md)
+  # Remove timestamp prefix if present (e.g., 20240127-143052-auth -> auth)
+  plan_name=$(echo "$plan_name" | sed 's/^[0-9]\{8\}-[0-9]\{6\}-//')
+  echo "feat/$plan_name"
+}
+
+FEATURE_BRANCH=$(get_feature_branch "$PLAN_PATH")
 
 echo -e "${GREEN}Ralph - Implementation Loop${NC}"
 echo "========================================"
 echo "Project: $PROJECT_NAME"
 echo "Project root: $PROJECT_ROOT"
 echo "Plan file: $PLAN_FILE"
+echo "Feature branch: $FEATURE_BRANCH"
 if [ "$REVIEW_PLAN" = true ]; then
   echo -e "Plan review: ${YELLOW}enabled ($REVIEW_PASSES passes)${NC}"
 fi
@@ -130,6 +144,19 @@ echo "Max iterations: $MAX_ITERATIONS"
 echo ""
 
 cd "$PROJECT_ROOT"
+
+# Setup feature branch (create or checkout)
+echo -e "${BLUE}Setting up feature branch...${NC}"
+if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
+  echo "  Branch exists, checking out..."
+  git checkout "$FEATURE_BRANCH"
+  git pull --ff-only 2>/dev/null || true
+else
+  echo "  Creating branch from $BASE_BRANCH..."
+  git checkout -b "$FEATURE_BRANCH" "$BASE_BRANCH" 2>/dev/null || git checkout -b "$FEATURE_BRANCH"
+fi
+echo "  On branch: $(git branch --show-current)"
+echo ""
 
 # ============================================
 # Phase 1: Plan Review (if --review-plan)
@@ -220,6 +247,8 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   "planFile": "$PLAN_FILE",
   "planPath": "$PLAN_PATH",
   "projectRoot": "$PROJECT_ROOT",
+  "featureBranch": "$FEATURE_BRANCH",
+  "baseBranch": "$BASE_BRANCH",
   "iteration": $i,
   "maxIterations": $MAX_ITERATIONS
 }

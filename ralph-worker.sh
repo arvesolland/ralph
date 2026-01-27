@@ -170,12 +170,49 @@ complete_plan() {
   echo "$completed_subdir"
 }
 
+# Get feature branch name from plan name
+get_feature_branch() {
+  local plan_file="$1"
+  local plan_name=$(basename "$plan_file" .md)
+  # Remove timestamp prefix if present (e.g., 20240127-143052-auth -> auth)
+  plan_name=$(echo "$plan_name" | sed 's/^[0-9]\{8\}-[0-9]\{6\}-//')
+  echo "feat/$plan_name"
+}
+
+# Create or checkout feature branch for plan
+setup_feature_branch() {
+  local plan_file="$1"
+  local branch_name=$(get_feature_branch "$plan_file")
+  local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
+
+  echo -e "${BLUE}Setting up feature branch: $branch_name${NC}"
+
+  # Check if branch exists
+  if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+    # Branch exists - checkout and pull
+    echo "  Branch exists, checking out..."
+    git checkout "$branch_name"
+    git pull --ff-only 2>/dev/null || true
+  else
+    # Create new branch from base
+    echo "  Creating branch from $base_branch..."
+    git checkout -b "$branch_name" "$base_branch" 2>/dev/null || git checkout -b "$branch_name"
+  fi
+
+  echo "  On branch: $(git branch --show-current)"
+}
+
 # Move next pending plan to current
 activate_next_plan() {
   local next_plan=$(get_oldest_file "$PENDING_DIR")
   if [ -n "$next_plan" ] && [ -f "$next_plan" ]; then
-    mv "$next_plan" "$CURRENT_DIR/"
-    echo "$CURRENT_DIR/$(basename "$next_plan")"
+    local dest="$CURRENT_DIR/$(basename "$next_plan")"
+    mv "$next_plan" "$dest"
+
+    # Setup feature branch for this plan
+    setup_feature_branch "$dest"
+
+    echo "$dest"
   fi
 }
 
@@ -304,20 +341,37 @@ do_work() {
 # Create PR via Claude Code
 create_pr_with_claude() {
   local plan_file="$1"
+  local feature_branch=$(git branch --show-current)
+  local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
 
   echo -e "${BLUE}Creating PR via Claude Code...${NC}"
+  echo "  Feature branch: $feature_branch"
+  echo "  Base branch: $base_branch"
   echo ""
 
   # Build prompt for Claude Code
-  local prompt="Create a pull request for the work completed in this branch.
+  local prompt="Create a pull request for the completed plan.
 
-Read the completed plan file at: $plan_file
+## Branch Info
+- Feature branch: $feature_branch
+- Target branch: $base_branch
 
-Use the plan's Context section and completed tasks to write a clear PR description.
-The PR title should reflect the main goal from the plan.
-Include a summary of what was implemented based on the completed tasks.
+## Plan File
+Read the completed plan at: $plan_file
 
-Create the PR targeting the base branch this feature branch was created from."
+## Instructions
+1. Run \`git log $base_branch..$feature_branch --oneline\` to see commits in this branch
+2. Run \`git diff $base_branch...$feature_branch --stat\` to see files changed
+3. Read the plan file for context and completed tasks
+
+Create a PR with:
+- **Title:** Clear, concise summary of the feature/fix (from plan name or context)
+- **Description:**
+  - Summary of what was implemented (from completed tasks)
+  - Key changes (from git diff)
+  - Any gotchas or notes (from progress file if exists)
+
+Use \`gh pr create\` to create the PR targeting $base_branch."
 
   # Run Claude Code to create PR
   echo "$prompt" | claude -p --dangerously-skip-permissions 2>&1 | tee /dev/stderr
