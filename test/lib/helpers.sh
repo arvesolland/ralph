@@ -21,7 +21,7 @@ setup_workspace() {
   cd "$WORKSPACE"
 
   # Initialize git repo (required for ralph)
-  git init -q
+  git init -q -b main
   git config user.email "test@test.com"
   git config user.name "Test"
 

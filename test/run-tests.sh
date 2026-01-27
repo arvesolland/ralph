@@ -99,6 +99,14 @@ test_single_task() {
   assert_file_exists "$WORKSPACE/output/marker.txt" "Marker file created" || failed=1
   assert_file_contains "$WORKSPACE/output/marker.txt" "ralph-test-complete" "Marker has correct content" || failed=1
 
+  # Verify feature branch was created
+  if git -C "$WORKSPACE" show-ref --verify --quiet "refs/heads/feat/test-plan"; then
+    echo -e "  ${GREEN}✓${NC} Feature branch created: feat/test-plan"
+  else
+    echo -e "  ${RED}✗${NC} Feature branch not created"
+    failed=1
+  fi
+
   # Plan may be in current/ (incomplete) or complete/ (finished)
   local plan_file=$(find "$WORKSPACE/plans" -name "*.md" -path "*/complete/*" -o -name "test-plan.md" -path "*/current/*" 2>/dev/null | head -1)
   if [ -n "$plan_file" ]; then
@@ -265,6 +273,14 @@ test_worker_queue() {
 
   # Verify results
   local failed=0
+
+  # Verify feature branch was created by worker
+  if git -C "$WORKSPACE" show-ref --verify --quiet "refs/heads/feat/test-plan"; then
+    echo -e "  ${GREEN}✓${NC} Feature branch created by worker: feat/test-plan"
+  else
+    echo -e "  ${RED}✗${NC} Feature branch not created"
+    failed=1
+  fi
 
   # Plan should have moved through the queue
   assert_dir_exists "$WORKSPACE/plans/complete" "Complete directory exists" || failed=1

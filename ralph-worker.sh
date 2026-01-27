@@ -185,21 +185,21 @@ setup_feature_branch() {
   local branch_name=$(get_feature_branch "$plan_file")
   local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
 
-  echo -e "${BLUE}Setting up feature branch: $branch_name${NC}"
+  # All output to stderr to avoid polluting stdout (which is captured for return values)
+  {
+    echo -e "${BLUE}Setting up feature branch: $branch_name${NC}"
 
-  # Check if branch exists
-  if git show-ref --verify --quiet "refs/heads/$branch_name"; then
-    # Branch exists - checkout and pull
-    echo "  Branch exists, checking out..."
-    git checkout "$branch_name"
-    git pull --ff-only 2>/dev/null || true
-  else
-    # Create new branch from base
-    echo "  Creating branch from $base_branch..."
-    git checkout -b "$branch_name" "$base_branch" 2>/dev/null || git checkout -b "$branch_name"
-  fi
+    if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+      echo "  Branch exists, checking out..."
+      git checkout "$branch_name" 2>&1
+      git pull --ff-only 2>&1 || true
+    else
+      echo "  Creating branch from $base_branch..."
+      git checkout -b "$branch_name" "$base_branch" 2>&1 || git checkout -b "$branch_name" 2>&1
+    fi
 
-  echo "  On branch: $(git branch --show-current)"
+    echo "  On branch: $(git branch --show-current)"
+  } >&2
 }
 
 # Move next pending plan to current
