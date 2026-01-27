@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - grep compatibility for summaries containing dashes
+- Improved awk script for changelog section handling
 
 ## [1.0.0] - 2025-01-28
 

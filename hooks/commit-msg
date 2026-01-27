@@ -2,7 +2,8 @@
 # Ralph commit-msg hook
 # Automatically updates CHANGELOG.md based on conventional commit messages
 #
-# Install: cp hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+# Install: ./hooks/install-hooks.sh
+# Or: cp hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
 
 COMMIT_MSG_FILE="$1"
 COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
@@ -66,80 +67,57 @@ if echo "$COMMIT_MSG" | grep -qE -- "^(feat|fix|docs|style|refactor|perf|test|ch
     exit 0
   fi
 
-  # Create a temp file for the new changelog
-  TEMP_CHANGELOG=$(mktemp)
+  # Create entry line
+  ENTRY="- $SUMMARY"
 
-  # Find [Unreleased] section and add entry under appropriate subsection
-  awk -v section="$SECTION" -v summary="$SUMMARY" '
-    BEGIN {
-      in_unreleased=0
-      in_target_section=0
-      added=0
-      buffer=""
-    }
+  # Use Python for reliable changelog manipulation (available on macOS)
+  python3 << EOF
+import re
 
-    # Found [Unreleased] header
-    /^## \[Unreleased\]/ {
-      print
-      in_unreleased=1
-      next
-    }
+with open('$CHANGELOG', 'r') as f:
+    content = f.read()
 
-    # Found next version header - end of unreleased section
-    in_unreleased && /^## \[/ {
-      # If we havent added yet, add new section before this line
-      if (!added) {
-        print ""
-        print "### " section
-        print "- " summary
-        added=1
-      }
-      in_unreleased=0
-      print
-      next
-    }
+section = "$SECTION"
+entry = "$ENTRY"
 
-    # In unreleased section, found our target section header
-    in_unreleased && $0 == "### " section {
-      print
-      print "- " summary
-      added=1
-      in_target_section=1
-      next
-    }
+# Find the [Unreleased] section
+unreleased_match = re.search(r'^## \[Unreleased\].*?(?=^## \[|\Z)', content, re.MULTILINE | re.DOTALL)
 
-    # In unreleased section, found a different section header
-    in_unreleased && /^### / {
-      in_target_section=0
-      print
-      next
-    }
+if not unreleased_match:
+    # No unreleased section found
+    exit(0)
 
-    { print }
+unreleased = unreleased_match.group()
+unreleased_start = unreleased_match.start()
+unreleased_end = unreleased_match.end()
 
-    END {
-      # If file ended while still in unreleased and we never added
-      if (in_unreleased && !added) {
-        print ""
-        print "### " section
-        print "- " summary
-      }
-    }
-  ' "$CHANGELOG" > "$TEMP_CHANGELOG"
+# Check if our section exists in unreleased
+section_pattern = rf'^### {re.escape(section)}$'
+section_match = re.search(section_pattern, unreleased, re.MULTILINE)
 
-  # Verify entry was added
-  if ! grep -qF -- "- $SUMMARY" "$TEMP_CHANGELOG"; then
-    echo "Warning: Failed to add changelog entry" >&2
-    rm -f "$TEMP_CHANGELOG"
-    exit 0
-  fi
+if section_match:
+    # Add entry after section header
+    insert_pos = unreleased_start + section_match.end()
+    new_content = content[:insert_pos] + '\n' + entry + content[insert_pos:]
+else:
+    # Need to add new section - find where to insert it
+    # Add before the next version or at end of unreleased
+    # Find the position just before the next ## [ or end of unreleased
+    next_version = re.search(r'\n(?=## \[(?!Unreleased))', content[unreleased_start:])
+    if next_version:
+        insert_pos = unreleased_start + next_version.start()
+    else:
+        insert_pos = len(content)
 
-  # Replace original changelog
-  mv "$TEMP_CHANGELOG" "$CHANGELOG"
+    new_section = f'\n### {section}\n{entry}\n'
+    new_content = content[:insert_pos] + new_section + content[insert_pos:]
+
+with open('$CHANGELOG', 'w') as f:
+    f.write(new_content)
+EOF
 
   # Stage the changelog update
   git add "$CHANGELOG"
-
 fi
 
 exit 0
