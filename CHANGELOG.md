@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
--  Add -- separator to grep commands for macOS compatibility
+### Added
+- Semantic versioning and changelog automation
+- `ralph-release.sh` for version bumping with auto-detection
+- commit-msg hook for automatic changelog updates
+- hooks/install-hooks.sh for easy hook installation
 
-### Changed
--  Add semantic versioning and changelog automation
+### Fixed
+- grep compatibility for summaries containing dashes
 
 ## [1.0.0] - 2025-01-28
 

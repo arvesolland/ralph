@@ -71,64 +71,67 @@ if echo "$COMMIT_MSG" | grep -qE -- "^(feat|fix|docs|style|refactor|perf|test|ch
 
   # Find [Unreleased] section and add entry under appropriate subsection
   awk -v section="$SECTION" -v summary="$SUMMARY" '
-    BEGIN { found_unreleased=0; found_section=0; added=0 }
+    BEGIN {
+      in_unreleased=0
+      in_target_section=0
+      added=0
+      buffer=""
+    }
 
     # Found [Unreleased] header
     /^## \[Unreleased\]/ {
       print
-      found_unreleased=1
+      in_unreleased=1
       next
     }
 
-    # We are in Unreleased section, looking for our section or next version
-    found_unreleased && !added {
-      # Found next version header - need to add our section before it
-      if (/^## \[/) {
+    # Found next version header - end of unreleased section
+    in_unreleased && /^## \[/ {
+      # If we havent added yet, add new section before this line
+      if (!added) {
         print ""
         print "### " section
         print "- " summary
         added=1
-        print
-        next
       }
+      in_unreleased=0
+      print
+      next
+    }
 
-      # Found our section header
-      if ($0 == "### " section) {
-        print
-        print "- " summary
-        found_section=1
-        added=1
-        next
-      }
+    # In unreleased section, found our target section header
+    in_unreleased && $0 == "### " section {
+      print
+      print "- " summary
+      added=1
+      in_target_section=1
+      next
+    }
 
-      # Found a different section header while looking
-      if (/^### / && !found_section) {
-        # Continue looking
-        print
-        next
-      }
+    # In unreleased section, found a different section header
+    in_unreleased && /^### / {
+      in_target_section=0
+      print
+      next
     }
 
     { print }
 
     END {
-      # If we never added (empty Unreleased), this will be handled
-    }
-  ' "$CHANGELOG" > "$TEMP_CHANGELOG"
-
-  # Check if we actually added something
-  if ! grep -qF -- "- $SUMMARY" "$TEMP_CHANGELOG"; then
-    # Entry wasn't added - insert it after [Unreleased]
-    awk -v section="$SECTION" -v summary="$SUMMARY" '
-      /^## \[Unreleased\]/ {
-        print
+      # If file ended while still in unreleased and we never added
+      if (in_unreleased && !added) {
         print ""
         print "### " section
         print "- " summary
-        next
       }
-      { print }
-    ' "$CHANGELOG" > "$TEMP_CHANGELOG"
+    }
+  ' "$CHANGELOG" > "$TEMP_CHANGELOG"
+
+  # Verify entry was added
+  if ! grep -qF -- "- $SUMMARY" "$TEMP_CHANGELOG"; then
+    echo "Warning: Failed to add changelog entry" >&2
+    rm -f "$TEMP_CHANGELOG"
+    exit 0
   fi
 
   # Replace original changelog
