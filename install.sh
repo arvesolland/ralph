@@ -114,6 +114,7 @@ SCRIPTS=(
   "ralph-worker.sh"
   "ralph-init.sh"
   "ralph-update.sh"
+  "ralph-reverse.sh"
   "lib/config.sh"
 )
 
@@ -131,6 +132,9 @@ echo -e "${BLUE}Installing base prompts...${NC}"
 PROMPTS=(
   "prompts/base/prompt.md"
   "prompts/base/plan_reviewer_prompt.md"
+  "prompts/base/reverse_discover_prompt.md"
+  "prompts/base/reverse_generate_prompt.md"
+  "prompts/base/reverse_spec_prompt.md"
 )
 
 for prompt in "${PROMPTS[@]}"; do
