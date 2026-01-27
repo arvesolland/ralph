@@ -106,41 +106,6 @@ if [[ ! -f "$PLAN_PATH" ]]; then
   exit 1
 fi
 
-# Validate plan structure
-validate_plan() {
-  local plan_file="$1"
-  local errors=()
-
-  # Check for required sections
-  if ! grep -q "^## Context" "$plan_file"; then
-    errors+=("Missing '## Context' section")
-  fi
-  if ! grep -q "^## Rules" "$plan_file"; then
-    errors+=("Missing '## Rules' section")
-  fi
-  if ! grep -q "^## Tasks" "$plan_file"; then
-    errors+=("Missing '## Tasks' section")
-  fi
-  if ! grep -q "^### T1:" "$plan_file"; then
-    errors+=("Missing first task (### T1:)")
-  fi
-
-  if [ ${#errors[@]} -gt 0 ]; then
-    log_error "Plan validation failed:"
-    for err in "${errors[@]}"; do
-      echo "  - $err"
-    done
-    echo ""
-    echo "See plan-spec.md or ralph-plan skill for required format."
-    return 1
-  fi
-  return 0
-}
-
-if ! validate_plan "$PLAN_PATH"; then
-  exit 1
-fi
-
 # Check dependencies
 if ! check_dependencies; then
   exit 1

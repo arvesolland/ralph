@@ -136,6 +136,23 @@ for prompt in "${PROMPTS[@]}"; do
   get_file "$prompt" "$PROJECT_ROOT/scripts/ralph/$prompt"
 done
 
+# Install Claude Code skills
+echo -e "${BLUE}Installing Claude Code skills...${NC}"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ralph-spec"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ralph-plan"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ralph-spec-to-plan"
+
+SKILLS=(
+  ".claude/skills/ralph-spec/SKILL.md"
+  ".claude/skills/ralph-plan/SKILL.md"
+  ".claude/skills/ralph-spec-to-plan/SKILL.md"
+)
+
+for skill in "${SKILLS[@]}"; do
+  echo "  - $skill"
+  get_file "$skill" "$PROJECT_ROOT/$skill"
+done
+
 # Create config stubs if they don't exist
 echo -e "${BLUE}Creating configuration files...${NC}"
 
