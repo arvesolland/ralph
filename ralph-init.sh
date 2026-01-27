@@ -384,6 +384,37 @@ EOF
   done
 fi
 
+# Add Ralph section to CLAUDE.md
+echo -e "${BLUE}Updating CLAUDE.md...${NC}"
+
+RALPH_SECTION='## Ralph (AI Development Agent)
+
+This project uses Ralph for autonomous feature implementation.
+
+- **Specs** (`specs/`) describe WHAT to build and WHY. Use `/ralph-spec` to create/manage specs.
+- **Plans** (`plans/`) describe HOW to build it with trackable tasks. Use `/ralph-plan` to manage plans.
+- Generate plans from specs with `/ralph-spec-to-plan`.
+
+Run plans with `./scripts/ralph/ralph.sh <plan-file>`.'
+
+CLAUDE_MD="$PROJECT_ROOT/CLAUDE.md"
+
+if [ -f "$CLAUDE_MD" ]; then
+  # Check if Ralph section already exists
+  if grep -q "## Ralph" "$CLAUDE_MD"; then
+    echo "  - CLAUDE.md already has Ralph section, skipped"
+  else
+    # Append Ralph section
+    echo "" >> "$CLAUDE_MD"
+    echo "$RALPH_SECTION" >> "$CLAUDE_MD"
+    echo -e "  ${GREEN}CLAUDE.md updated with Ralph section${NC}"
+  fi
+else
+  # Create new CLAUDE.md with Ralph section
+  echo "$RALPH_SECTION" > "$CLAUDE_MD"
+  echo -e "  ${GREEN}CLAUDE.md created${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}========================================"
 echo -e "Configuration Complete!"
@@ -392,6 +423,7 @@ echo ""
 echo "Configuration files are in: $CONFIG_DIR/"
 echo ""
 echo -e "${YELLOW}Review and edit these files:${NC}"
+echo "  - CLAUDE.md      - Claude Code instructions (Ralph section added)"
 echo "  - config.yaml    - Project settings and commands"
 echo "  - principles.md  - Development principles"
 echo "  - patterns.md    - Code patterns to follow"
