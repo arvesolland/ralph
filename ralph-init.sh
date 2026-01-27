@@ -391,9 +391,9 @@ RALPH_SECTION='## Ralph (AI Development Agent)
 
 This project uses Ralph for autonomous feature implementation.
 
-- **Specs** (`specs/`) describe WHAT to build and WHY. Use `/ralph-spec` to create/manage specs.
-- **Plans** (`plans/`) describe HOW to build it with trackable tasks. Use `/ralph-plan` to manage plans.
-- Generate plans from specs with `/ralph-spec-to-plan`.
+- **Specs** (`specs/`) describe WHAT to build and WHY. Use the `ralph-spec` skill to create/manage specs.
+- **Plans** (`plans/`) describe HOW to build it with trackable tasks. Use the `ralph-plan` skill to manage plans.
+- Generate plans from specs with the `ralph-spec-to-plan` skill.
 
 Run plans with `./scripts/ralph/ralph.sh <plan-file>`.'
 
