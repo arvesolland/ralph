@@ -276,11 +276,11 @@ test_worker_queue() {
   # Verify results
   local failed=0
 
-  # Verify feature branch was created by worker
-  if git -C "$WORKSPACE" show-ref --verify --quiet "refs/heads/feat/test-plan"; then
-    echo -e "  ${GREEN}✓${NC} Feature branch created by worker: feat/test-plan"
+  # Verify work was merged to main (feature branch is deleted after merge)
+  if git -C "$WORKSPACE" log --oneline main | grep -q "feat/test-plan\|marker"; then
+    echo -e "  ${GREEN}✓${NC} Work merged to main branch"
   else
-    echo -e "  ${RED}✗${NC} Feature branch not created"
+    echo -e "  ${RED}✗${NC} Work not merged to main"
     failed=1
   fi
 
