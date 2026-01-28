@@ -187,6 +187,95 @@ log_info() {
   echo -e "${BLUE}$1${NC}"
 }
 
+# Run claude with retry logic for transient errors
+# Usage: echo "$PROMPT" | run_claude_with_retry [claude_args...]
+# Returns: Claude output on success, exits with error after max retries
+run_claude_with_retry() {
+  local max_retries=${RALPH_MAX_RETRIES:-5}
+  local base_delay=${RALPH_RETRY_DELAY:-5}
+  local attempt=1
+  local prompt
+  local output
+  local exit_code
+  local temp_file
+
+  # Read prompt from stdin
+  prompt=$(cat)
+
+  # Create temp file for output (to capture both stdout and check for errors)
+  temp_file=$(mktemp)
+  trap "rm -f '$temp_file'" RETURN
+
+  while [ $attempt -le $max_retries ]; do
+    # Run claude and capture output + exit code
+    set +e
+    output=$(echo "$prompt" | claude "$@" 2>&1 | tee /dev/stderr)
+    exit_code=$?
+    set -e
+
+    # Check for known transient errors
+    if echo "$output" | grep -q "No messages returned" || \
+       echo "$output" | grep -q "promise rejected" || \
+       echo "$output" | grep -q "ECONNRESET" || \
+       echo "$output" | grep -q "ETIMEDOUT" || \
+       echo "$output" | grep -q "rate limit" || \
+       [ $exit_code -ne 0 ]; then
+
+      if [ $attempt -lt $max_retries ]; then
+        local delay=$((base_delay * attempt))
+        log_warn "Claude CLI error (attempt $attempt/$max_retries). Retrying in ${delay}s..."
+        sleep $delay
+        attempt=$((attempt + 1))
+        continue
+      else
+        log_error "Claude CLI failed after $max_retries attempts"
+        echo "$output"
+        return 1
+      fi
+    fi
+
+    # Success
+    echo "$output"
+    return 0
+  done
+}
+
+# Run claude with retry (simple version for verification calls)
+# Usage: run_claude_simple_with_retry "prompt" [claude_args...]
+run_claude_simple_with_retry() {
+  local prompt="$1"
+  shift
+  local max_retries=${RALPH_MAX_RETRIES:-5}
+  local base_delay=${RALPH_RETRY_DELAY:-5}
+  local attempt=1
+  local output
+  local exit_code
+
+  while [ $attempt -le $max_retries ]; do
+    set +e
+    output=$(echo "$prompt" | claude "$@" 2>/dev/null)
+    exit_code=$?
+    set -e
+
+    # Check for errors (empty output or non-zero exit)
+    if [ -z "$output" ] || [ $exit_code -ne 0 ]; then
+      if [ $attempt -lt $max_retries ]; then
+        local delay=$((base_delay * attempt))
+        log_warn "Claude verification error (attempt $attempt/$max_retries). Retrying in ${delay}s..." >&2
+        sleep $delay
+        attempt=$((attempt + 1))
+        continue
+      else
+        log_error "Claude verification failed after $max_retries attempts" >&2
+        return 1
+      fi
+    fi
+
+    echo "$output"
+    return 0
+  done
+}
+
 # Check required dependencies
 check_dependencies() {
   local missing=()

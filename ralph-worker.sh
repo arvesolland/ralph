@@ -118,27 +118,55 @@ ensure_dirs() {
   mkdir -p "$PENDING_DIR" "$CURRENT_DIR" "$COMPLETED_DIR"
 }
 
-# Get count of files in a directory
+# Check if file is a plan (not a progress file or other auxiliary file)
+is_plan_file() {
+  local file="$1"
+  local basename=$(basename "$file")
+
+  # Exclude progress files and hidden files
+  # Note: reverse-discovery.md IS a valid plan file (output from ralph-reverse discover)
+  if [[ "$basename" == *.progress.md ]] || \
+     [[ "$basename" == .* ]]; then
+    return 1
+  fi
+  return 0
+}
+
+# Get count of plan files in a directory (excludes progress files)
 count_files() {
   local dir="$1"
-  find "$dir" -maxdepth 1 -type f -name "*.md" 2>/dev/null | wc -l | tr -d ' '
+  local count=0
+  shopt -s nullglob
+  for f in "$dir"/*.md; do
+    [ -f "$f" ] && is_plan_file "$f" && count=$((count + 1))
+  done
+  shopt -u nullglob
+  echo "$count"
 }
 
-# Get oldest file in a directory (FIFO queue order)
+# Get oldest plan file in a directory (FIFO queue order, excludes progress files)
 get_oldest_file() {
   local dir="$1"
-  # ls -tr sorts by time, oldest first; head -1 gets the oldest
-  ls -tr "$dir"/*.md 2>/dev/null | head -1
+  # ls -tr sorts by time, oldest first
+  for f in $(ls -tr "$dir"/*.md 2>/dev/null); do
+    if [ -f "$f" ] && is_plan_file "$f"; then
+      echo "$f"
+      return
+    fi
+  done
 }
 
-# Get the current plan file (if any)
+# Get the current plan file (if any, excludes progress files)
 get_current_plan() {
-  # Use glob directly to avoid word-splitting issues with spaces in filenames
-  local first_file
-  first_file=$(ls "$CURRENT_DIR"/*.md 2>/dev/null | head -1)
-  if [ -n "$first_file" ] && [ -f "$first_file" ]; then
-    echo "$first_file"
-  fi
+  shopt -s nullglob
+  for f in "$CURRENT_DIR"/*.md; do
+    if [ -f "$f" ] && is_plan_file "$f"; then
+      shopt -u nullglob
+      echo "$f"
+      return
+    fi
+  done
+  shopt -u nullglob
 }
 
 # Check if a plan has incomplete tasks (used for status display only)
@@ -217,8 +245,34 @@ setup_feature_branch() {
   } >&2
 }
 
+# Check for and warn about orphaned files (progress files in wrong places)
+check_orphaned_files() {
+  local found_orphans=false
+
+  shopt -s nullglob
+
+  # Check for progress files in pending (should never happen)
+  for f in "$PENDING_DIR"/*.progress.md; do
+    if [ -f "$f" ]; then
+      echo -e "${YELLOW}Warning: Found orphaned progress file in pending: $(basename "$f")${NC}" >&2
+      echo "  Moving to current directory..." >&2
+      mv "$f" "$CURRENT_DIR/" 2>/dev/null || true
+      found_orphans=true
+    fi
+  done
+
+  shopt -u nullglob
+
+  if [ "$found_orphans" = true ]; then
+    echo "" >&2
+  fi
+}
+
 # Move next pending plan to current
 activate_next_plan() {
+  # First check for orphaned files
+  check_orphaned_files
+
   local next_plan=$(get_oldest_file "$PENDING_DIR")
   if [ -n "$next_plan" ] && [ -f "$next_plan" ]; then
     local dest="$CURRENT_DIR/$(basename "$next_plan")"
@@ -246,9 +300,11 @@ show_status() {
 
   echo -e "${BLUE}Pending:${NC} $pending_count plan(s)"
   if [ "$pending_count" -gt 0 ]; then
+    shopt -s nullglob
     for f in "$PENDING_DIR"/*.md; do
-      [ -f "$f" ] && echo "  - $(basename "$f")"
+      [ -f "$f" ] && is_plan_file "$f" && echo "  - $(basename "$f")"
     done
+    shopt -u nullglob
   fi
   echo ""
 
@@ -280,6 +336,12 @@ add_plan() {
     exit 1
   fi
 
+  # Validate it's a plan file, not a progress file
+  if ! is_plan_file "$file"; then
+    echo -e "${RED}Error: Cannot add '$file' - this appears to be a progress file or auxiliary file, not a plan${NC}"
+    exit 1
+  fi
+
   ensure_dirs
 
   # Add timestamp prefix for ordering
@@ -301,9 +363,17 @@ process_plan() {
   echo -e "${BLUE}Processing:${NC} $plan_name"
   echo ""
 
+  # Build ralph.sh arguments
+  local ralph_args=("$plan_file" --max "$MAX_ITERATIONS")
+
+  # Pass through CREATE_PR flag if set
+  if [ "$CREATE_PR" = true ]; then
+    ralph_args+=(--create-pr)
+  fi
+
   # Run ralph.sh on the plan
   # ralph.sh will call ralph-worker.sh --complete when it catches <promise>COMPLETE</promise>
-  "$SCRIPT_DIR/ralph.sh" "$plan_file" --max "$MAX_ITERATIONS"
+  "$SCRIPT_DIR/ralph.sh" "${ralph_args[@]}"
   local exit_code=$?
 
   # ralph.sh handles completion detection via COMPLETE marker
@@ -315,6 +385,9 @@ process_plan() {
 # Main work function
 do_work() {
   ensure_dirs
+
+  # Check for orphaned files before starting
+  check_orphaned_files
 
   echo -e "${GREEN}========================================"
   echo -e "Ralph Worker"
@@ -388,8 +461,8 @@ Create a PR with:
 
 Use \`gh pr create\` to create the PR targeting $base_branch."
 
-  # Run Claude Code to create PR
-  echo "$prompt" | claude -p --dangerously-skip-permissions 2>&1 | tee /dev/stderr
+  # Run Claude Code to create PR (with retry logic)
+  echo "$prompt" | run_claude_with_retry -p --dangerously-skip-permissions || true
 
   echo ""
 }

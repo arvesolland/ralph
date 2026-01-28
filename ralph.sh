@@ -187,9 +187,9 @@ if [ "$REVIEW_PLAN" = true ]; then
 }
 EOF
 
-    # Build and run prompt
+    # Build and run prompt with retry logic
     PROMPT=$(build_prompt "$SCRIPT_DIR/prompts/base/plan_reviewer_prompt.md" "$CONFIG_DIR")
-    OUTPUT=$(echo "$PROMPT" | claude -p --dangerously-skip-permissions 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(echo "$PROMPT" | run_claude_with_retry -p --dangerously-skip-permissions) || true
 
     echo ""
 
@@ -254,9 +254,9 @@ for i in $(seq 1 $MAX_ITERATIONS); do
 }
 EOF
 
-  # Build and run prompt
+  # Build and run prompt with retry logic
   PROMPT=$(build_prompt "$SCRIPT_DIR/prompts/base/prompt.md" "$CONFIG_DIR")
-  OUTPUT=$(echo "$PROMPT" | claude -p --dangerously-skip-permissions 2>&1 | tee /dev/stderr) || true
+  OUTPUT=$(echo "$PROMPT" | run_claude_with_retry -p --dangerously-skip-permissions) || true
 
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
     echo ""
@@ -270,7 +270,7 @@ Output ONLY one word: COMPLETE or INCOMPLETE
 
 $(cat "$PLAN_PATH")"
 
-    VERIFY_RESULT=$(echo "$VERIFY_PROMPT" | claude --model haiku -p 2>/dev/null | tr -d '[:space:]')
+    VERIFY_RESULT=$(run_claude_simple_with_retry "$VERIFY_PROMPT" --model haiku -p | tr -d '[:space:]')
 
     if [ "$VERIFY_RESULT" = "COMPLETE" ]; then
       log_success "Verified: All tasks complete!"
