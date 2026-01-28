@@ -499,8 +499,9 @@ do_complete() {
     return 1
   fi
 
-  # Store plan path before moving (for PR creation)
-  local plan_for_pr="$current_plan"
+  # Get branch info before completing
+  local feature_branch=$(git branch --show-current)
+  local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
 
   echo -e "${GREEN}Completing:${NC} $(basename "$current_plan")"
   local completed_dir=$(complete_plan "$current_plan")
@@ -510,6 +511,33 @@ do_complete() {
   if [ "$CREATE_PR" = true ]; then
     echo ""
     create_pr_with_claude "$completed_dir/plan.md"
+  fi
+
+  # Merge feature branch to main and pull latest
+  if [ "$feature_branch" != "$base_branch" ]; then
+    echo ""
+    echo -e "${BLUE}Merging $feature_branch → $base_branch...${NC}"
+
+    # Switch to base branch
+    git checkout "$base_branch" 2>&1 | grep -v "^D\|^M" || true
+
+    # Merge feature branch (fast-forward if possible, merge commit otherwise)
+    if git merge --ff-only "$feature_branch" 2>/dev/null; then
+      echo "  Fast-forward merge successful"
+    elif git merge --no-edit "$feature_branch" 2>/dev/null; then
+      echo "  Merge commit created"
+    else
+      echo -e "${YELLOW}  Merge conflict - please resolve manually${NC}"
+      echo "  Then run: git merge --continue && ralph-worker --next"
+      return 1
+    fi
+
+    # Pull latest to get new pending plans from others
+    echo -e "${BLUE}Pulling latest from remote...${NC}"
+    git pull --ff-only 2>/dev/null || git pull --rebase 2>/dev/null || echo "  No remote or pull failed (continuing anyway)"
+
+    # Optionally delete the merged feature branch
+    git branch -d "$feature_branch" 2>/dev/null && echo "  Deleted branch: $feature_branch" || true
   fi
 
   # Check for next plan

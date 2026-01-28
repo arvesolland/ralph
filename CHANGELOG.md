@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Increase default max iterations to 50
 - Add --review flag to worker for plan review
 - Simplify plan reviewer prompt and add spec alignment
 - Improve error detection and plan file preservation
