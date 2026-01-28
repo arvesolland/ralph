@@ -237,11 +237,12 @@ run_claude_with_retry() {
 
     if [ "$has_jq" = true ]; then
       # Stream with jq for real-time readable output
-      # Pipeline: claude -> grep (filter JSON) -> tee (capture) -> jq (display)
+      # Pipeline: claude -> tee (capture ALL for error detection) -> grep (filter JSON) -> jq (display)
       # Note: --verbose is required when using --output-format stream-json with -p
+      # IMPORTANT: tee must come BEFORE grep so error messages are captured for retry detection
       claude "$@" --verbose --output-format stream-json < "$temp_prompt" 2>&1 \
-        | grep --line-buffered '^{' \
         | tee "$temp_output" \
+        | grep --line-buffered '^{' \
         | jq --unbuffered -rj "$stream_text" >&2 &
       stream_pid=$!
 
@@ -317,17 +318,18 @@ run_claude_with_retry() {
       result_received=true
     fi
 
-    # Check for known transient errors
-    if grep -qE "No messages returned|promise rejected|ECONNRESET|ETIMEDOUT|rate limit|overloaded" "$temp_output" 2>/dev/null; then
+    # Check for known transient errors (only in non-JSON lines - actual CLI errors are plain text)
+    # This avoids false positives when the agent's response contains these strings
+    if grep -v '^{' "$temp_output" 2>/dev/null | grep -qE "No messages returned|promise rejected|ECONNRESET|ETIMEDOUT|rate limit|overloaded"; then
       has_error=true
-      error_msg=$(grep -oE "No messages returned|promise rejected|ECONNRESET|ETIMEDOUT|rate limit|overloaded" "$temp_output" 2>/dev/null | head -1)
+      error_msg=$(grep -v '^{' "$temp_output" 2>/dev/null | grep -oE "No messages returned|promise rejected|ECONNRESET|ETIMEDOUT|rate limit|overloaded" | head -1)
     fi
 
     # Cleanup temp files
     rm -f "$temp_output" "$temp_prompt"
 
-    # Check if we should retry
-    if [ "$has_error" = true ] || { [ "$result_received" = false ] && [ -n "$output" ] && echo "$output" | grep -qE "error|Error|ERROR"; }; then
+    # Check if we should retry (only check non-JSON lines for errors to avoid false positives from agent response)
+    if [ "$has_error" = true ] || { [ "$result_received" = false ] && [ -n "$output" ] && echo "$output" | grep -v '^{' | grep -qE "error|Error|ERROR"; }; then
       if [ $attempt -lt $max_retries ]; then
         local delay=$((base_delay * attempt))
         log_warn "Claude CLI error (attempt $attempt/$max_retries): $error_msg" >&2

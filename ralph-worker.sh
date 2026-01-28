@@ -232,6 +232,13 @@ setup_feature_branch() {
   {
     echo -e "${BLUE}Setting up feature branch: $branch_name${NC}"
 
+    # Stash uncommitted changes (like the plan file move) to preserve across branch switch
+    local had_stash=false
+    if ! git diff --quiet --cached 2>/dev/null || ! git diff --quiet 2>/dev/null; then
+      git stash push -q -m "ralph: preserve plan file during branch switch"
+      had_stash=true
+    fi
+
     if git show-ref --verify --quiet "refs/heads/$branch_name"; then
       echo "  Branch exists, checking out..."
       git checkout "$branch_name" 2>&1
@@ -239,6 +246,11 @@ setup_feature_branch() {
     else
       echo "  Creating branch from $base_branch..."
       git checkout -b "$branch_name" "$base_branch" 2>&1 || git checkout -b "$branch_name" 2>&1
+    fi
+
+    # Restore stashed changes (plan file) onto the feature branch
+    if [ "$had_stash" = true ]; then
+      git stash pop -q 2>&1 || true
     fi
 
     echo "  On branch: $(git branch --show-current)"
