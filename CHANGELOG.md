@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Simplify plan reviewer prompt and add spec alignment
 - Improve error detection and plan file preservation
 - Update prompt to commit plan and progress files together
 - Add retry logic and prevent progress files from being treated as plans

@@ -42,6 +42,7 @@ LOOP_MODE=false
 ADD_FILE=""
 MAX_ITERATIONS=30
 CREATE_PR=false
+REVIEW_PLAN=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -74,6 +75,10 @@ while [[ $# -gt 0 ]]; do
       CREATE_PR=true
       shift
       ;;
+    --review|-r)
+      REVIEW_PLAN=true
+      shift
+      ;;
     --version|-v)
       echo "Ralph Worker v$(get_ralph_version "$SCRIPT_DIR" 2>/dev/null || echo "unknown")"
       exit 0
@@ -96,6 +101,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --next, -n         Activate next pending plan"
       echo "  --loop, -l         Keep processing until no more plans"
       echo "  --max, -m N        Max iterations per plan (default: 30)"
+      echo "  --review, -r       Run plan reviewer before starting each plan"
       echo "  --create-pr, --pr  Create PR via Claude Code after plan completion"
       echo "  --version, -v      Show version"
       echo "  --help, -h         Show this help"
@@ -378,9 +384,12 @@ process_plan() {
   # Build ralph.sh arguments
   local ralph_args=("$plan_file" --max "$MAX_ITERATIONS")
 
-  # Pass through CREATE_PR flag if set
+  # Pass through flags if set
   if [ "$CREATE_PR" = true ]; then
     ralph_args+=(--create-pr)
+  fi
+  if [ "$REVIEW_PLAN" = true ]; then
+    ralph_args+=(--review-plan)
   fi
 
   # Run ralph.sh on the plan
