@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Add retry logic and prevent progress files from being treated as plans
+
 ## [1.1.0] - 2026-01-28
 
 ### Added

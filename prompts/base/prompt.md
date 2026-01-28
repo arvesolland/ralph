@@ -108,23 +108,13 @@ Run validation commands:
 - Do not commit broken code
 - If you cannot fix it, document the blocker in the progress file
 
-### 4. Commit
-Use conventional commit format:
-```
-feat(scope): add user validation
-fix(auth): handle expired tokens
-refactor(api): extract common middleware
-```
-
-Commit after completing each subtask. Small, atomic commits.
-
-### 5. Update the Plan
+### 4. Update the Plan
 - Check off completed subtask: `[ ]` → `[x]`
 - **A task is complete ONLY when ALL acceptance criteria are verified** (see below)
 - If you discovered new work: add to `## Discovered` section, don't interrupt current task
 
-### 6. Record Learnings
-If you discovered something non-obvious, append to the progress file:
+### 5. Record Learnings
+If you discovered something non-obvious, append to the progress file (`<plan-name>.progress.md` in the same folder as the plan):
 
 ```markdown
 ---
@@ -133,7 +123,32 @@ If you discovered something non-obvious, append to the progress file:
 **Pattern:** [Reusable approach that worked]
 ```
 
-Skip if nothing notable. Don't log "completed successfully."
+**Create the file if it doesn't exist.** Start with a header:
+```markdown
+# Progress: [Plan Name]
+
+Learnings and gotchas from implementation.
+```
+
+Skip recording if nothing notable. Don't log "completed successfully."
+
+### 6. Commit Everything
+Use conventional commit format:
+```
+feat(scope): add user validation
+fix(auth): handle expired tokens
+refactor(api): extract common middleware
+```
+
+**IMPORTANT: Include ALL changed files in your commit:**
+- Code changes
+- Plan file (with updated checkboxes/status)
+- Progress file (if you added learnings)
+
+Commit after completing each subtask. Small, atomic commits. Example:
+```bash
+git add -A && git commit -m "feat(auth): implement token validation"
+```
 
 ---
 
@@ -211,9 +226,9 @@ If tasks remain incomplete, end your response normally after completing your sub
 6. ☐ Select next task/subtask
 7. ☐ Implement
 8. ☐ Validate (lint + test)
-9. ☐ Commit
-10. ☐ Update plan checkboxes
-11. ☐ **Verify acceptance criteria if task may be complete**
-12. ☐ Update task status if ALL criteria met
-13. ☐ Record learnings (if any)
+9. ☐ Update plan checkboxes
+10. ☐ **Verify acceptance criteria if task may be complete**
+11. ☐ Update task status if ALL criteria met
+12. ☐ Record learnings in progress file (if any)
+13. ☐ **Commit ALL changes** (code + plan + progress file)
 14. ☐ Output `<promise>COMPLETE</promise>` if plan done, else end normally
