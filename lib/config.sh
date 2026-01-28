@@ -1,6 +1,12 @@
 #!/bin/bash
 # Ralph Configuration Library
 # Shared functions for loading config and building prompts
+#
+# Environment variables for retry/timeout configuration:
+#   RALPH_MAX_RETRIES     - Max retry attempts (default: 5)
+#   RALPH_RETRY_DELAY     - Base delay between retries in seconds (default: 5)
+#   RALPH_GRACE_PERIOD    - Seconds to wait after completion before killing hung process (default: 5)
+#   RALPH_SIMPLE_TIMEOUT  - Timeout for simple verification calls in seconds (default: 60)
 
 # Get Ralph version
 get_ralph_version() {
@@ -190,51 +196,153 @@ log_info() {
 # Run claude with retry logic for transient errors
 # Usage: echo "$PROMPT" | run_claude_with_retry [claude_args...]
 # Returns: Claude output on success, exits with error after max retries
+#
+# WORKAROUND: Uses stream-json output with jq filtering for real-time streaming
+# and timeout-based hang detection (GitHub Issue #19060).
+# Credit: Matt Pollock for the jq streaming approach.
 run_claude_with_retry() {
   local max_retries=${RALPH_MAX_RETRIES:-5}
   local base_delay=${RALPH_RETRY_DELAY:-5}
+  local grace_period=${RALPH_GRACE_PERIOD:-5}
   local attempt=1
   local prompt
-  local output
-  local exit_code
-  local temp_file
 
   # Read prompt from stdin
   prompt=$(cat)
 
-  # Create temp file for output (to capture both stdout and check for errors)
-  temp_file=$(mktemp)
-  trap "rm -f '$temp_file'" RETURN
+  # jq filter to extract streaming text from assistant messages (credit: Matt Pollock)
+  # - Selects assistant messages and extracts text content
+  # - Fixes line endings for proper terminal display
+  local stream_text='select(.type == "assistant").message.content[]? | select(.type == "text").text // empty'
+
+  # jq filter to extract final result
+  local final_result='select(.type == "result").result // empty'
+
+  # Check if jq is available for streaming output
+  local has_jq=false
+  if command -v jq &> /dev/null; then
+    has_jq=true
+  fi
 
   while [ $attempt -le $max_retries ]; do
-    # Run claude and capture output + exit code
-    set +e
-    output=$(echo "$prompt" | claude "$@" 2>&1 | tee /dev/stderr)
-    exit_code=$?
-    set -e
+    local temp_output=$(mktemp)
+    local temp_prompt=$(mktemp)
+    local stream_pid=""
+    local result_received=false
+    local has_error=false
+    local error_msg=""
+
+    # Save prompt to file for the background process
+    echo "$prompt" > "$temp_prompt"
+
+    if [ "$has_jq" = true ]; then
+      # Stream with jq for real-time readable output
+      # Pipeline: claude -> grep (filter JSON) -> tee (capture) -> jq (display)
+      # Note: --verbose is required when using --output-format stream-json with -p
+      claude "$@" --verbose --output-format stream-json < "$temp_prompt" 2>&1 \
+        | grep --line-buffered '^{' \
+        | tee "$temp_output" \
+        | jq --unbuffered -rj "$stream_text" >&2 &
+      stream_pid=$!
+
+      # Monitor for completion and handle hanging
+      (
+        local result_found=false
+        while kill -0 $stream_pid 2>/dev/null; do
+          sleep 1
+          if [ -f "$temp_output" ] && grep -q '"type":"result"' "$temp_output" 2>/dev/null; then
+            if [ "$result_found" = false ]; then
+              result_found=true
+              sleep $grace_period
+              # If pipeline still running after grace period, kill it
+              if kill -0 $stream_pid 2>/dev/null; then
+                # Kill the whole pipeline process group
+                kill $stream_pid 2>/dev/null || true
+                sleep 1
+                kill -9 $stream_pid 2>/dev/null || true
+              fi
+              break
+            fi
+          fi
+        done
+      ) &
+      local monitor_pid=$!
+
+      # Wait for streaming pipeline to finish
+      wait $stream_pid 2>/dev/null || true
+
+      # Stop the monitor
+      kill $monitor_pid 2>/dev/null || true
+      wait $monitor_pid 2>/dev/null || true
+
+      echo "" >&2  # Newline after streaming output
+    else
+      # Fallback: no jq, just capture output with timeout monitoring
+      # Note: --verbose is required when using --output-format stream-json with -p
+      claude "$@" --verbose --output-format stream-json < "$temp_prompt" > "$temp_output" 2>&1 &
+      local claude_pid=$!
+
+      # Monitor for completion and handle hanging
+      (
+        local result_found=false
+        while kill -0 $claude_pid 2>/dev/null; do
+          sleep 1
+          if [ -f "$temp_output" ] && grep -q '"type":"result"' "$temp_output" 2>/dev/null; then
+            if [ "$result_found" = false ]; then
+              result_found=true
+              sleep $grace_period
+              if kill -0 $claude_pid 2>/dev/null; then
+                log_warn "Claude CLI hanging after completion - terminating" >&2
+                kill $claude_pid 2>/dev/null || true
+                sleep 1
+                kill -9 $claude_pid 2>/dev/null || true
+              fi
+              break
+            fi
+          fi
+        done
+      ) &
+      local monitor_pid=$!
+
+      wait $claude_pid 2>/dev/null || true
+      kill $monitor_pid 2>/dev/null || true
+      wait $monitor_pid 2>/dev/null || true
+    fi
+
+    # Read final output
+    local output=$(cat "$temp_output" 2>/dev/null || true)
+
+    # Check if result was received (successful completion)
+    if grep -q '"type":"result"' "$temp_output" 2>/dev/null; then
+      result_received=true
+    fi
 
     # Check for known transient errors
-    if echo "$output" | grep -q "No messages returned" || \
-       echo "$output" | grep -q "promise rejected" || \
-       echo "$output" | grep -q "ECONNRESET" || \
-       echo "$output" | grep -q "ETIMEDOUT" || \
-       echo "$output" | grep -q "rate limit" || \
-       [ $exit_code -ne 0 ]; then
+    if grep -qE "No messages returned|promise rejected|ECONNRESET|ETIMEDOUT|rate limit|overloaded" "$temp_output" 2>/dev/null; then
+      has_error=true
+      error_msg=$(grep -oE "No messages returned|promise rejected|ECONNRESET|ETIMEDOUT|rate limit|overloaded" "$temp_output" 2>/dev/null | head -1)
+    fi
 
+    # Cleanup temp files
+    rm -f "$temp_output" "$temp_prompt"
+
+    # Check if we should retry
+    if [ "$has_error" = true ] || { [ "$result_received" = false ] && [ -n "$output" ] && echo "$output" | grep -qE "error|Error|ERROR"; }; then
       if [ $attempt -lt $max_retries ]; then
         local delay=$((base_delay * attempt))
-        log_warn "Claude CLI error (attempt $attempt/$max_retries). Retrying in ${delay}s..."
+        log_warn "Claude CLI error (attempt $attempt/$max_retries): $error_msg" >&2
+        log_warn "Retrying in ${delay}s..." >&2
         sleep $delay
         attempt=$((attempt + 1))
         continue
       else
-        log_error "Claude CLI failed after $max_retries attempts"
+        log_error "Claude CLI failed after $max_retries attempts" >&2
         echo "$output"
         return 1
       fi
     fi
 
-    # Success
+    # Success - output the full response (stream-json format)
     echo "$output"
     return 0
   done
@@ -242,23 +350,47 @@ run_claude_with_retry() {
 
 # Run claude with retry (simple version for verification calls)
 # Usage: run_claude_simple_with_retry "prompt" [claude_args...]
+# Uses timeout to handle Claude Code CLI hanging bug (GitHub Issue #19060)
 run_claude_simple_with_retry() {
   local prompt="$1"
   shift
   local max_retries=${RALPH_MAX_RETRIES:-5}
   local base_delay=${RALPH_RETRY_DELAY:-5}
+  local timeout_secs=${RALPH_SIMPLE_TIMEOUT:-60}
   local attempt=1
-  local output
-  local exit_code
 
   while [ $attempt -le $max_retries ]; do
-    set +e
-    output=$(echo "$prompt" | claude "$@" 2>/dev/null)
-    exit_code=$?
-    set -e
+    local temp_output=$(mktemp)
+    local claude_pid
+    local timed_out=false
 
-    # Check for errors (empty output or non-zero exit)
-    if [ -z "$output" ] || [ $exit_code -ne 0 ]; then
+    # Run claude in background
+    echo "$prompt" | claude "$@" > "$temp_output" 2>&1 &
+    claude_pid=$!
+
+    # Wait with timeout
+    local waited=0
+    while kill -0 $claude_pid 2>/dev/null && [ $waited -lt $timeout_secs ]; do
+      sleep 1
+      waited=$((waited + 1))
+    done
+
+    # Check if still running (timed out)
+    if kill -0 $claude_pid 2>/dev/null; then
+      timed_out=true
+      log_warn "Claude verification timed out after ${timeout_secs}s - terminating" >&2
+      kill $claude_pid 2>/dev/null || true
+      sleep 1
+      kill -9 $claude_pid 2>/dev/null || true
+    fi
+
+    wait $claude_pid 2>/dev/null || true
+    local exit_code=$?
+    local output=$(cat "$temp_output" 2>/dev/null || true)
+    rm -f "$temp_output"
+
+    # Check for errors (empty output, non-zero exit, or timeout)
+    if [ -z "$output" ] || [ $exit_code -ne 0 ] || [ "$timed_out" = true ]; then
       if [ $attempt -lt $max_retries ]; then
         local delay=$((base_delay * attempt))
         log_warn "Claude verification error (attempt $attempt/$max_retries). Retrying in ${delay}s..." >&2

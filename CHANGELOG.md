@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Handle Claude Code CLI hanging bug (GitHub Issue #19060) with timeout-based workaround
+- Add real-time streaming output using jq filtering (credit: Matt Pollock)
+- Add proper timeout handling for verification calls to prevent infinite hangs
+
 ### Changed
+- Update prompt to commit plan and progress files together
 - Add retry logic and prevent progress files from being treated as plans
 
 ## [1.1.0] - 2026-01-28
