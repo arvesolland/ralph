@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Update worker-queue test for merge-to-main flow
 - Merge feature branch to main after plan completion
 - Increase default max iterations to 50
 - Add --review flag to worker for plan review

@@ -527,9 +527,53 @@ do_complete() {
     elif git merge --no-edit "$feature_branch" 2>/dev/null; then
       echo "  Merge commit created"
     else
-      echo -e "${YELLOW}  Merge conflict - please resolve manually${NC}"
-      echo "  Then run: git merge --continue && ralph-worker --next"
-      return 1
+      echo -e "${YELLOW}  Merge conflict detected - asking Claude to resolve...${NC}"
+
+      # Get list of conflicted files
+      local conflicted_files=$(git diff --name-only --diff-filter=U)
+
+      if [ -n "$conflicted_files" ]; then
+        # Build prompt for Claude to resolve conflicts
+        local resolve_prompt="You are resolving a git merge conflict. Be CAREFUL and CONSERVATIVE.
+
+## Conflicted files:
+$conflicted_files
+
+## Instructions:
+1. Read each conflicted file
+2. Look for conflict markers: <<<<<<<, =======, >>>>>>>
+3. CAREFULLY resolve each conflict by choosing the best combination of changes
+4. Preserve ALL functionality from both sides where possible
+5. Remove ALL conflict markers
+6. Run: git add <file> for each resolved file
+7. Run: git merge --continue
+
+If you cannot confidently resolve a conflict, output CONFLICT_UNRESOLVED and stop.
+
+Be conservative - when in doubt, keep both changes."
+
+        # Try to resolve with Claude
+        if echo "$resolve_prompt" | run_claude_with_retry -p --dangerously-skip-permissions 2>&1 | grep -q "CONFLICT_UNRESOLVED"; then
+          echo -e "${RED}  Claude could not resolve conflict${NC}"
+          git merge --abort 2>/dev/null || true
+          echo -e "${YELLOW}  Please resolve manually, then run:${NC}"
+          echo "  git checkout $base_branch && git merge $feature_branch"
+          echo "  # resolve conflicts"
+          echo "  git add . && git merge --continue"
+          echo "  ralph-worker --next"
+          return 1
+        fi
+
+        # Check if merge was completed successfully
+        if git rev-parse --verify HEAD >/dev/null 2>&1 && ! git diff --name-only --diff-filter=U | grep -q .; then
+          echo -e "  ${GREEN}Merge conflict resolved by Claude${NC}"
+        else
+          echo -e "${RED}  Merge still incomplete after Claude attempt${NC}"
+          git merge --abort 2>/dev/null || true
+          echo -e "${YELLOW}  Please resolve manually${NC}"
+          return 1
+        fi
+      fi
     fi
 
     # Pull latest to get new pending plans from others
