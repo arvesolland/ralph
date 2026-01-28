@@ -60,17 +60,23 @@ Read the plan file specified in `context.json`. This contains:
 - Subtasks (implementation steps)
 - Current status of each task
 
-### 5. Progress File
-The progress file tracks learnings across iterations: `<plan-name>.progress.md` in the same folder as the plan.
+### 5. Progress File (CRITICAL)
+The progress file is your **primary input** for understanding what previous iterations accomplished: `<plan-name>.progress.md` in the same folder as the plan.
 
 **If the file doesn't exist, create it now** with this header:
 ```markdown
 # Progress: [Plan Name]
 
-Learnings and gotchas from implementation.
+Iteration log - what was done, gotchas, and next steps.
 ```
 
-**If it exists, read it carefully.** Previous iterations recorded gotchas and patterns here. Learn from them to avoid repeating mistakes.
+**If it exists, read it carefully.** This tells you:
+- What work was completed in previous iterations
+- What files were changed and how
+- Gotchas and patterns discovered
+- What the previous iteration suggested you tackle next
+
+This is faster and more reliable than searching the codebase to understand current state.
 
 ---
 
@@ -120,17 +126,18 @@ Run validation commands:
 - **A task is complete ONLY when ALL acceptance criteria are verified** (see below)
 - If you discovered new work: add to `## Discovered` section, don't interrupt current task
 
-### 5. Record Learnings
-If you discovered something non-obvious, append to the progress file (which you created/read in step 5 of context gathering):
+### 5. Update Progress File (EVERY ITERATION)
+**Always** append to the progress file after completing work. This is the primary communication to the next iteration's agent - they will read this to understand what's been done without searching the codebase.
 
 ```markdown
 ---
-### [Task/Subtask identifier]: [Brief description]
-**Gotcha:** [What surprised you, what didn't work, edge cases]
-**Pattern:** [Reusable approach that worked]
+### Iteration [N]: [Task/Subtask identifier]
+**Completed:** [What you actually did - be specific about files changed, functions added, etc.]
+**Gotcha:** [Optional - what surprised you, edge cases, things that didn't work]
+**Next:** [What the next iteration should tackle, or "Plan complete" if done]
 ```
 
-Skip recording if nothing notable. Don't log "completed successfully."
+**This is NOT optional.** Every iteration must log its work. Keep it concise but specific enough that the next agent knows exactly what changed.
 
 ### 6. Commit Everything
 Use conventional commit format:
@@ -229,6 +236,6 @@ If tasks remain incomplete, end your response normally after completing your sub
 9. ☐ Update plan checkboxes
 10. ☐ **Verify acceptance criteria if task may be complete**
 11. ☐ Update task status if ALL criteria met
-12. ☐ Record learnings in progress file (if any)
+12. ☐ **Update progress file** (EVERY iteration - log what you did)
 13. ☐ **Commit ALL changes** (code + plan + progress file - always include progress file)
 14. ☐ Output `<promise>COMPLETE</promise>` if plan done, else end normally

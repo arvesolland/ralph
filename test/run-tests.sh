@@ -108,7 +108,8 @@ test_single_task() {
   fi
 
   # Plan may be in current/ (incomplete) or complete/ (finished)
-  local plan_file=$(find "$WORKSPACE/plans" -name "*.md" -path "*/complete/*" -o -name "test-plan.md" -path "*/current/*" 2>/dev/null | head -1)
+  # Note: worker renames to plan.md when archiving to complete/
+  local plan_file=$(find "$WORKSPACE/plans" -name "plan.md" -path "*/complete/*" -o -name "test-plan.md" -path "*/current/*" 2>/dev/null | head -1)
   if [ -n "$plan_file" ]; then
     assert_file_contains "$plan_file" "\[x\]" "Subtask checked off" || failed=1
   else
