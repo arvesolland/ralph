@@ -112,14 +112,12 @@ First, check if the plan follows the required structure:
 
 If structure is wrong, **fix it first** before other review steps.
 
-### Step 1: Understand the Codebase
+### Step 1: Understand the RELEVANT PARTS of the Codebase
 
-Before judging the plan, understand the existing codebase:
+Before judging the plan, understand the relevant parts of the codebase:
 
-1. Read `scripts/ralph/progress.txt` for learned patterns
-2. Explore relevant existing code to understand current patterns
-
-**Critical question: Does this plan fit naturally into the existing codebase?**
+1. Study specs/INDEX.md to understand the features and dependencies - for relevant specs - read the individual spec files too.
+2. Explore relevant existing code to understand current patterns and patterns that are already in use
 
 ### Step 2: Research Where Needed
 
@@ -137,7 +135,7 @@ Ask these questions about each part of the plan:
 #### On Simplicity
 - Could this be done with less code?
 - Is this abstraction earning its keep, or is it speculative?
-- Are we solving problems we don't have yet?
+- Are we solving problems we don't have yet or won't have for a while?
 - Would a junior developer understand this in 5 minutes?
 
 #### On Fit
@@ -145,7 +143,7 @@ Ask these questions about each part of the plan:
 - Does it use existing helpers/utilities instead of creating new ones?
 - Does it match how similar features are implemented?
 
-#### On Overengineering (The Big One)
+#### On Overengineering 
 Red flags to look for:
 - Generic solutions for specific problems
 - Interfaces with only one implementation
@@ -155,14 +153,13 @@ Red flags to look for:
 - Multiple levels of indirection
 - Custom implementations of standard library features
 
-**The question to ask: "What's the simplest thing that could possibly work?"**
+**The question to ask: "What's the simplest thing that could possibly work - but works well?"**
 
 #### On Security
 - Are inputs validated at system boundaries?
 - Are there any injection risks?
 
 #### On Feasibility
-- Is this achievable within reasonable effort?
 - Are the dependencies available and compatible?
 - Are there hidden complexities the plan glosses over?
 
@@ -180,18 +177,12 @@ Red flags to look for:
 - **Remove unnecessary abstractions**
 - **Add missing security considerations**
 - **Align with codebase patterns**
-- **Fix feasibility issues**
-- **Remove speculative features**
 
 **Be direct.** Don't add commentary or review notes - just make the plan better.
 
 ### Step 5: Report Changes
 
-After editing, briefly report what you changed (to stdout, not the file).
-
-### Step 6: Commit on Final Pass
-
-If this is the **final pass** (`pass` equals `totalPasses` in context.json), commit:
+After editing, briefly report what you changed and commit the changes with this report as the commit message. Do not add any other commentary.
 
 ```bash
 git add <plan-file>
@@ -200,7 +191,6 @@ git commit -m "docs: Optimize plan with artisan review
 - <key improvement 1>
 - <key improvement 2>
 
-Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
 Only commit if you actually made changes.
@@ -219,20 +209,11 @@ Only commit if you actually made changes.
 - Solve hypothetical future problems
 - Introduce new patterns when existing ones work
 
-## Artisan Wisdom
-
-> "Perfection is achieved not when there is nothing more to add, but when there is nothing left to take away." - Antoine de Saint-Exupery
-
-> "The best code is no code at all." - Jeff Atwood
-
-> "YAGNI - You Aren't Gonna Need It" - Extreme Programming
-
-Remember: Every line of code is a liability. Every abstraction is a cost. The plan that does the job with the least complexity wins.
 
 ## Output
 
 1. **Update the plan file** - Make direct improvements
 2. **Report what you changed** - Brief list of improvements
-3. **Commit on final pass** - If `pass == totalPasses`, commit changes
+3. **Commit the changes** - Commit changes with the report as the commit message
 
 If the plan is already solid and needs no changes, say so.
