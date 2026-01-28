@@ -40,7 +40,7 @@ COMPLETED_DIR="$PLANS_DIR/complete"
 ACTION="work"
 LOOP_MODE=false
 ADD_FILE=""
-MAX_ITERATIONS=30
+MAX_ITERATIONS=50
 CREATE_PR=false
 REVIEW_PLAN=false
 
@@ -100,7 +100,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --complete, -c     Complete current plan and activate next"
       echo "  --next, -n         Activate next pending plan"
       echo "  --loop, -l         Keep processing until no more plans"
-      echo "  --max, -m N        Max iterations per plan (default: 30)"
+      echo "  --max, -m N        Max iterations per plan (default: 50)"
       echo "  --review, -r       Run plan reviewer before starting each plan"
       echo "  --create-pr, --pr  Create PR via Claude Code after plan completion"
       echo "  --version, -v      Show version"
