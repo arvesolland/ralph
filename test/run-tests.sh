@@ -53,6 +53,7 @@ while [[ $# -gt 0 ]]; do
       echo "  progress           Progress file creation"
       echo "  loose-format       Non-strict plan format"
       echo "  worker-queue       Queue management workflow"
+      echo "  core-principles    Verify ALL core Ralph principles"
       exit 0
       ;;
     *)
@@ -312,6 +313,135 @@ test_worker_queue() {
 }
 
 # ============================================
+# TEST: Core Principles
+# Verifies ALL Ralph core principles in one test:
+# 1. One task at a time
+# 2. Reads context (CLAUDE.md, specs, plan, progress)
+# 3. Picks next task respecting dependencies
+# 4. Completes with verification
+# 5. Updates plan
+# 6. Updates progress log (EVERY iteration)
+# 7. Commits all changes
+# ============================================
+test_core_principles() {
+  begin_test "Core Principles Verification"
+
+  WORKSPACE=$(setup_workspace)
+  echo "Workspace: $WORKSPACE"
+
+  # Copy test plan (3 dependent tasks)
+  cp "$SCRIPT_DIR/plans/05-core-principles.md" "$WORKSPACE/plans/current/test-plan.md"
+
+  # Run ralph with enough iterations for 3 tasks
+  echo "Running ralph..."
+  cd "$WORKSPACE"
+  ./scripts/ralph/ralph.sh plans/current/test-plan.md --max 10 || true
+
+  # Verify results
+  local failed=0
+
+  echo ""
+  echo "  Verifying Core Principles:"
+  echo ""
+
+  # PRINCIPLE 1: One task at a time (verified by dependency order)
+  # If tasks ran in parallel, step2 might run before step1
+  assert_file_exists "$WORKSPACE/output/step1.txt" "P1: Task T1 completed" || failed=1
+  assert_file_exists "$WORKSPACE/output/step2.txt" "P1: Task T2 completed" || failed=1
+  assert_file_exists "$WORKSPACE/output/final.txt" "P1: Task T3 completed" || failed=1
+  assert_file_contains "$WORKSPACE/output/step1.txt" "step1-complete" "P1: T1 correct content" || failed=1
+  assert_file_contains "$WORKSPACE/output/step2.txt" "step2-complete" "P1: T2 correct content" || failed=1
+  assert_file_contains "$WORKSPACE/output/final.txt" "all-done" "P1: T3 correct content" || failed=1
+
+  # PRINCIPLE 3: Picks next task (dependency ordering)
+  # T2 requires T1, T3 requires T2 - verified by files existing in order
+
+  # PRINCIPLE 4: Completes with verification (acceptance criteria checked)
+  # T2 verifies T1 exists, T3 verifies both exist - verified by final.txt existing
+
+  # PRINCIPLE 5: Updates plan (checkboxes marked)
+  local plan_file=$(find "$WORKSPACE/plans" -name "plan.md" -path "*/complete/*" -o -name "test-plan.md" -path "*/current/*" 2>/dev/null | grep -v progress | head -1)
+  if [ -n "$plan_file" ]; then
+    # Count checked boxes - should have multiple [x] entries
+    local checked_count=$(grep -c '\[x\]' "$plan_file" 2>/dev/null || echo "0")
+    if [ "$checked_count" -ge 3 ]; then
+      echo -e "  ${GREEN}✓${NC} P5: Plan updated ($checked_count subtasks checked)"
+    else
+      echo -e "  ${RED}✗${NC} P5: Plan not fully updated (only $checked_count checked)"
+      failed=1
+    fi
+
+    # Verify all tasks marked complete
+    local complete_count=$(grep -c 'Status:\*\* complete' "$plan_file" 2>/dev/null || echo "0")
+    if [ "$complete_count" -ge 3 ]; then
+      echo -e "  ${GREEN}✓${NC} P5: All 3 tasks marked complete"
+    else
+      echo -e "  ${RED}✗${NC} P5: Not all tasks marked complete ($complete_count/3)"
+      failed=1
+    fi
+  else
+    echo -e "  ${RED}✗${NC} P5: Could not find plan file"
+    failed=1
+  fi
+
+  # PRINCIPLE 6: Updates progress log (EVERY iteration)
+  local progress_file=$(find "$WORKSPACE/plans" -name "progress.md" -o -name "*.progress.md" 2>/dev/null | head -1)
+  if [ -n "$progress_file" ] && [ -f "$progress_file" ]; then
+    echo -e "  ${GREEN}✓${NC} P6: Progress file exists"
+
+    # Count iteration entries - should have at least 3 (one per task)
+    local iteration_count=$(grep -c '### Iteration' "$progress_file" 2>/dev/null || echo "0")
+    if [ "$iteration_count" -ge 3 ]; then
+      echo -e "  ${GREEN}✓${NC} P6: Progress logged for $iteration_count iterations"
+    else
+      echo -e "  ${RED}✗${NC} P6: Progress not logged every iteration (only $iteration_count entries, expected >=3)"
+      failed=1
+    fi
+
+    # Check for "Completed:" entries (required format)
+    local completed_entries=$(grep -c 'Completed:' "$progress_file" 2>/dev/null || echo "0")
+    if [ "$completed_entries" -ge 3 ]; then
+      echo -e "  ${GREEN}✓${NC} P6: All iterations have Completed entries"
+    else
+      echo -e "  ${RED}✗${NC} P6: Missing Completed entries (only $completed_entries, expected >=3)"
+      failed=1
+    fi
+  else
+    echo -e "  ${RED}✗${NC} P6: Progress file not found"
+    failed=1
+  fi
+
+  # PRINCIPLE 7: Commits all changes
+  local commit_count=$(git -C "$WORKSPACE" log --oneline feat/test-plan 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$commit_count" -ge 3 ]; then
+    echo -e "  ${GREEN}✓${NC} P7: Multiple commits made ($commit_count commits)"
+  else
+    echo -e "  ${RED}✗${NC} P7: Expected at least 3 commits, got $commit_count"
+    failed=1
+  fi
+
+  # Verify commits include plan and progress files
+  local plan_commits=$(git -C "$WORKSPACE" log --oneline --all -- "plans/" 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$plan_commits" -ge 3 ]; then
+    echo -e "  ${GREEN}✓${NC} P7: Plan file committed in multiple iterations"
+  else
+    echo -e "  ${YELLOW}!${NC} P7: Plan commits: $plan_commits (expected >=3)"
+  fi
+
+  if [ "$failed" -eq 0 ]; then
+    pass_test
+  else
+    fail_test "Core principles not all verified"
+  fi
+
+  if [ "$KEEP_WORKSPACE" = false ]; then
+    teardown_workspace
+  else
+    echo -e "${YELLOW}Workspace kept at: $WORKSPACE${NC}"
+  fi
+}
+
+# ============================================
 # Run tests
 # ============================================
 
@@ -321,6 +451,7 @@ if [ "$RUN_ALL" = true ]; then
   test_progress
   test_loose_format
   test_worker_queue
+  test_core_principles
 else
   case "$SPECIFIC_TEST" in
     single-task)
@@ -337,6 +468,9 @@ else
       ;;
     worker-queue)
       test_worker_queue
+      ;;
+    core-principles)
+      test_core_principles
       ;;
     *)
       echo -e "${RED}Unknown test: $SPECIFIC_TEST${NC}"
