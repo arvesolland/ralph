@@ -60,10 +60,17 @@ Read the plan file specified in `context.json`. This contains:
 - Subtasks (implementation steps)
 - Current status of each task
 
-### 5. Previous Learnings
-Read the progress file if it exists: `<plan-name>.progress.md` in the same folder as the plan.
+### 5. Progress File
+The progress file tracks learnings across iterations: `<plan-name>.progress.md` in the same folder as the plan.
 
-**This is critical.** Previous iterations recorded gotchas and patterns here. Learn from them to avoid repeating mistakes.
+**If the file doesn't exist, create it now** with this header:
+```markdown
+# Progress: [Plan Name]
+
+Learnings and gotchas from implementation.
+```
+
+**If it exists, read it carefully.** Previous iterations recorded gotchas and patterns here. Learn from them to avoid repeating mistakes.
 
 ---
 
@@ -114,20 +121,13 @@ Run validation commands:
 - If you discovered new work: add to `## Discovered` section, don't interrupt current task
 
 ### 5. Record Learnings
-If you discovered something non-obvious, append to the progress file (`<plan-name>.progress.md` in the same folder as the plan):
+If you discovered something non-obvious, append to the progress file (which you created/read in step 5 of context gathering):
 
 ```markdown
 ---
 ### [Task/Subtask identifier]: [Brief description]
 **Gotcha:** [What surprised you, what didn't work, edge cases]
 **Pattern:** [Reusable approach that worked]
-```
-
-**Create the file if it doesn't exist.** Start with a header:
-```markdown
-# Progress: [Plan Name]
-
-Learnings and gotchas from implementation.
 ```
 
 Skip recording if nothing notable. Don't log "completed successfully."
@@ -143,7 +143,7 @@ refactor(api): extract common middleware
 **IMPORTANT: Include ALL changed files in your commit:**
 - Code changes
 - Plan file (with updated checkboxes/status)
-- Progress file (if you added learnings)
+- Progress file (always - even if just created with header)
 
 Commit after completing each subtask. Small, atomic commits. Example:
 ```bash
@@ -222,7 +222,7 @@ If tasks remain incomplete, end your response normally after completing your sub
 2. ☐ Read specs/INDEX.md (if exists)
 3. ☐ Read context.json
 4. ☐ Read plan file
-5. ☐ Read progress file (if exists)
+5. ☐ Read/create progress file (create with header if doesn't exist)
 6. ☐ Select next task/subtask
 7. ☐ Implement
 8. ☐ Validate (lint + test)
@@ -230,5 +230,5 @@ If tasks remain incomplete, end your response normally after completing your sub
 10. ☐ **Verify acceptance criteria if task may be complete**
 11. ☐ Update task status if ALL criteria met
 12. ☐ Record learnings in progress file (if any)
-13. ☐ **Commit ALL changes** (code + plan + progress file)
+13. ☐ **Commit ALL changes** (code + plan + progress file - always include progress file)
 14. ☐ Output `<promise>COMPLETE</promise>` if plan done, else end normally
