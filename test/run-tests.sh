@@ -411,8 +411,8 @@ test_core_principles() {
     failed=1
   fi
 
-  # PRINCIPLE 7: Commits all changes
-  local commit_count=$(git -C "$WORKSPACE" log --oneline feat/test-plan 2>/dev/null | wc -l | tr -d ' ')
+  # PRINCIPLE 7: Commits all changes (check main since feature branch is merged+deleted)
+  local commit_count=$(git -C "$WORKSPACE" log --oneline main 2>/dev/null | wc -l | tr -d ' ')
   if [ "$commit_count" -ge 3 ]; then
     echo -e "  ${GREEN}✓${NC} P7: Multiple commits made ($commit_count commits)"
   else

@@ -1,6 +1,6 @@
 # Ralph
 
-An implementation of the [Ralph Wiggum technique](https://ralph-wiggum.ai) for autonomous AI development.
+An implementation of the Ralph Wiggum technique for autonomous AI development.
 
 ## Why It Works
 
