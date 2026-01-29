@@ -145,6 +145,10 @@ echo ""
 
 cd "$PROJECT_ROOT"
 
+# Notify plan start
+PLAN_NAME=$(basename "$PLAN_FILE" .md)
+send_slack_notification "start" "Starting plan: *$PLAN_NAME* (max $MAX_ITERATIONS iterations)" "$CONFIG_DIR"
+
 # Setup feature branch (create or checkout)
 echo -e "${BLUE}Setting up feature branch...${NC}"
 
@@ -263,6 +267,9 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "========================================"
   echo ""
 
+  # Notify iteration start (if enabled)
+  send_slack_notification "iteration" "Plan *$PLAN_NAME* - iteration $i of $MAX_ITERATIONS" "$CONFIG_DIR"
+
   # Write context for worker
   cat > "$SCRIPT_DIR/context.json" << EOF
 {
@@ -300,6 +307,9 @@ $(cat "$PLAN_PATH")"
       echo "Plan file: $PLAN_FILE"
       rm -f "$SCRIPT_DIR/context.json"
 
+      # Notify completion
+      send_slack_notification "complete" "Plan *$PLAN_NAME* completed successfully after $i iterations! 🎉" "$CONFIG_DIR"
+
       # If plan is in the queue (current folder), trigger completion workflow
       if [[ "$PLAN_PATH" == *"/plans/current/"* ]]; then
         echo ""
@@ -326,4 +336,8 @@ echo ""
 log_warn "Max iterations ($MAX_ITERATIONS) reached"
 echo "Check plan file for remaining tasks: $PLAN_FILE"
 rm -f "$SCRIPT_DIR/context.json"
+
+# Notify max iterations reached
+send_slack_notification "error" "Plan *$PLAN_NAME* hit max iterations ($MAX_ITERATIONS) without completing" "$CONFIG_DIR"
+
 exit 1

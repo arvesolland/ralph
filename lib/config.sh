@@ -193,6 +193,87 @@ log_info() {
   echo -e "${BLUE}$1${NC}"
 }
 
+# ============================================
+# Slack Notifications
+# ============================================
+# Send notification to Slack webhook if configured
+# Usage: send_slack_notification "event_type" "message" ["config_dir"]
+#
+# Event types: start, complete, iteration, error
+# Config in .ralph/config.yaml:
+#   slack:
+#     webhook_url: "https://hooks.slack.com/services/..."
+#     notify_start: true      # notify on plan start (default: true)
+#     notify_complete: true   # notify on plan completion (default: true)
+#     notify_iteration: false # notify on each iteration (default: false)
+#     notify_error: true      # notify on errors (default: true)
+#
+send_slack_notification() {
+  local event_type="$1"
+  local message="$2"
+  local config_dir="${3:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  # Get webhook URL - skip if not configured
+  local webhook_url=$(config_get "slack.webhook_url" "$config_file")
+  if [ -z "$webhook_url" ]; then
+    return 0
+  fi
+
+  # Check if this event type should be notified
+  local should_notify="true"
+  case "$event_type" in
+    start)
+      should_notify=$(config_get "slack.notify_start" "$config_file")
+      should_notify=${should_notify:-true}
+      ;;
+    complete)
+      should_notify=$(config_get "slack.notify_complete" "$config_file")
+      should_notify=${should_notify:-true}
+      ;;
+    iteration)
+      should_notify=$(config_get "slack.notify_iteration" "$config_file")
+      should_notify=${should_notify:-false}
+      ;;
+    error)
+      should_notify=$(config_get "slack.notify_error" "$config_file")
+      should_notify=${should_notify:-true}
+      ;;
+  esac
+
+  if [ "$should_notify" != "true" ]; then
+    return 0
+  fi
+
+  # Get project name for context
+  local project_name=$(config_get "project.name" "$config_file")
+  project_name=${project_name:-"Ralph"}
+
+  # Choose emoji based on event type
+  local emoji="🤖"
+  case "$event_type" in
+    start)    emoji="🚀" ;;
+    complete) emoji="✅" ;;
+    iteration) emoji="🔄" ;;
+    error)    emoji="❌" ;;
+  esac
+
+  # Build JSON payload
+  local payload=$(cat <<EOF
+{
+  "text": "$emoji *[$project_name]* $message",
+  "unfurl_links": false,
+  "unfurl_media": false
+}
+EOF
+)
+
+  # Send to Slack (async, don't block on failure)
+  curl -s -X POST -H 'Content-type: application/json' \
+    --data "$payload" \
+    "$webhook_url" >/dev/null 2>&1 &
+}
+
 # Run claude with retry logic for transient errors
 # Usage: echo "$PROMPT" | run_claude_with_retry [claude_args...]
 # Returns: Claude output on success, exits with error after max retries
