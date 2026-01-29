@@ -238,10 +238,10 @@ setup_feature_branch() {
   {
     echo -e "${BLUE}Setting up feature branch: $branch_name${NC}"
 
-    # Stash uncommitted changes (like the plan file move) to preserve across branch switch
+    # Stash uncommitted AND untracked changes (like the plan file move) to preserve across branch switch
     local had_stash=false
-    if ! git diff --quiet --cached 2>/dev/null || ! git diff --quiet 2>/dev/null; then
-      git stash push -q -m "ralph: preserve plan file during branch switch"
+    if ! git diff --quiet --cached 2>/dev/null || ! git diff --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+      git stash push -u -q -m "ralph: preserve plan file during branch switch"
       had_stash=true
     fi
 

@@ -147,6 +147,14 @@ cd "$PROJECT_ROOT"
 
 # Setup feature branch (create or checkout)
 echo -e "${BLUE}Setting up feature branch...${NC}"
+
+# Stash uncommitted AND untracked changes to preserve across branch switch
+RALPH_HAD_STASH=false
+if ! git diff --quiet --cached 2>/dev/null || ! git diff --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+  git stash push -u -q -m "ralph: preserve changes during branch switch"
+  RALPH_HAD_STASH=true
+fi
+
 if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
   echo "  Branch exists, checking out..."
   git checkout "$FEATURE_BRANCH"
@@ -155,6 +163,12 @@ else
   echo "  Creating branch from $BASE_BRANCH..."
   git checkout -b "$FEATURE_BRANCH" "$BASE_BRANCH" 2>/dev/null || git checkout -b "$FEATURE_BRANCH"
 fi
+
+# Restore stashed changes onto the feature branch
+if [ "$RALPH_HAD_STASH" = true ]; then
+  git stash pop -q 2>/dev/null || true
+fi
+
 echo "  On branch: $(git branch --show-current)"
 echo ""
 
