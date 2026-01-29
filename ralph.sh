@@ -159,6 +159,14 @@ if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
   echo "  Branch exists, checking out..."
   git checkout "$FEATURE_BRANCH"
   git pull --ff-only 2>/dev/null || true
+  # Merge base branch to get latest changes (e.g., from previously completed plans)
+  if ! git merge-base --is-ancestor "$BASE_BRANCH" HEAD 2>/dev/null; then
+    echo "  Merging $BASE_BRANCH to get latest changes..."
+    git merge "$BASE_BRANCH" --no-edit 2>&1 || {
+      echo "  Merge conflict - please resolve manually"
+      git merge --abort 2>/dev/null || true
+    }
+  fi
 else
   echo "  Creating branch from $BASE_BRANCH..."
   git checkout -b "$FEATURE_BRANCH" "$BASE_BRANCH" 2>/dev/null || git checkout -b "$FEATURE_BRANCH"

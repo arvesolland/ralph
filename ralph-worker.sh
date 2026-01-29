@@ -249,6 +249,14 @@ setup_feature_branch() {
       echo "  Branch exists, checking out..."
       git checkout "$branch_name" 2>&1
       git pull --ff-only 2>&1 || true
+      # Merge base branch to get latest changes (e.g., from previously completed plans)
+      if ! git merge-base --is-ancestor "$base_branch" HEAD 2>/dev/null; then
+        echo "  Merging $base_branch to get latest changes..."
+        git merge "$base_branch" --no-edit 2>&1 || {
+          echo "  Merge conflict - please resolve manually"
+          git merge --abort 2>/dev/null || true
+        }
+      fi
     else
       echo "  Creating branch from $base_branch..."
       git checkout -b "$branch_name" "$base_branch" 2>&1 || git checkout -b "$branch_name" 2>&1
