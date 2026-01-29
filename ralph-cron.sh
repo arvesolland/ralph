@@ -2,10 +2,13 @@
 # Ralph Cron Wrapper - Run ralph-worker with flock to prevent overlap
 #
 # Usage:
-#   ./ralph-cron.sh [options]
+#   ./ralph-cron.sh <project-dir> [ralph-worker options]
 #
-# Add to crontab (every 5 minutes):
+# Crontab (every 5 minutes):
 #   */5 * * * * /path/to/ralph-cron.sh /path/to/project --loop >> /tmp/ralph.log 2>&1
+#
+# tmux loop:
+#   while true; do caffeinate -i /path/to/ralph-cron.sh /path/to/project --loop; sleep 300; done
 #
 # Requirements:
 #   - flock (brew install flock on macOS)
@@ -27,7 +30,12 @@ fi
 
 cd "$PROJECT_DIR" || exit 1
 
+# Pull latest changes (plans, code)
+echo "[$(date)] Pulling latest..."
+git pull --ff-only 2>/dev/null || git pull --rebase 2>/dev/null || echo "Pull failed (continuing anyway)"
+
 # Use flock to ensure only one instance runs
 # -n = non-blocking (exit immediately if lock held)
-# caffeinate -i = prevent idle sleep while running
-exec flock -n "$LOCK_FILE" caffeinate -i "$SCRIPT_DIR/ralph-worker.sh" "$@"
+# --review = run plan reviewer before each plan
+# --loop = keep processing until queue empty
+exec flock -n "$LOCK_FILE" "$SCRIPT_DIR/ralph-worker.sh" --review "$@"
