@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Update CHANGELOG.md to include recent changes
 - Add git pull and --review to ralph-cron.sh
 - Add ralph-cron.sh wrapper for scheduled runs
 - Add Slack notifications section to CLAUDE.md
