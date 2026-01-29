@@ -74,6 +74,21 @@ Progress persists in:
 2. Haiku verification confirms plan is actually complete (prevents false positives)
 3. If plan is in `plans/current/`, triggers completion workflow (archive + optional PR)
 
+### Slack Notifications (Optional)
+
+Configure in `.ralph/config.yaml` to receive Slack notifications:
+
+```yaml
+slack:
+  webhook_url: "https://hooks.slack.com/services/..."
+  notify_start: true      # plan start (default: true)
+  notify_complete: true   # plan completion (default: true)
+  notify_iteration: false # each iteration (default: false)
+  notify_error: true      # errors/max iterations (default: true)
+```
+
+Notifications are sent async and silently skip if `webhook_url` is not set.
+
 ### Skills (.claude/skills/)
 
 ```
