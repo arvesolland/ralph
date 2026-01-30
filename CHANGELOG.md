@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Include PR URL in Slack completion notification
 - Handle inline YAML comments in config_get
 - macOS sed compatibility in Slack message escaping
 - Clarify worktree plan location in reviewer prompt
