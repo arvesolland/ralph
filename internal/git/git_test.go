@@ -542,3 +542,299 @@ func containsAt(s, substr string) bool {
 	}
 	return false
 }
+
+// ==================== Worktree Tests ====================
+
+func TestCreateWorktree_NewBranch(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	// Need at least one commit
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// Create worktree with new branch
+	worktreePath := filepath.Join(repoDir, ".worktrees", "feature")
+	if err := g.CreateWorktree(worktreePath, "feature"); err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	// Verify worktree directory exists
+	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+		t.Error("worktree directory should exist")
+	}
+
+	// Verify branch was created
+	exists, err := g.BranchExists("feature")
+	if err != nil {
+		t.Fatalf("BranchExists: %v", err)
+	}
+	if !exists {
+		t.Error("feature branch should exist")
+	}
+
+	// Verify branch is checked out in worktree
+	worktreeGit := NewGit(worktreePath)
+	branch, err := worktreeGit.CurrentBranch()
+	if err != nil {
+		t.Fatalf("CurrentBranch in worktree: %v", err)
+	}
+	if branch != "feature" {
+		t.Errorf("worktree branch = %q, want %q", branch, "feature")
+	}
+}
+
+func TestCreateWorktree_ExistingBranch(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// Create branch first
+	if err := g.CreateBranch("existing-branch"); err != nil {
+		t.Fatalf("CreateBranch: %v", err)
+	}
+
+	// Create worktree with existing branch
+	worktreePath := filepath.Join(repoDir, ".worktrees", "existing")
+	if err := g.CreateWorktree(worktreePath, "existing-branch"); err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	// Verify worktree has correct branch
+	worktreeGit := NewGit(worktreePath)
+	branch, err := worktreeGit.CurrentBranch()
+	if err != nil {
+		t.Fatalf("CurrentBranch in worktree: %v", err)
+	}
+	if branch != "existing-branch" {
+		t.Errorf("worktree branch = %q, want %q", branch, "existing-branch")
+	}
+}
+
+func TestCreateWorktree_BranchAlreadyCheckedOut(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// main is already checked out in the main worktree
+	worktreePath := filepath.Join(repoDir, ".worktrees", "main-copy")
+	err := g.CreateWorktree(worktreePath, "main")
+	if err != ErrBranchAlreadyCheckedOut {
+		t.Errorf("CreateWorktree with checked out branch: got %v, want ErrBranchAlreadyCheckedOut", err)
+	}
+}
+
+func TestCreateWorktree_BranchCheckedOutInOtherWorktree(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// Create first worktree with feature branch
+	worktree1 := filepath.Join(repoDir, ".worktrees", "wt1")
+	if err := g.CreateWorktree(worktree1, "feature"); err != nil {
+		t.Fatalf("CreateWorktree wt1: %v", err)
+	}
+
+	// Try to create second worktree with same branch
+	worktree2 := filepath.Join(repoDir, ".worktrees", "wt2")
+	err := g.CreateWorktree(worktree2, "feature")
+	if err != ErrBranchAlreadyCheckedOut {
+		t.Errorf("CreateWorktree with same branch: got %v, want ErrBranchAlreadyCheckedOut", err)
+	}
+}
+
+func TestRemoveWorktree(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// Create worktree
+	worktreePath := filepath.Join(repoDir, ".worktrees", "feature")
+	if err := g.CreateWorktree(worktreePath, "feature"); err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	// Remove worktree
+	if err := g.RemoveWorktree(worktreePath); err != nil {
+		t.Fatalf("RemoveWorktree: %v", err)
+	}
+
+	// Verify worktree directory is gone
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Error("worktree directory should not exist after removal")
+	}
+}
+
+func TestRemoveWorktree_NotFound(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	err := g.RemoveWorktree("/nonexistent/path")
+	if err != ErrWorktreeNotFound {
+		t.Errorf("RemoveWorktree nonexistent: got %v, want ErrWorktreeNotFound", err)
+	}
+}
+
+func TestRemoveWorktree_WithChanges(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// Create worktree
+	worktreePath := filepath.Join(repoDir, ".worktrees", "feature")
+	if err := g.CreateWorktree(worktreePath, "feature"); err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	// Create uncommitted changes in worktree
+	createFile(t, worktreePath, "untracked.txt", "untracked content")
+
+	// RemoveWorktree should force-remove even with changes
+	if err := g.RemoveWorktree(worktreePath); err != nil {
+		t.Fatalf("RemoveWorktree with changes: %v", err)
+	}
+
+	// Verify worktree is gone
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Error("worktree directory should not exist after removal")
+	}
+}
+
+func TestListWorktrees(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// List worktrees (should have just main worktree)
+	worktrees, err := g.ListWorktrees()
+	if err != nil {
+		t.Fatalf("ListWorktrees: %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Fatalf("expected 1 worktree, got %d", len(worktrees))
+	}
+
+	// Resolve symlinks for path comparison (handles macOS /private/var)
+	expectedPath, _ := filepath.EvalSymlinks(repoDir)
+	actualPath, _ := filepath.EvalSymlinks(worktrees[0].Path)
+	if actualPath != expectedPath {
+		t.Errorf("worktree path = %q, want %q", worktrees[0].Path, expectedPath)
+	}
+	if worktrees[0].Branch != "main" {
+		t.Errorf("worktree branch = %q, want %q", worktrees[0].Branch, "main")
+	}
+	if worktrees[0].Commit == "" {
+		t.Error("worktree commit should not be empty")
+	}
+}
+
+func TestListWorktrees_Multiple(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	createFile(t, repoDir, "README.md", "# Test\n")
+	g := NewGit(repoDir)
+	if err := g.Commit("Initial commit", "README.md"); err != nil {
+		t.Fatalf("initial commit: %v", err)
+	}
+
+	// Create additional worktrees
+	wt1 := filepath.Join(repoDir, ".worktrees", "feature1")
+	if err := g.CreateWorktree(wt1, "feature1"); err != nil {
+		t.Fatalf("CreateWorktree feature1: %v", err)
+	}
+
+	wt2 := filepath.Join(repoDir, ".worktrees", "feature2")
+	if err := g.CreateWorktree(wt2, "feature2"); err != nil {
+		t.Fatalf("CreateWorktree feature2: %v", err)
+	}
+
+	// List worktrees
+	worktrees, err := g.ListWorktrees()
+	if err != nil {
+		t.Fatalf("ListWorktrees: %v", err)
+	}
+
+	if len(worktrees) != 3 {
+		t.Fatalf("expected 3 worktrees, got %d", len(worktrees))
+	}
+
+	// Verify branches are present
+	branches := make(map[string]bool)
+	for _, wt := range worktrees {
+		branches[wt.Branch] = true
+	}
+
+	if !branches["main"] {
+		t.Error("main branch not found in worktrees")
+	}
+	if !branches["feature1"] {
+		t.Error("feature1 branch not found in worktrees")
+	}
+	if !branches["feature2"] {
+		t.Error("feature2 branch not found in worktrees")
+	}
+}
+
+func TestWorktreeInfo(t *testing.T) {
+	// Test WorktreeInfo struct directly
+	info := WorktreeInfo{
+		Path:   "/path/to/worktree",
+		Branch: "feature",
+		Commit: "abc123",
+		Bare:   false,
+	}
+
+	if info.Path != "/path/to/worktree" {
+		t.Errorf("Path = %q, want %q", info.Path, "/path/to/worktree")
+	}
+	if info.Branch != "feature" {
+		t.Errorf("Branch = %q, want %q", info.Branch, "feature")
+	}
+	if info.Commit != "abc123" {
+		t.Errorf("Commit = %q, want %q", info.Commit, "abc123")
+	}
+	if info.Bare {
+		t.Error("Bare should be false")
+	}
+}

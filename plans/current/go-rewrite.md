@@ -431,24 +431,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Create, remove, and list git worktrees.
 
 **Requires:** T15
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `CreateWorktree(path, branch string) error` runs `git worktree add`
-- [ ] Creates branch if it doesn't exist (based on current HEAD)
-- [ ] `RemoveWorktree(path string) error` runs `git worktree remove`
-- [ ] `ListWorktrees() ([]WorktreeInfo, error)` parses `git worktree list --porcelain`
-- [ ] `WorktreeInfo` contains Path, Branch, Commit
-- [ ] CreateWorktree returns specific error if branch already checked out (this is the lock!)
-- [ ] Integration tests verify worktree creation and removal
+- [x] `CreateWorktree(path, branch string) error` runs `git worktree add`
+- [x] Creates branch if it doesn't exist (based on current HEAD)
+- [x] `RemoveWorktree(path string) error` runs `git worktree remove`
+- [x] `ListWorktrees() ([]WorktreeInfo, error)` parses `git worktree list --porcelain`
+- [x] `WorktreeInfo` contains Path, Branch, Commit
+- [x] CreateWorktree returns specific error if branch already checked out (this is the lock!)
+- [x] Integration tests verify worktree creation and removal
 
 **Subtasks:**
-1. [ ] Implement CreateWorktree
-2. [ ] Implement branch creation within CreateWorktree
-3. [ ] Implement RemoveWorktree
-4. [ ] Implement ListWorktrees with porcelain parsing
-5. [ ] Define and detect "branch already checked out" error
-6. [ ] Write integration tests
+1. [x] Implement CreateWorktree
+2. [x] Implement branch creation within CreateWorktree
+3. [x] Implement RemoveWorktree
+4. [x] Implement ListWorktrees with porcelain parsing
+5. [x] Define and detect "branch already checked out" error
+6. [x] Write integration tests
 
 ---
 

@@ -13,11 +13,13 @@ import (
 
 // Common errors returned by Git operations.
 var (
-	ErrNotGitRepo        = errors.New("not a git repository")
-	ErrUncommittedChanges = errors.New("uncommitted changes exist")
-	ErrBranchNotFound    = errors.New("branch not found")
-	ErrBranchExists      = errors.New("branch already exists")
-	ErrMergeConflict     = errors.New("merge conflict")
+	ErrNotGitRepo           = errors.New("not a git repository")
+	ErrUncommittedChanges   = errors.New("uncommitted changes exist")
+	ErrBranchNotFound       = errors.New("branch not found")
+	ErrBranchExists         = errors.New("branch already exists")
+	ErrMergeConflict        = errors.New("merge conflict")
+	ErrBranchAlreadyCheckedOut = errors.New("branch is already checked out in another worktree")
+	ErrWorktreeNotFound     = errors.New("worktree not found")
 )
 
 // Status represents the state of a git working tree.
@@ -31,6 +33,14 @@ type Status struct {
 // IsClean returns true if there are no uncommitted changes.
 func (s *Status) IsClean() bool {
 	return len(s.Staged) == 0 && len(s.Unstaged) == 0
+}
+
+// WorktreeInfo contains information about a git worktree.
+type WorktreeInfo struct {
+	Path   string // Absolute path to the worktree
+	Branch string // Branch checked out in this worktree (empty for detached HEAD)
+	Commit string // Commit SHA checked out
+	Bare   bool   // True if this is the bare repository
 }
 
 // Git defines the interface for git operations.
@@ -83,6 +93,18 @@ type Git interface {
 
 	// WorkDir returns the working directory.
 	WorkDir() string
+
+	// CreateWorktree creates a new worktree at the given path for the branch.
+	// If the branch doesn't exist, it will be created based on current HEAD.
+	// Returns ErrBranchAlreadyCheckedOut if the branch is checked out elsewhere.
+	CreateWorktree(path, branch string) error
+
+	// RemoveWorktree removes a worktree at the given path.
+	// Returns ErrWorktreeNotFound if the worktree doesn't exist.
+	RemoveWorktree(path string) error
+
+	// ListWorktrees returns information about all worktrees in the repository.
+	ListWorktrees() ([]WorktreeInfo, error)
 }
 
 // CLIGit implements Git interface using git CLI commands.
@@ -380,4 +402,103 @@ func (g *CLIGit) IsClean() (bool, error) {
 		return false, err
 	}
 	return status.IsClean(), nil
+}
+
+// CreateWorktree creates a new worktree at the given path for the branch.
+// If the branch doesn't exist, it will be created based on current HEAD.
+func (g *CLIGit) CreateWorktree(path, branch string) error {
+	// Check if branch already exists
+	exists, err := g.BranchExists(branch)
+	if err != nil {
+		return fmt.Errorf("checking branch existence: %w", err)
+	}
+
+	var args []string
+	if exists {
+		// Use existing branch
+		args = []string{"worktree", "add", path, branch}
+	} else {
+		// Create new branch with -b flag
+		args = []string{"worktree", "add", "-b", branch, path}
+	}
+
+	_, stderr, err := g.run(args...)
+	if err != nil {
+		// Check for "already checked out" error
+		if strings.Contains(stderr, "is already checked out") || strings.Contains(stderr, "already used by worktree") {
+			return ErrBranchAlreadyCheckedOut
+		}
+		return fmt.Errorf("git worktree add: %s: %w", stderr, err)
+	}
+	return nil
+}
+
+// RemoveWorktree removes a worktree at the given path.
+func (g *CLIGit) RemoveWorktree(path string) error {
+	// First try normal remove
+	_, stderr, err := g.run("worktree", "remove", path)
+	if err != nil {
+		// Check for common errors
+		if strings.Contains(stderr, "is not a working tree") || strings.Contains(stderr, "No such file or directory") {
+			return ErrWorktreeNotFound
+		}
+		// If there are untracked files or changes, try force
+		if strings.Contains(stderr, "contains modified or untracked files") {
+			_, stderr, err = g.run("worktree", "remove", "--force", path)
+			if err != nil {
+				return fmt.Errorf("git worktree remove --force: %s: %w", stderr, err)
+			}
+			return nil
+		}
+		return fmt.Errorf("git worktree remove: %s: %w", stderr, err)
+	}
+	return nil
+}
+
+// ListWorktrees returns information about all worktrees in the repository.
+func (g *CLIGit) ListWorktrees() ([]WorktreeInfo, error) {
+	output, stderr, err := g.runRaw("worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, fmt.Errorf("git worktree list: %s: %w", stderr, err)
+	}
+
+	var worktrees []WorktreeInfo
+	var current *WorktreeInfo
+
+	// Parse porcelain output
+	// Format:
+	// worktree /path/to/worktree
+	// HEAD abc123...
+	// branch refs/heads/main
+	// (blank line)
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimRight(line, "\r")
+
+		if strings.HasPrefix(line, "worktree ") {
+			// Start of new worktree entry
+			if current != nil {
+				worktrees = append(worktrees, *current)
+			}
+			current = &WorktreeInfo{
+				Path: strings.TrimPrefix(line, "worktree "),
+			}
+		} else if strings.HasPrefix(line, "HEAD ") && current != nil {
+			current.Commit = strings.TrimPrefix(line, "HEAD ")
+		} else if strings.HasPrefix(line, "branch ") && current != nil {
+			// Extract branch name from refs/heads/branchname
+			ref := strings.TrimPrefix(line, "branch ")
+			current.Branch = strings.TrimPrefix(ref, "refs/heads/")
+		} else if line == "bare" && current != nil {
+			current.Bare = true
+		} else if strings.HasPrefix(line, "detached") && current != nil {
+			// Detached HEAD - branch stays empty
+		}
+	}
+
+	// Don't forget the last entry
+	if current != nil {
+		worktrees = append(worktrees, *current)
+	}
+
+	return worktrees, nil
 }

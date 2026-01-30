@@ -387,3 +387,23 @@ Iteration log - what was done, gotchas, and next steps.
 - `git commit` with nothing to commit outputs to stdout, not stderr.
 
 **Next:** T16 - Implement git worktree operations (depends on T15, now complete)
+
+---
+### Iteration 16: T16 - Implement git worktree operations
+**Completed:**
+- Added worktree operations to `internal/git/git.go`:
+  - `CreateWorktree(path, branch string) error` - creates worktree, auto-creates branch if needed
+  - `RemoveWorktree(path string) error` - removes worktree, force-removes if has changes
+  - `ListWorktrees() ([]WorktreeInfo, error)` - parses `git worktree list --porcelain`
+  - `WorktreeInfo` struct with Path, Branch, Commit, Bare fields
+  - `ErrBranchAlreadyCheckedOut` and `ErrWorktreeNotFound` error types
+- Added 11 integration tests to `internal/git/git_test.go`:
+  - TestCreateWorktree_NewBranch, TestCreateWorktree_ExistingBranch
+  - TestCreateWorktree_BranchAlreadyCheckedOut, TestCreateWorktree_BranchCheckedOutInOtherWorktree
+  - TestRemoveWorktree, TestRemoveWorktree_NotFound, TestRemoveWorktree_WithChanges
+  - TestListWorktrees, TestListWorktrees_Multiple, TestWorktreeInfo
+- All 30 git tests pass, all 147 total tests pass
+
+**Gotcha:** The worktree list porcelain output includes `bare` and `detached` markers that need special handling. Detached HEAD means branch field stays empty.
+
+**Next:** T17 - Implement WorktreeManager (depends on T16 and T11, both now complete)
