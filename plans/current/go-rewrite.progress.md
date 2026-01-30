@@ -657,3 +657,41 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Platform-specific syscall errors (ECONNREFUSED, ECONNRESET) don't work consistently with errors.Is on all platforms. The error message matching handles these cases reliably.
 
 **Next:** T25 - Implement Runner with timeout handling (depends on T22, T23, T24 - all complete)
+
+---
+### Iteration 25: T25 - Implement Runner with timeout handling (+ T26 completion marker detection)
+**Completed:**
+- Created `internal/runner/runner.go` with:
+  - `Runner` interface defining `Run(ctx context.Context, prompt string, opts Options) (*Result, error)`
+  - `Result` struct with Output, TextContent, Duration, Attempts, IsComplete, Blocker fields
+  - `Blocker` struct placeholder (full implementation in T27)
+  - `CLIRunner` implementation with timeout handling via context
+  - `NewCLIRunner()` and `NewCLIRunnerWithRetrier()` constructors
+  - `Run()` method integrating with Retrier for transient failures
+  - `runOnce()` for single execution with streaming parser
+  - `terminateProcess()` with SIGTERM → 5s wait → SIGKILL sequence
+  - `containsCompletionMarker()` for `<promise>COMPLETE</promise>` detection
+  - `isRetryableExitError()` for classifying CLI exit errors
+- Created mock scripts in `internal/runner/testdata/`:
+  - `mock-claude-success.sh` - outputs stream-json with completion marker
+  - `mock-claude-timeout.sh` - simulates slow/hanging execution
+  - `mock-claude-error.sh` - outputs rate limit error and exits 1
+- Created `internal/runner/runner_test.go` with 14 test functions:
+  - TestNewCLIRunner, TestNewCLIRunnerWithRetrier
+  - TestContainsCompletionMarker (10 subtests for various marker positions/cases)
+  - TestIsRetryableExitError (12 subtests for error classification)
+  - TestResult_Fields, TestBlocker_Fields
+  - TestCLIRunner_RunWithMockScript_Success, TestCLIRunner_RunWithMockScript_Timeout
+  - TestCLIRunner_RunWithMockScript_Error, TestCLIRunner_TerminateProcess
+  - TestRunnerInterface (interface compliance), TestCLIRunner_ConcurrentAccess
+- T26 (completion marker detection) implemented as part of T25:
+  - `Result.IsComplete` populated by `containsCompletionMarker()`
+  - Case-sensitive exact match
+  - Works anywhere in output
+  - Tests cover partial matches, lowercase, whitespace
+- All 76 runner tests pass (16 command + 20 stream + 26 retry + 14 runner)
+- Build succeeds
+
+**Gotcha:** The completion marker detection (T26) was implemented alongside T25 since it's used within the Result struct during execution. Marked both tasks complete.
+
+**Next:** T27 - Implement blocker extraction (depends on T25, now complete)

@@ -664,26 +664,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Execute Claude CLI with timeout and process management.
 
 **Requires:** T22, T23, T24
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/runner.go` defines `Runner` interface and `CLIRunner` implementation
-- [ ] `Run(ctx context.Context, prompt string, opts Options) (*Result, error)` executes Claude
-- [ ] Timeout enforced via context with deadline
-- [ ] On timeout: sends SIGTERM, waits 5s, sends SIGKILL if needed
-- [ ] Streams output in real-time during execution
-- [ ] Returns `Result` with Output, Duration, Attempts
-- [ ] Integrates with Retrier for transient failures
-- [ ] Integration test with mock claude script (simulates timeout)
+- [x] `internal/runner/runner.go` defines `Runner` interface and `CLIRunner` implementation
+- [x] `Run(ctx context.Context, prompt string, opts Options) (*Result, error)` executes Claude
+- [x] Timeout enforced via context with deadline
+- [x] On timeout: sends SIGTERM, waits 5s, sends SIGKILL if needed
+- [x] Streams output in real-time during execution
+- [x] Returns `Result` with Output, Duration, Attempts
+- [x] Integrates with Retrier for transient failures
+- [x] Integration test with mock claude script (simulates timeout)
 
 **Subtasks:**
-1. [ ] Define Runner interface and Result struct
-2. [ ] Implement CLIRunner.Run()
-3. [ ] Implement timeout with context
-4. [ ] Implement process termination (SIGTERM/SIGKILL)
-5. [ ] Integrate streaming parser
-6. [ ] Integrate retry logic
-7. [ ] Write integration test with mock script
+1. [x] Define Runner interface and Result struct
+2. [x] Implement CLIRunner.Run()
+3. [x] Implement timeout with context
+4. [x] Implement process termination (SIGTERM/SIGKILL)
+5. [x] Integrate streaming parser
+6. [x] Integrate retry logic
+7. [x] Write integration test with mock script
 
 ---
 
@@ -691,19 +691,19 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Detect `<promise>COMPLETE</promise>` in Claude output.
 
 **Requires:** T25
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `Result.IsComplete` set to true when output contains `<promise>COMPLETE</promise>`
-- [ ] Detection is case-sensitive (exact match)
-- [ ] Works with marker anywhere in output (not just end)
-- [ ] Does not false-positive on partial matches or mentions
-- [ ] Unit tests verify detection in various positions
+- [x] `Result.IsComplete` set to true when output contains `<promise>COMPLETE</promise>`
+- [x] Detection is case-sensitive (exact match)
+- [x] Works with marker anywhere in output (not just end)
+- [x] Does not false-positive on partial matches or mentions
+- [x] Unit tests verify detection in various positions
 
 **Subtasks:**
-1. [ ] Add IsComplete field to Result
-2. [ ] Implement detection in output parsing
-3. [ ] Write unit tests
+1. [x] Add IsComplete field to Result
+2. [x] Implement detection in output parsing
+3. [x] Write unit tests
 
 ---
 
