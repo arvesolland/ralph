@@ -40,6 +40,8 @@ Read `scripts/ralph/context.json` to get:
 
 Then read the plan file.
 
+**Note on worktree execution:** When Ralph runs with worktree isolation, plans execute in a separate git worktree at `.ralph/worktrees/feat-<plan>/`. The plan is copied to `plan.md` at the worktree root — this is correct by design. Don't flag this as a structural issue. The original plan remains in `plans/current/` in the main repository.
+
 ## Review Process
 
 ### Step 1: Spec Alignment
