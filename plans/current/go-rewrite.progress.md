@@ -407,3 +407,31 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The worktree list porcelain output includes `bare` and `detached` markers that need special handling. Detached HEAD means branch field stays empty.
 
 **Next:** T17 - Implement WorktreeManager (depends on T16 and T11, both now complete)
+
+---
+### Iteration 17: T17 - Implement WorktreeManager
+**Completed:**
+- Created `internal/worktree/manager.go` with:
+  - `WorktreeManager` struct with git, baseDir, repoRoot fields
+  - `Worktree` struct with Path, Branch, PlanName fields
+  - `NewManager(g git.Git, baseDir string) (*WorktreeManager, error)` constructor
+  - `Path(plan *Plan) string` returns worktree path (uses plan name without `feat/` prefix for shorter dirs)
+  - `Exists(plan *Plan) bool` checks if worktree directory exists
+  - `Get(plan *Plan) (*Worktree, error)` returns worktree or nil if not found
+  - `Create(plan *Plan) (*Worktree, error)` creates worktree using Git.CreateWorktree
+  - `Remove(plan *Plan, deleteBranch bool) error` removes worktree and optionally deletes branch
+  - Error types: `ErrWorktreeExists`, `ErrWorktreeNotFound`
+- Removed placeholder `internal/worktree/worktree.go` file
+- Created `internal/worktree/manager_test.go` with 17 test functions using mock Git interface:
+  - TestNewManager, TestNewManager_AbsolutePath
+  - TestManager_Path (3 subtests for different plan names)
+  - TestManager_Exists_NotExists, TestManager_Exists_AfterCreate
+  - TestManager_Create, TestManager_Create_AlreadyExists, TestManager_Create_BranchCheckedOut
+  - TestManager_Get_NotExists, TestManager_Get_AfterCreate
+  - TestManager_Remove, TestManager_Remove_WithDeleteBranch, TestManager_Remove_NotExists
+  - TestManager_BaseDir, TestManager_RepoRoot, TestManager_FullLifecycle
+- All 17 worktree tests pass, all tests pass
+
+**Gotcha:** The `Path()` method strips the `feat/` prefix from the branch name for cleaner directory names (`.ralph/worktrees/go-rewrite/` instead of `.ralph/worktrees/feat-go-rewrite/`).
+
+**Next:** T18 - Implement dependency auto-detection for worktrees (depends on T17, now complete)

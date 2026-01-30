@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- implement worktree operations (T16)
+- implement Git interface and basic operations
 - add ralph status command
 - implement feedback file handling
 - implement progress file handling

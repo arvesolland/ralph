@@ -456,25 +456,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > High-level worktree management for plans.
 
 **Requires:** T16, T11
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/manager.go` defines `WorktreeManager` struct
-- [ ] `Create(plan *Plan) (*Worktree, error)` creates worktree at `.ralph/worktrees/feat-<plan-name>/`
-- [ ] `Remove(plan *Plan) error` removes plan's worktree and optionally deletes branch
-- [ ] `Get(plan *Plan) (*Worktree, error)` returns existing worktree or nil
-- [ ] `Exists(plan *Plan) bool` checks if worktree exists
-- [ ] `Path(plan *Plan) string` returns worktree path for plan
-- [ ] Worktree path is gitignored (check `.ralph/worktrees/` in .gitignore)
-- [ ] Unit tests with mock Git interface
+- [x] `internal/worktree/manager.go` defines `WorktreeManager` struct
+- [x] `Create(plan *Plan) (*Worktree, error)` creates worktree at `.ralph/worktrees/feat-<plan-name>/`
+- [x] `Remove(plan *Plan) error` removes plan's worktree and optionally deletes branch
+- [x] `Get(plan *Plan) (*Worktree, error)` returns existing worktree or nil
+- [x] `Exists(plan *Plan) bool` checks if worktree exists
+- [x] `Path(plan *Plan) string` returns worktree path for plan
+- [x] Worktree path is gitignored (check `.ralph/worktrees/` in .gitignore)
+- [x] Unit tests with mock Git interface
 
 **Subtasks:**
-1. [ ] Define WorktreeManager struct
-2. [ ] Implement path derivation
-3. [ ] Implement Create with Git.CreateWorktree
-4. [ ] Implement Remove
-5. [ ] Implement Get and Exists
-6. [ ] Write unit tests with mock Git
+1. [x] Define WorktreeManager struct
+2. [x] Implement path derivation
+3. [x] Implement Create with Git.CreateWorktree
+4. [x] Implement Remove
+5. [x] Implement Get and Exists
+6. [x] Write unit tests with mock Git
 
 ---
 
