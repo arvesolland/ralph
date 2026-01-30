@@ -199,6 +199,13 @@ init_worktree() {
     # 1. Copy .env file if exists (and not already present)
     _copy_env_files "$main_worktree" "$worktree_path" "$config_file"
 
+    # 1b. Sync .ralph/config.yaml to worktree (for slack settings, etc.)
+    if [[ -f "$config_file" ]]; then
+        mkdir -p "$worktree_path/.ralph"
+        cp "$config_file" "$worktree_path/.ralph/config.yaml"
+        log_info "Synced .ralph/config.yaml to worktree" >&2
+    fi
+
     # 2. Run custom hook script if exists
     local hook_script="$config_dir/hooks/worktree-init"
     if [[ -x "$hook_script" ]]; then
