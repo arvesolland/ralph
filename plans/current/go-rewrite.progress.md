@@ -330,3 +330,31 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - implementation follows the same patterns as progress.go with section-aware parsing.
 
 **Next:** T14 - Add `ralph status` command (depends on T11 and T3, both complete)
+
+---
+### Iteration 14: T14 - Add `ralph status` command
+**Completed:**
+- Created `internal/cli/status.go` with:
+  - `statusCmd` Cobra command with description and usage info
+  - `runStatus()` function that displays queue status
+  - Reads from `plans/` directory (pending, current, complete subdirectories)
+  - Uses `plan.Queue` from T11 for status retrieval
+  - Displays current plan name and branch (feat/<name>) in green
+  - Displays pending plans count and list in yellow
+  - Displays complete plans count
+  - Worktree status placeholder (not yet implemented - T17+)
+  - Color output with TTY detection and --no-color flag support
+  - Graceful handling of missing plans directory
+- Created `internal/cli/status_test.go` with 6 integration tests:
+  - TestRunStatus_NoPlanDirectory - graceful handling when no plans/
+  - TestRunStatus_EmptyQueue - empty queue display
+  - TestRunStatus_WithCurrentPlan - current plan name and branch display
+  - TestRunStatus_WithPendingPlans - pending list with multiple plans
+  - TestRunStatus_OutputFormat - all sections present with correct counts
+  - TestRunStatus_ExitCode - returns nil (exit 0) on success
+- All 117 tests pass (111 existing + 6 new)
+- Build succeeds, `ralph status` works correctly
+
+**Gotcha:** None - used direct fmt.Print for status output instead of log package since log adds timestamps/levels which aren't appropriate for status display.
+
+**Next:** T15 - Implement Git interface and basic operations (depends on T2, which is complete)

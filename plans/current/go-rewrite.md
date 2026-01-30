@@ -378,23 +378,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Display queue status and worktree information.
 
 **Requires:** T11, T3
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph status` displays count of plans in each queue (pending, current, complete)
-- [ ] Shows current plan name and branch if one is active
-- [ ] Shows list of pending plans by name
-- [ ] Shows worktree status (count, paths) - placeholder until worktree implemented
-- [ ] Colored output: current=green, pending=yellow
-- [ ] Returns exit code 0 on success
-- [ ] Integration test verifies output format
+- [x] `ralph status` displays count of plans in each queue (pending, current, complete)
+- [x] Shows current plan name and branch if one is active
+- [x] Shows list of pending plans by name
+- [x] Shows worktree status (count, paths) - placeholder until worktree implemented
+- [x] Colored output: current=green, pending=yellow
+- [x] Returns exit code 0 on success
+- [x] Integration test verifies output format
 
 **Subtasks:**
-1. [ ] Create internal/cli/status.go
-2. [ ] Implement queue status display
-3. [ ] Add worktree status placeholder
-4. [ ] Add colored output
-5. [ ] Write integration test
+1. [x] Create internal/cli/status.go
+2. [x] Implement queue status display
+3. [x] Add worktree status placeholder
+4. [x] Add colored output
+5. [x] Write integration test
 
 ---
 
