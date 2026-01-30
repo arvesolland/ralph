@@ -120,7 +120,11 @@ PROJECT_NAME=${PROJECT_NAME:-"Project"}
 BASE_BRANCH=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml")
 BASE_BRANCH=${BASE_BRANCH:-"main"}
 
-# Get feature branch name from plan
+# Get current branch (ralph.sh now runs in whatever worktree it's invoked in)
+# No branch switching - that's handled by ralph-worker.sh via worktrees
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+
+# Derive feature branch name for context (used in context.json)
 get_feature_branch() {
   local plan_file="$1"
   local plan_name=$(basename "$plan_file" .md)
@@ -129,14 +133,23 @@ get_feature_branch() {
   echo "feat/$plan_name"
 }
 
-FEATURE_BRANCH=$(get_feature_branch "$PLAN_PATH")
+# Use current branch if on a feature branch, otherwise derive from plan name
+if [[ "$CURRENT_BRANCH" == feat/* ]]; then
+  FEATURE_BRANCH="$CURRENT_BRANCH"
+else
+  FEATURE_BRANCH=$(get_feature_branch "$PLAN_PATH")
+fi
 
 echo -e "${GREEN}Ralph - Implementation Loop${NC}"
 echo "========================================"
 echo "Project: $PROJECT_NAME"
 echo "Project root: $PROJECT_ROOT"
 echo "Plan file: $PLAN_FILE"
-echo "Feature branch: $FEATURE_BRANCH"
+echo "Current branch: $CURRENT_BRANCH"
+if [[ "$CURRENT_BRANCH" != "$FEATURE_BRANCH" ]]; then
+  echo -e "${YELLOW}Warning: Not on expected feature branch ($FEATURE_BRANCH)${NC}"
+  echo "  This is OK if running standalone or in a worktree"
+fi
 if [ "$REVIEW_PLAN" = true ]; then
   echo -e "Plan review: ${YELLOW}enabled ($REVIEW_PASSES passes)${NC}"
 fi
@@ -149,39 +162,9 @@ cd "$PROJECT_ROOT"
 PLAN_NAME=$(basename "$PLAN_FILE" .md)
 send_slack_notification "start" "Starting plan: *$PLAN_NAME* (max $MAX_ITERATIONS iterations)" "$CONFIG_DIR"
 
-# Setup feature branch (create or checkout)
-echo -e "${BLUE}Setting up feature branch...${NC}"
-
-# Stash uncommitted AND untracked changes to preserve across branch switch
-RALPH_HAD_STASH=false
-if ! git diff --quiet --cached 2>/dev/null || ! git diff --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-  git stash push -u -q -m "ralph: preserve changes during branch switch"
-  RALPH_HAD_STASH=true
-fi
-
-if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
-  echo "  Branch exists, checking out..."
-  git checkout "$FEATURE_BRANCH"
-  git pull --ff-only 2>/dev/null || true
-  # Merge base branch to get latest changes (e.g., from previously completed plans)
-  if ! git merge-base --is-ancestor "$BASE_BRANCH" HEAD 2>/dev/null; then
-    echo "  Merging $BASE_BRANCH to get latest changes..."
-    git merge "$BASE_BRANCH" --no-edit 2>&1 || {
-      echo "  Merge conflict - please resolve manually"
-      git merge --abort 2>/dev/null || true
-    }
-  fi
-else
-  echo "  Creating branch from $BASE_BRANCH..."
-  git checkout -b "$FEATURE_BRANCH" "$BASE_BRANCH" 2>/dev/null || git checkout -b "$FEATURE_BRANCH"
-fi
-
-# Restore stashed changes onto the feature branch
-if [ "$RALPH_HAD_STASH" = true ]; then
-  git stash pop -q 2>/dev/null || true
-fi
-
-echo "  On branch: $(git branch --show-current)"
+# No branch switching! ralph.sh now runs in whatever directory/worktree it's invoked in
+# Branch management is handled by ralph-worker.sh using git worktrees
+echo -e "${BLUE}Working on branch:${NC} $CURRENT_BRANCH"
 echo ""
 
 # ============================================
@@ -310,16 +293,8 @@ $(cat "$PLAN_PATH")"
       # Notify completion
       send_slack_notification "complete" "Plan *$PLAN_NAME* completed successfully after $i iterations! 🎉" "$CONFIG_DIR"
 
-      # If plan is in the queue (current folder), trigger completion workflow
-      if [[ "$PLAN_PATH" == *"/plans/current/"* ]]; then
-        echo ""
-        echo "Plan is in queue - triggering completion workflow..."
-        if [ "$CREATE_PR" = true ]; then
-          "$SCRIPT_DIR/ralph-worker.sh" --complete --create-pr
-        else
-          "$SCRIPT_DIR/ralph-worker.sh" --complete
-        fi
-      fi
+      # Completion workflow is handled by ralph-worker.sh when running in worktree mode
+      # ralph-worker.sh will detect exit code 0 and call do_complete
 
       exit 0
     else

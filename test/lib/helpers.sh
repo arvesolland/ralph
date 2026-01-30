@@ -205,3 +205,70 @@ print_summary() {
     return 1
   fi
 }
+
+# ============================================
+# Worktree-specific assertions
+# ============================================
+
+# Assert worktree exists for a plan
+assert_worktree_exists() {
+  local workspace="$1"
+  local plan_name="$2"
+  local msg="${3:-Worktree should exist for: $plan_name}"
+
+  local worktree_dir="$workspace/.ralph/worktrees/feat-$plan_name"
+  if [ -d "$worktree_dir" ]; then
+    echo -e "  ${GREEN}✓${NC} $msg"
+    return 0
+  else
+    echo -e "  ${RED}✗${NC} $msg"
+    echo -e "    ${RED}Worktree not found: $worktree_dir${NC}"
+    return 1
+  fi
+}
+
+# Assert worktree does NOT exist (cleaned up)
+assert_worktree_not_exists() {
+  local workspace="$1"
+  local plan_name="$2"
+  local msg="${3:-Worktree should be cleaned up for: $plan_name}"
+
+  local worktree_dir="$workspace/.ralph/worktrees/feat-$plan_name"
+  if [ ! -d "$worktree_dir" ]; then
+    echo -e "  ${GREEN}✓${NC} $msg"
+    return 0
+  else
+    echo -e "  ${RED}✗${NC} $msg"
+    echo -e "    ${RED}Worktree still exists: $worktree_dir${NC}"
+    return 1
+  fi
+}
+
+# Assert main worktree is on expected branch
+assert_on_branch() {
+  local workspace="$1"
+  local expected_branch="$2"
+  local msg="${3:-Should be on branch: $expected_branch}"
+
+  local current_branch=$(git -C "$workspace" branch --show-current 2>/dev/null)
+  if [ "$current_branch" = "$expected_branch" ]; then
+    echo -e "  ${GREEN}✓${NC} $msg"
+    return 0
+  else
+    echo -e "  ${RED}✗${NC} $msg"
+    echo -e "    ${RED}Actually on branch: $current_branch${NC}"
+    return 1
+  fi
+}
+
+# Count worktrees in workspace
+count_worktrees() {
+  local workspace="$1"
+  local worktrees_dir="$workspace/.ralph/worktrees"
+
+  if [ -d "$worktrees_dir" ]; then
+    ls -d "$worktrees_dir"/*/ 2>/dev/null | wc -l | tr -d ' '
+  else
+    echo "0"
+  fi
+}

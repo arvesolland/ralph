@@ -3,6 +3,9 @@ context.json
 .current_task.md
 .worker.lock
 
+# Worktrees for plan execution (created at runtime)
+.ralph/worktrees/
+
 # Test workspaces (created at runtime)
 test/workspaces/
 

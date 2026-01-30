@@ -42,7 +42,12 @@ LOOP_MODE=false
 ADD_FILE=""
 MAX_ITERATIONS=50
 CREATE_PR=false
+MERGE_DIRECT=false
 REVIEW_PLAN=false
+DELETE_BRANCH=true
+
+# Get default completion mode from config
+DEFAULT_COMPLETION_MODE=$(config_get "completion.mode" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "pr")
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -73,6 +78,20 @@ while [[ $# -gt 0 ]]; do
       ;;
     --create-pr|--pr)
       CREATE_PR=true
+      MERGE_DIRECT=false
+      shift
+      ;;
+    --merge)
+      MERGE_DIRECT=true
+      CREATE_PR=false
+      shift
+      ;;
+    --no-delete-branch)
+      DELETE_BRANCH=false
+      shift
+      ;;
+    --cleanup)
+      ACTION="cleanup"
       shift
       ;;
     --review|-r)
@@ -84,7 +103,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     --help|-h)
-      echo "Ralph Worker - File-based task queue"
+      echo "Ralph Worker - File-based task queue with worktree isolation"
       echo ""
       echo "Usage:"
       echo "  ./ralph-worker.sh              Process current or next plan"
@@ -93,6 +112,7 @@ while [[ $# -gt 0 ]]; do
       echo "  ./ralph-worker.sh --complete   Mark current plan complete, activate next"
       echo "  ./ralph-worker.sh --next       Activate next pending plan"
       echo "  ./ralph-worker.sh --loop       Process until queue empty"
+      echo "  ./ralph-worker.sh --cleanup    Remove orphaned worktrees"
       echo ""
       echo "Options:"
       echo "  --status, -s       Show queue status"
@@ -102,14 +122,25 @@ while [[ $# -gt 0 ]]; do
       echo "  --loop, -l         Keep processing until no more plans"
       echo "  --max, -m N        Max iterations per plan (default: 50)"
       echo "  --review, -r       Run plan reviewer before starting each plan"
-      echo "  --create-pr, --pr  Create PR via Claude Code after plan completion"
+      echo "  --pr               Create PR after completion (default)"
+      echo "  --merge            Direct merge to base branch (skip PR)"
+      echo "  --no-delete-branch Keep feature branch after merge"
+      echo "  --cleanup          Remove orphaned worktrees"
       echo "  --version, -v      Show version"
       echo "  --help, -h         Show this help"
+      echo ""
+      echo "Completion modes (set via flag or completion.mode in config.yaml):"
+      echo "  pr (default)       Push branch and create PR via gh"
+      echo "  merge              Merge directly to base branch"
       echo ""
       echo "Folder structure:"
       echo "  plans/pending/    Plans waiting to be processed"
       echo "  plans/current/    Currently active plan (0-1 files)"
       echo "  plans/complete/   Finished plans with logs"
+      echo ""
+      echo "Worktree isolation:"
+      echo "  Each plan executes in its own git worktree at .ralph/worktrees/"
+      echo "  This prevents branch switching conflicts in the main worktree."
       exit 0
       ;;
     *)
@@ -118,6 +149,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Apply default completion mode if no flag specified
+if [[ "$CREATE_PR" == "false" ]] && [[ "$MERGE_DIRECT" == "false" ]]; then
+  if [[ "$DEFAULT_COMPLETION_MODE" == "merge" ]]; then
+    MERGE_DIRECT=true
+  else
+    CREATE_PR=true
+  fi
+fi
 
 # Ensure directories exist
 ensure_dirs() {
@@ -228,47 +268,54 @@ get_feature_branch() {
   echo "feat/$plan_name"
 }
 
-# Create or checkout feature branch for plan
-setup_feature_branch() {
+# Get plan name from plan file (for worktree functions)
+get_plan_name() {
   local plan_file="$1"
-  local branch_name=$(get_feature_branch "$plan_file")
+  basename "$plan_file" .md
+}
+
+# DEPRECATED: Old branch-switching approach - kept for reference
+# setup_feature_branch() { ... }
+# Now replaced by worktree-based isolation. See create_plan_worktree() in lib/worktree.sh
+
+# Setup worktree for plan execution (replaces setup_feature_branch)
+# Creates isolated worktree, copies plan file into it
+# Returns: worktree path on stdout
+setup_plan_worktree() {
+  local plan_file="$1"
+  local plan_name=$(get_plan_name "$plan_file")
   local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
 
-  # All output to stderr to avoid polluting stdout (which is captured for return values)
-  {
-    echo -e "${BLUE}Setting up feature branch: $branch_name${NC}"
+  # Check if already locked (prevents double-execution)
+  if is_plan_locked "$plan_name"; then
+    local existing_path=$(get_worktree_path "$plan_name")
+    log_warn "Plan already has active worktree: $existing_path" >&2
+    echo "$existing_path"
+    return 0
+  fi
 
-    # Stash uncommitted AND untracked changes (like the plan file move) to preserve across branch switch
-    local had_stash=false
-    if ! git diff --quiet --cached 2>/dev/null || ! git diff --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-      git stash push -u -q -m "ralph: preserve plan file during branch switch"
-      had_stash=true
-    fi
+  # Create worktree (this also creates branch if needed)
+  local worktree_path
+  worktree_path=$(create_plan_worktree "$plan_name" "$base_branch")
 
-    if git show-ref --verify --quiet "refs/heads/$branch_name"; then
-      echo "  Branch exists, checking out..."
-      git checkout "$branch_name" 2>&1
-      git pull --ff-only 2>&1 || true
-      # Merge base branch to get latest changes (e.g., from previously completed plans)
-      if ! git merge-base --is-ancestor "$base_branch" HEAD 2>/dev/null; then
-        echo "  Merging $base_branch to get latest changes..."
-        git merge "$base_branch" --no-edit 2>&1 || {
-          echo "  Merge conflict - please resolve manually"
-          git merge --abort 2>/dev/null || true
-        }
-      fi
-    else
-      echo "  Creating branch from $base_branch..."
-      git checkout -b "$branch_name" "$base_branch" 2>&1 || git checkout -b "$branch_name" 2>&1
-    fi
+  if [[ -z "$worktree_path" ]] || [[ ! -d "$worktree_path" ]]; then
+    log_error "Failed to create worktree for plan: $plan_name" >&2
+    return 1
+  fi
 
-    # Restore stashed changes (plan file) onto the feature branch
-    if [ "$had_stash" = true ]; then
-      git stash pop -q 2>&1 || true
-    fi
+  # Copy plan file into worktree (keeps original in queue for state tracking)
+  cp "$plan_file" "$worktree_path/plan.md"
 
-    echo "  On branch: $(git branch --show-current)"
-  } >&2
+  # Also copy progress file if it exists
+  local progress_file="${plan_file%.md}.progress.md"
+  if [[ -f "$progress_file" ]]; then
+    cp "$progress_file" "$worktree_path/plan.progress.md"
+  fi
+
+  log_info "Worktree ready: $worktree_path" >&2
+  log_info "Plan copied to: $worktree_path/plan.md" >&2
+
+  echo "$worktree_path"
 }
 
 # Check for and warn about orphaned files (progress files in wrong places)
@@ -294,18 +341,39 @@ check_orphaned_files() {
   fi
 }
 
-# Move next pending plan to current
+# Move next pending plan to current and setup worktree
+# Returns: plan file path in current/ on stdout
 activate_next_plan() {
   # First check for orphaned files
   check_orphaned_files
 
   local next_plan=$(get_oldest_file "$PENDING_DIR")
   if [ -n "$next_plan" ] && [ -f "$next_plan" ]; then
+    local plan_name=$(get_plan_name "$next_plan")
+
+    # Check if plan is already locked (worktree exists)
+    if is_plan_locked "$plan_name"; then
+      log_error "Plan '$plan_name' is already being executed (worktree exists)" >&2
+      log_error "Use --cleanup to remove orphaned worktrees, or wait for execution to complete" >&2
+      return 1
+    fi
+
     local dest="$CURRENT_DIR/$(basename "$next_plan")"
     mv "$next_plan" "$dest"
 
-    # Setup feature branch for this plan
-    setup_feature_branch "$dest"
+    # Commit the plan activation on base branch (keeps queue state tracked)
+    git add "$PENDING_DIR" "$CURRENT_DIR" 2>/dev/null || true
+    git commit -m "chore: activate plan $plan_name" --allow-empty 2>/dev/null || true
+
+    # Setup worktree for execution (no branch switch in main worktree!)
+    local worktree_path
+    worktree_path=$(setup_plan_worktree "$dest")
+
+    if [[ -z "$worktree_path" ]]; then
+      log_error "Failed to setup worktree, moving plan back to pending" >&2
+      mv "$dest" "$next_plan"
+      return 1
+    fi
 
     echo "$dest"
   fi
@@ -336,13 +404,36 @@ show_status() {
 
   echo -e "${BLUE}Current:${NC}"
   if [ -n "$current_plan" ]; then
+    local plan_name=$(get_plan_name "$current_plan")
     local task_count=$(grep -c '^\s*-\s*\[ \]' "$current_plan" 2>/dev/null || echo "0")
     local done_count=$(grep -c '^\s*-\s*\[x\]' "$current_plan" 2>/dev/null || echo "0")
     echo "  - $(basename "$current_plan") ($done_count done, $task_count remaining)"
+
+    # Show worktree status
+    local worktree_path=$(get_worktree_path "$plan_name")
+    if [[ -d "$worktree_path" ]]; then
+      local wt_branch=$(get_worktree_branch "$worktree_path")
+      echo -e "    ${BLUE}Worktree:${NC} $worktree_path"
+      echo -e "    ${BLUE}Branch:${NC} $wt_branch"
+    else
+      echo -e "    ${YELLOW}Worktree:${NC} not created yet"
+    fi
   else
     echo "  (none)"
   fi
   echo ""
+
+  # Show active worktrees
+  local worktrees=$(list_plan_worktrees 2>/dev/null)
+  if [[ -n "$worktrees" ]]; then
+    local wt_count=$(echo "$worktrees" | wc -l | tr -d ' ')
+    echo -e "${BLUE}Active Worktrees:${NC} $wt_count"
+    for wt in $worktrees; do
+      local branch=$(get_worktree_branch "$wt")
+      echo "  - $(basename "$wt") ($branch)"
+    done
+    echo ""
+  fi
 
   echo -e "${BLUE}Completed:${NC} $completed_count plan(s)"
   if [ "$completed_count" -gt 0 ]; then
@@ -381,33 +472,59 @@ add_plan() {
   show_status
 }
 
-# Process a single plan
+# Process a single plan (runs ralph.sh inside the plan's worktree)
 process_plan() {
   local plan_file="$1"
-  local plan_name=$(basename "$plan_file")
+  local plan_name=$(get_plan_name "$plan_file")
 
-  echo -e "${BLUE}Processing:${NC} $plan_name"
+  echo -e "${BLUE}Processing:${NC} $(basename "$plan_file")"
   echo ""
 
-  # Build ralph.sh arguments
-  local ralph_args=("$plan_file" --max "$MAX_ITERATIONS")
+  # Get or create worktree for this plan
+  local worktree_path
+  worktree_path=$(get_worktree_path "$plan_name")
 
-  # Pass through flags if set
-  if [ "$CREATE_PR" = true ]; then
-    ralph_args+=(--create-pr)
+  # If worktree doesn't exist, create it
+  if [[ ! -d "$worktree_path" ]]; then
+    worktree_path=$(setup_plan_worktree "$plan_file")
+    if [[ -z "$worktree_path" ]] || [[ ! -d "$worktree_path" ]]; then
+      log_error "Failed to setup worktree for plan: $plan_name"
+      return 1
+    fi
   fi
+
+  echo -e "${BLUE}Executing in worktree:${NC} $worktree_path"
+  echo ""
+
+  # Build ralph.sh arguments - use plan.md inside worktree
+  local ralph_args=("plan.md" --max "$MAX_ITERATIONS")
+
+  # Don't pass --create-pr to ralph.sh (completion is handled here)
   if [ "$REVIEW_PLAN" = true ]; then
     ralph_args+=(--review-plan)
   fi
 
-  # Run ralph.sh on the plan
-  # ralph.sh will call ralph-worker.sh --complete when it catches <promise>COMPLETE</promise>
-  "$SCRIPT_DIR/ralph.sh" "${ralph_args[@]}"
+  # Run ralph.sh INSIDE the worktree
+  # This means ralph.sh operates on the feature branch without switching branches in main worktree
+  (cd "$worktree_path" && "$SCRIPT_DIR/ralph.sh" "${ralph_args[@]}")
   local exit_code=$?
 
-  # ralph.sh handles completion detection via COMPLETE marker
-  # If it returns 0, plan was completed and moved by the completion hook
-  # If it returns 1, max iterations reached - plan still in current/
+  # Sync plan file back to current/ (so queue state reflects progress)
+  if [[ -f "$worktree_path/plan.md" ]] && [[ -f "$plan_file" ]]; then
+    cp "$worktree_path/plan.md" "$plan_file"
+  fi
+  if [[ -f "$worktree_path/plan.progress.md" ]]; then
+    cp "$worktree_path/plan.progress.md" "${plan_file%.md}.progress.md" 2>/dev/null || true
+  fi
+
+  # If ralph.sh completed successfully (exit 0), trigger completion workflow
+  # ralph.sh no longer handles this because it runs inside a worktree
+  if [[ "$exit_code" -eq 0 ]]; then
+    echo ""
+    echo -e "${BLUE}Plan completed - triggering completion workflow...${NC}"
+    do_complete
+  fi
+
   return $exit_code
 }
 
@@ -455,45 +572,96 @@ do_work() {
   fi
 }
 
-# Create PR via Claude Code
-create_pr_with_claude() {
-  local plan_file="$1"
-  local feature_branch=$(git branch --show-current)
+# Create PR for completed plan (from worktree)
+# Usage: create_pr_for_plan "plan-name" "worktree-path"
+create_pr_for_plan() {
+  local plan_name="$1"
+  local worktree_path="$2"
+  local feature_branch=$(get_feature_branch_from_name "$plan_name")
   local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
 
-  echo -e "${BLUE}Creating PR via Claude Code...${NC}"
-  echo "  Feature branch: $feature_branch"
-  echo "  Base branch: $base_branch"
-  echo ""
+  echo -e "${BLUE}Creating PR for $feature_branch...${NC}"
 
-  # Build prompt for Claude Code
-  local prompt="Create a pull request for the completed plan.
+  # Push the branch from worktree
+  echo "  Pushing branch to origin..."
+  if ! git -C "$worktree_path" push -u origin "$feature_branch" 2>&1; then
+    log_warn "Failed to push branch - may already exist on remote"
+  fi
 
-## Branch Info
-- Feature branch: $feature_branch
-- Target branch: $base_branch
+  # Create PR using gh (from worktree so it has the right context)
+  echo "  Creating PR via gh..."
+  local plan_file="$worktree_path/plan.md"
+  local pr_title="feat: $plan_name"
 
-## Plan File
-Read the completed plan at: $plan_file
+  # Extract summary from plan if possible
+  local pr_body="## Summary
 
-## Instructions
-1. Run \`git log $base_branch..$feature_branch --oneline\` to see commits in this branch
-2. Run \`git diff $base_branch...$feature_branch --stat\` to see files changed
-3. Read the plan file for context and completed tasks
+Completed plan: $plan_name
 
-Create a PR with:
-- **Title:** Clear, concise summary of the feature/fix (from plan name or context)
-- **Description:**
-  - Summary of what was implemented (from completed tasks)
-  - Key changes (from git diff)
-  - Any gotchas or notes (from progress file if exists)
+## Changes
 
-Use \`gh pr create\` to create the PR targeting $base_branch."
+See commits in this PR for details.
 
-  # Run Claude Code to create PR (with retry logic)
-  echo "$prompt" | run_claude_with_retry -p --dangerously-skip-permissions || true
+---
+*Generated by Ralph*"
 
-  echo ""
+  if command -v gh &> /dev/null; then
+    (cd "$worktree_path" && gh pr create \
+      --title "$pr_title" \
+      --body "$pr_body" \
+      --base "$base_branch" \
+      --head "$feature_branch" 2>&1) || {
+      log_warn "PR creation failed - may already exist"
+      # Try to get existing PR URL
+      (cd "$worktree_path" && gh pr view --json url -q .url 2>/dev/null) || true
+    }
+  else
+    log_warn "gh CLI not installed - skipping PR creation"
+    echo "  Push completed. Create PR manually at:"
+    echo "  https://github.com/$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/compare/$base_branch...$feature_branch"
+  fi
+}
+
+# Merge feature branch directly to base (from main worktree)
+# Usage: merge_plan_branch "plan-name"
+merge_plan_branch() {
+  local plan_name="$1"
+  local feature_branch=$(get_feature_branch_from_name "$plan_name")
+  local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
+
+  echo -e "${BLUE}Merging $feature_branch → $base_branch...${NC}"
+
+  # Ensure we're on base branch in main worktree
+  local current_branch=$(git branch --show-current)
+  if [[ "$current_branch" != "$base_branch" ]]; then
+    echo "  Switching to $base_branch..."
+    git checkout "$base_branch" 2>&1 || {
+      log_error "Failed to checkout $base_branch"
+      return 1
+    }
+  fi
+
+  # Merge feature branch
+  if git merge --ff-only "$feature_branch" 2>/dev/null; then
+    echo "  Fast-forward merge successful"
+  elif git merge --no-edit "$feature_branch" 2>/dev/null; then
+    echo "  Merge commit created"
+  else
+    log_error "Merge conflict detected"
+    git merge --abort 2>/dev/null || true
+    echo -e "${YELLOW}  Please resolve manually:${NC}"
+    echo "  git checkout $base_branch && git merge $feature_branch"
+    echo "  # resolve conflicts"
+    echo "  git add . && git merge --continue"
+    return 1
+  fi
+
+  # Delete feature branch if configured
+  if [[ "$DELETE_BRANCH" == "true" ]]; then
+    git branch -d "$feature_branch" 2>/dev/null && echo "  Deleted branch: $feature_branch" || true
+  fi
+
+  return 0
 }
 
 # Complete current plan and activate next
@@ -507,90 +675,72 @@ do_complete() {
     return 1
   fi
 
-  # Get branch info before completing
-  local feature_branch=$(git branch --show-current)
+  local plan_name=$(get_plan_name "$current_plan")
+  local worktree_path=$(get_worktree_path "$plan_name")
   local base_branch=$(config_get "git.base_branch" "$CONFIG_DIR/config.yaml" 2>/dev/null || echo "main")
 
   echo -e "${GREEN}Completing:${NC} $(basename "$current_plan")"
-  local completed_dir=$(complete_plan "$current_plan")
-  echo "  Archived to: $completed_dir"
 
-  # Create PR if flag is set
-  if [ "$CREATE_PR" = true ]; then
-    echo ""
-    create_pr_with_claude "$completed_dir/plan.md"
+  # Sync final state from worktree back to current/ (if worktree exists)
+  if [[ -d "$worktree_path" ]]; then
+    if [[ -f "$worktree_path/plan.md" ]]; then
+      cp "$worktree_path/plan.md" "$current_plan"
+    fi
+    if [[ -f "$worktree_path/plan.progress.md" ]]; then
+      cp "$worktree_path/plan.progress.md" "${current_plan%.md}.progress.md"
+    fi
   fi
 
-  # Merge feature branch to main and pull latest
-  if [ "$feature_branch" != "$base_branch" ]; then
+  # Handle completion mode: PR or merge
+  if [[ "$CREATE_PR" == "true" ]]; then
     echo ""
-    echo -e "${BLUE}Merging $feature_branch → $base_branch...${NC}"
+    echo -e "${BLUE}Completion mode: PR${NC}"
 
-    # Switch to base branch
-    git checkout "$base_branch" 2>&1 | grep -v "^D\|^M" || true
-
-    # Merge feature branch (fast-forward if possible, merge commit otherwise)
-    if git merge --ff-only "$feature_branch" 2>/dev/null; then
-      echo "  Fast-forward merge successful"
-    elif git merge --no-edit "$feature_branch" 2>/dev/null; then
-      echo "  Merge commit created"
+    if [[ -d "$worktree_path" ]]; then
+      create_pr_for_plan "$plan_name" "$worktree_path"
     else
-      echo -e "${YELLOW}  Merge conflict detected - asking Claude to resolve...${NC}"
-
-      # Get list of conflicted files
-      local conflicted_files=$(git diff --name-only --diff-filter=U)
-
-      if [ -n "$conflicted_files" ]; then
-        # Build prompt for Claude to resolve conflicts
-        local resolve_prompt="You are resolving a git merge conflict. Be CAREFUL and CONSERVATIVE.
-
-## Conflicted files:
-$conflicted_files
-
-## Instructions:
-1. Read each conflicted file
-2. Look for conflict markers: <<<<<<<, =======, >>>>>>>
-3. CAREFULLY resolve each conflict by choosing the best combination of changes
-4. Preserve ALL functionality from both sides where possible
-5. Remove ALL conflict markers
-6. Run: git add <file> for each resolved file
-7. Run: git merge --continue
-
-If you cannot confidently resolve a conflict, output CONFLICT_UNRESOLVED and stop.
-
-Be conservative - when in doubt, keep both changes."
-
-        # Try to resolve with Claude
-        if echo "$resolve_prompt" | run_claude_with_retry -p --dangerously-skip-permissions 2>&1 | grep -q "CONFLICT_UNRESOLVED"; then
-          echo -e "${RED}  Claude could not resolve conflict${NC}"
-          git merge --abort 2>/dev/null || true
-          echo -e "${YELLOW}  Please resolve manually, then run:${NC}"
-          echo "  git checkout $base_branch && git merge $feature_branch"
-          echo "  # resolve conflicts"
-          echo "  git add . && git merge --continue"
-          echo "  ralph-worker --next"
-          return 1
-        fi
-
-        # Check if merge was completed successfully
-        if git rev-parse --verify HEAD >/dev/null 2>&1 && ! git diff --name-only --diff-filter=U | grep -q .; then
-          echo -e "  ${GREEN}Merge conflict resolved by Claude${NC}"
-        else
-          echo -e "${RED}  Merge still incomplete after Claude attempt${NC}"
-          git merge --abort 2>/dev/null || true
-          echo -e "${YELLOW}  Please resolve manually${NC}"
-          return 1
-        fi
-      fi
+      log_warn "Worktree not found - cannot create PR"
+      log_warn "Branch may need to be pushed manually"
     fi
 
-    # Pull latest to get new pending plans from others
-    echo -e "${BLUE}Pulling latest from remote...${NC}"
-    git pull --ff-only 2>/dev/null || git pull --rebase 2>/dev/null || echo "  No remote or pull failed (continuing anyway)"
+    # Archive plan (PR workflow - don't merge yet)
+    local completed_dir=$(complete_plan "$current_plan")
+    echo "  Archived to: $completed_dir"
 
-    # Optionally delete the merged feature branch
-    git branch -d "$feature_branch" 2>/dev/null && echo "  Deleted branch: $feature_branch" || true
+    # Clean up worktree (PR is created, worktree no longer needed)
+    if [[ -d "$worktree_path" ]]; then
+      echo "  Cleaning up worktree..."
+      remove_plan_worktree "$plan_name"
+    fi
+
+  elif [[ "$MERGE_DIRECT" == "true" ]]; then
+    echo ""
+    echo -e "${BLUE}Completion mode: Direct merge${NC}"
+
+    # Merge the feature branch to base
+    if ! merge_plan_branch "$plan_name"; then
+      log_error "Merge failed - plan not archived"
+      return 1
+    fi
+
+    # Archive plan after successful merge
+    local completed_dir=$(complete_plan "$current_plan")
+    echo "  Archived to: $completed_dir"
+
+    # Clean up worktree
+    if [[ -d "$worktree_path" ]]; then
+      echo "  Cleaning up worktree..."
+      remove_plan_worktree "$plan_name"
+    fi
+
+    # Pull latest to sync
+    echo -e "${BLUE}Pulling latest from remote...${NC}"
+    git pull --ff-only 2>/dev/null || git pull --rebase 2>/dev/null || echo "  No remote or pull failed (continuing)"
   fi
+
+  # Commit queue state change
+  git add "$CURRENT_DIR" "$COMPLETED_DIR" 2>/dev/null || true
+  git commit -m "chore: complete plan $plan_name" --allow-empty 2>/dev/null || true
 
   # Check for next plan
   local pending_count=$(count_files "$PENDING_DIR")
@@ -601,7 +751,7 @@ Be conservative - when in doubt, keep both changes."
     if [ -n "$next" ]; then
       echo "  Activated: $(basename "$next")"
       echo ""
-      echo "Run 'ralph-worker' or 'ralph plans/current/*.md' to continue."
+      echo "Run 'ralph-worker' to continue."
     fi
   else
     echo ""
@@ -633,6 +783,40 @@ do_next() {
   fi
 }
 
+# Clean up orphaned worktrees
+do_cleanup() {
+  echo -e "${BLUE}Cleaning up orphaned worktrees...${NC}"
+  echo ""
+
+  # First show what worktrees exist
+  local worktrees=$(list_plan_worktrees)
+  if [[ -z "$worktrees" ]]; then
+    echo "No worktrees found."
+    git worktree prune 2>/dev/null || true
+    return 0
+  fi
+
+  echo "Current worktrees:"
+  for wt in $worktrees; do
+    local branch=$(get_worktree_branch "$wt")
+    echo "  - $(basename "$wt") ($branch)"
+  done
+  echo ""
+
+  # Clean up orphans
+  local cleaned=$(cleanup_orphan_worktrees)
+
+  if [[ "$cleaned" -gt 0 ]]; then
+    echo -e "${GREEN}Cleaned $cleaned orphaned worktree(s)${NC}"
+  else
+    echo "No orphaned worktrees found."
+  fi
+
+  # Also prune git worktree references
+  git worktree prune 2>/dev/null || true
+  echo "Git worktree references pruned."
+}
+
 # Main
 case "$ACTION" in
   status)
@@ -646,6 +830,9 @@ case "$ACTION" in
     ;;
   next)
     do_next
+    ;;
+  cleanup)
+    do_cleanup
     ;;
   work)
     if [ "$LOOP_MODE" = true ]; then

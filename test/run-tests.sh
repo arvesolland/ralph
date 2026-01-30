@@ -52,7 +52,9 @@ while [[ $# -gt 0 ]]; do
       echo "  dependencies       Task dependency ordering"
       echo "  progress           Progress file creation"
       echo "  loose-format       Non-strict plan format"
-      echo "  worker-queue       Queue management workflow"
+      echo "  worker-queue       Queue management with worktree isolation"
+      echo "  dirty-state        Dirty main worktree handling"
+      echo "  worktree-cleanup   Orphaned worktree cleanup"
       echo "  core-principles    Verify ALL core Ralph principles"
       exit 0
       ;;
@@ -257,10 +259,10 @@ test_loose_format() {
 }
 
 # ============================================
-# TEST: Worker Queue
+# TEST: Worker Queue (with worktree isolation)
 # ============================================
 test_worker_queue() {
-  begin_test "Worker Queue Management"
+  begin_test "Worker Queue with Worktree Isolation"
 
   WORKSPACE=$(setup_workspace)
   echo "Workspace: $WORKSPACE"
@@ -268,16 +270,22 @@ test_worker_queue() {
   # Copy test plan to pending
   cp "$SCRIPT_DIR/plans/01-single-task.md" "$WORKSPACE/plans/pending/test-plan.md"
 
-  # Run worker (should move to current, process, move to complete)
-  echo "Running worker..."
+  # Run worker with --merge flag (should move to current, process in worktree, merge, move to complete)
+  echo "Running worker with --merge..."
   cd "$WORKSPACE"
-  ./scripts/ralph/ralph-worker.sh --max "$MAX_ITERATIONS" || true
+  ./scripts/ralph/ralph-worker.sh --max "$MAX_ITERATIONS" --merge || true
 
   # Verify results
   local failed=0
 
-  # Verify work was merged to main (feature branch is deleted after merge)
-  if git -C "$WORKSPACE" log --oneline main | grep -q "feat/test-plan\|marker"; then
+  # Main worktree should stay on main branch throughout
+  assert_on_branch "$WORKSPACE" "main" "Main worktree stayed on main branch" || failed=1
+
+  # Worktree should be cleaned up after completion
+  assert_worktree_not_exists "$WORKSPACE" "test-plan" "Worktree cleaned up" || failed=1
+
+  # Verify work was merged to main
+  if git -C "$WORKSPACE" log --oneline main | grep -q "feat/test-plan\|marker\|complete"; then
     echo -e "  ${GREEN}✓${NC} Work merged to main branch"
   else
     echo -e "  ${RED}✗${NC} Work not merged to main"
@@ -313,6 +321,109 @@ test_worker_queue() {
 }
 
 # ============================================
+# TEST: Dirty State Handling
+# Verifies that worktree isolation prevents dirty state issues
+# ============================================
+test_dirty_state() {
+  begin_test "Dirty State Handling"
+
+  WORKSPACE=$(setup_workspace)
+  echo "Workspace: $WORKSPACE"
+
+  # Create uncommitted changes in main worktree (this would break old stash-based approach)
+  echo "Creating dirty state in main worktree..."
+  echo "uncommitted change" > "$WORKSPACE/dirty-file.txt"
+
+  # Copy test plan to pending
+  cp "$SCRIPT_DIR/plans/01-single-task.md" "$WORKSPACE/plans/pending/test-plan.md"
+
+  # Run worker - should succeed despite dirty main worktree
+  echo "Running worker with dirty main worktree..."
+  cd "$WORKSPACE"
+  ./scripts/ralph/ralph-worker.sh --max "$MAX_ITERATIONS" --merge || true
+
+  # Verify results
+  local failed=0
+
+  # Main worktree should still have the dirty file (not lost to stash)
+  if [ -f "$WORKSPACE/dirty-file.txt" ]; then
+    echo -e "  ${GREEN}✓${NC} Dirty file preserved in main worktree"
+  else
+    echo -e "  ${RED}✗${NC} Dirty file was lost"
+    failed=1
+  fi
+
+  # Main worktree should stay on main branch
+  assert_on_branch "$WORKSPACE" "main" "Main worktree stayed on main" || failed=1
+
+  # Output should have been created (execution worked)
+  assert_file_exists "$WORKSPACE/output/marker.txt" "Execution succeeded despite dirty state" || failed=1
+
+  if [ "$failed" -eq 0 ]; then
+    pass_test
+  else
+    fail_test "Assertions failed"
+  fi
+
+  if [ "$KEEP_WORKSPACE" = false ]; then
+    teardown_workspace
+  else
+    echo -e "${YELLOW}Workspace kept at: $WORKSPACE${NC}"
+  fi
+}
+
+# ============================================
+# TEST: Worktree Cleanup
+# Verifies the --cleanup command removes orphaned worktrees
+# ============================================
+test_worktree_cleanup() {
+  begin_test "Worktree Cleanup"
+
+  WORKSPACE=$(setup_workspace)
+  echo "Workspace: $WORKSPACE"
+
+  # Create an orphaned worktree manually (simulates interrupted execution)
+  echo "Creating orphaned worktree..."
+  mkdir -p "$WORKSPACE/.ralph/worktrees"
+  git -C "$WORKSPACE" branch feat/orphan-plan main 2>/dev/null || true
+  git -C "$WORKSPACE" worktree add "$WORKSPACE/.ralph/worktrees/feat-orphan-plan" feat/orphan-plan 2>/dev/null || true
+
+  # Verify orphan exists
+  local failed=0
+  if [ -d "$WORKSPACE/.ralph/worktrees/feat-orphan-plan" ]; then
+    echo -e "  ${GREEN}✓${NC} Orphaned worktree created"
+  else
+    echo -e "  ${RED}✗${NC} Failed to create orphan worktree"
+    failed=1
+  fi
+
+  # Run cleanup
+  echo "Running cleanup..."
+  cd "$WORKSPACE"
+  ./scripts/ralph/ralph-worker.sh --cleanup
+
+  # Verify orphan was cleaned up
+  if [ ! -d "$WORKSPACE/.ralph/worktrees/feat-orphan-plan" ]; then
+    echo -e "  ${GREEN}✓${NC} Orphaned worktree cleaned up"
+  else
+    echo -e "  ${RED}✗${NC} Orphan worktree still exists"
+    failed=1
+  fi
+
+  if [ "$failed" -eq 0 ]; then
+    pass_test
+  else
+    fail_test "Assertions failed"
+  fi
+
+  if [ "$KEEP_WORKSPACE" = false ]; then
+    teardown_workspace
+  else
+    echo -e "${YELLOW}Workspace kept at: $WORKSPACE${NC}"
+  fi
+}
+
+# ============================================
 # TEST: Core Principles
 # Verifies ALL Ralph core principles in one test:
 # 1. One task at a time
@@ -329,13 +440,13 @@ test_core_principles() {
   WORKSPACE=$(setup_workspace)
   echo "Workspace: $WORKSPACE"
 
-  # Copy test plan (3 dependent tasks)
-  cp "$SCRIPT_DIR/plans/05-core-principles.md" "$WORKSPACE/plans/current/test-plan.md"
+  # Copy test plan to pending (worker will activate it)
+  cp "$SCRIPT_DIR/plans/05-core-principles.md" "$WORKSPACE/plans/pending/test-plan.md"
 
-  # Run ralph with enough iterations for 3 tasks
-  echo "Running ralph..."
+  # Run worker with --merge (uses worktree isolation, merges to main on completion)
+  echo "Running worker with --merge..."
   cd "$WORKSPACE"
-  ./scripts/ralph/ralph.sh plans/current/test-plan.md --max 10 || true
+  ./scripts/ralph/ralph-worker.sh --max 10 --merge || true
 
   # Verify results
   local failed=0
@@ -359,8 +470,15 @@ test_core_principles() {
   # PRINCIPLE 4: Completes with verification (acceptance criteria checked)
   # T2 verifies T1 exists, T3 verifies both exist - verified by final.txt existing
 
+  # Worktree should be cleaned up after completion
+  assert_worktree_not_exists "$WORKSPACE" "test-plan" "Worktree cleaned up after completion" || failed=1
+
+  # Main worktree should be on main branch
+  assert_on_branch "$WORKSPACE" "main" "Main worktree on main branch" || failed=1
+
   # PRINCIPLE 5: Updates plan (checkboxes marked)
-  local plan_file=$(find "$WORKSPACE/plans" -name "plan.md" -path "*/complete/*" -o -name "test-plan.md" -path "*/current/*" 2>/dev/null | grep -v progress | head -1)
+  # After worker --merge, plan is archived in plans/complete/
+  local plan_file=$(find "$WORKSPACE/plans/complete" -name "plan.md" 2>/dev/null | head -1)
   if [ -n "$plan_file" ]; then
     # Count checked boxes - should have multiple [x] entries
     local checked_count=$(grep -c '\[x\]' "$plan_file" 2>/dev/null || echo "0")
@@ -385,7 +503,8 @@ test_core_principles() {
   fi
 
   # PRINCIPLE 6: Updates progress log (EVERY iteration)
-  local progress_file=$(find "$WORKSPACE/plans" -name "progress.md" -o -name "*.progress.md" 2>/dev/null | head -1)
+  # After worker --merge, progress is archived in plans/complete/
+  local progress_file=$(find "$WORKSPACE/plans/complete" -name "progress.md" -o -name "*.progress.md" 2>/dev/null | head -1)
   if [ -n "$progress_file" ] && [ -f "$progress_file" ]; then
     echo -e "  ${GREEN}✓${NC} P6: Progress file exists"
 
@@ -411,21 +530,30 @@ test_core_principles() {
     failed=1
   fi
 
-  # PRINCIPLE 7: Commits all changes (check main since feature branch is merged+deleted)
+  # PRINCIPLE 7: Commits all changes (check main since feature branch is merged)
+  # With worker --merge flow: initial + activation + agent commits + completion + merge
   local commit_count=$(git -C "$WORKSPACE" log --oneline main 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$commit_count" -ge 3 ]; then
-    echo -e "  ${GREEN}✓${NC} P7: Multiple commits made ($commit_count commits)"
+  if [ "$commit_count" -ge 4 ]; then
+    echo -e "  ${GREEN}✓${NC} P7: Multiple commits made ($commit_count commits on main)"
   else
-    echo -e "  ${RED}✗${NC} P7: Expected at least 3 commits, got $commit_count"
+    echo -e "  ${RED}✗${NC} P7: Expected at least 4 commits on main, got $commit_count"
     failed=1
   fi
 
-  # Verify commits include plan and progress files
-  local plan_commits=$(git -C "$WORKSPACE" log --oneline --all -- "plans/" 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$plan_commits" -ge 3 ]; then
-    echo -e "  ${GREEN}✓${NC} P7: Plan file committed in multiple iterations"
+  # Verify the merge brought work from feature branch
+  if git -C "$WORKSPACE" log --oneline main | grep -q "feat/test-plan\|T1\|T2\|T3\|step"; then
+    echo -e "  ${GREEN}✓${NC} P7: Feature branch work merged to main"
   else
-    echo -e "  ${YELLOW}!${NC} P7: Plan commits: $plan_commits (expected >=3)"
+    echo -e "  ${RED}✗${NC} P7: Feature branch work not found on main"
+    failed=1
+  fi
+
+  # Verify commits include plan changes
+  local plan_commits=$(git -C "$WORKSPACE" log --oneline main -- "plans/" 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$plan_commits" -ge 2 ]; then
+    echo -e "  ${GREEN}✓${NC} P7: Plan file committed ($plan_commits commits)"
+  else
+    echo -e "  ${YELLOW}!${NC} P7: Plan commits: $plan_commits (expected >=2)"
   fi
 
   if [ "$failed" -eq 0 ]; then
@@ -451,6 +579,8 @@ if [ "$RUN_ALL" = true ]; then
   test_progress
   test_loose_format
   test_worker_queue
+  test_dirty_state
+  test_worktree_cleanup
   test_core_principles
 else
   case "$SPECIFIC_TEST" in
@@ -468,6 +598,12 @@ else
       ;;
     worker-queue)
       test_worker_queue
+      ;;
+    dirty-state)
+      test_dirty_state
+      ;;
+    worktree-cleanup)
+      test_worktree_cleanup
       ;;
     core-principles)
       test_core_principles

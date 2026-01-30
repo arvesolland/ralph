@@ -529,3 +529,12 @@ check_optional_dependencies() {
     done
   fi
 }
+
+# ============================================
+# Worktree Management
+# ============================================
+# Source worktree library if available
+SCRIPT_DIR_CONFIG="${BASH_SOURCE[0]%/*}"
+if [[ -f "$SCRIPT_DIR_CONFIG/worktree.sh" ]]; then
+  source "$SCRIPT_DIR_CONFIG/worktree.sh"
+fi

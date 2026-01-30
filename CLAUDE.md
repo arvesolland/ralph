@@ -15,7 +15,7 @@ Ralph is an autonomous AI development loop orchestration system implementing the
 # Run specific test
 ./test/run-tests.sh --test single-task
 
-# Available tests: single-task, dependencies, progress, loose-format, worker-queue
+# Available tests: single-task, dependencies, progress, loose-format, worker-queue, dirty-state, worktree-cleanup, core-principles
 
 # Check script versions
 ./ralph.sh --version
@@ -34,6 +34,38 @@ ralph.sh            # Main implementation loop - iterates until plan complete
 ralph-worker.sh     # Queue management - pending → current → complete
 ralph-init.sh       # Project initialization with --detect or --ai modes
 lib/config.sh       # Shared functions: config loading, prompt building, logging
+lib/worktree.sh     # Worktree isolation for plan execution
+```
+
+### Worktree-Based Isolation
+
+Each plan executes in an isolated git worktree, preventing branch-switching conflicts:
+
+```
+repo/                          # Main worktree (always on base branch)
+├── plans/
+│   ├── pending/              # Queue of plans to run
+│   ├── current/              # Currently active plan
+│   └── complete/             # Archived plans
+├── .ralph/
+│   └── worktrees/            # Execution worktrees (gitignored)
+│       └── feat-my-plan/     # One per active plan
+```
+
+**Concurrency Protection (Three-Layer Lock):**
+1. **File location lock**: Plan in `current/` = claimed (can't move same file twice)
+2. **Git worktree lock**: Branch checked out = locked (`fatal: '<branch>' is already checked out`)
+3. **Directory lock**: Worktree exists = execution in progress
+
+**Completion Modes:**
+- `--pr` (default): Push branch, create PR via `gh`, archive plan, clean up worktree
+- `--merge`: Merge directly to base branch, archive, delete branch + worktree
+- Config: `completion.mode: pr|merge` in `.ralph/config.yaml`
+
+**Commands:**
+```bash
+ralph-worker.sh --cleanup     # Remove orphaned worktrees
+ralph-worker.sh --status      # Show queue and worktree status
 ```
 
 ### Prompt System
@@ -104,6 +136,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `ralph.sh` | Main entry point - runs implementation loop |
 | `ralph-worker.sh` | Queue management and plan lifecycle |
 | `lib/config.sh` | All shared functions (`build_prompt`, `config_get`, logging) |
+| `lib/worktree.sh` | Worktree creation, cleanup, and locking helpers |
 | `prompts/base/prompt.md` | Agent instructions for implementation |
 | `test/run-tests.sh` | Integration test suite |
 | `test/lib/helpers.sh` | Test utilities and assertions |
@@ -139,10 +172,12 @@ Test plans in `test/plans/`:
 
 ### Branch Management
 
-Plans automatically get feature branches:
+Plans automatically get feature branches via worktree isolation:
 - Branch name: `feat/<plan-name>` (derived from plan filename)
-- Created/checked out by bash before Claude runs
-- Agent is told branch name via context.json
+- Each plan runs in its own worktree at `.ralph/worktrees/feat-<plan>/`
+- Main worktree stays on base branch (no stash/checkout needed)
+- Agent runs inside the worktree and is told branch name via context.json
+- On completion: PR created (default) or direct merge (`--merge` flag)
 
 ### Error Handling
 
@@ -171,6 +206,8 @@ git push && git push --tags
 
 - **stdout pollution**: Worker functions that return values must redirect output to stderr (`>&2`)
 - **Plan validation removed**: Plans can be any markdown format; Claude handles parsing
-- **Feature branches**: Created by bash, not Claude - prompt just tells agent the branch name
+- **Feature branches**: Created via worktree by bash, not Claude - prompt just tells agent the branch name
 - **Test workspace**: Must use `git init -b main` since config expects "main" branch
 - **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion - haiku verification catches this
+- **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph-worker.sh --cleanup` to remove them
+- **Plan file sync**: Plan file is copied into worktree; changes are synced back to `current/` after each iteration
