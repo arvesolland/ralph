@@ -191,3 +191,136 @@ func (m *WorktreeManager) BaseDir() string {
 func (m *WorktreeManager) RepoRoot() string {
 	return m.repoRoot
 }
+
+// CleanupResult contains information about a cleaned up worktree.
+type CleanupResult struct {
+	// Path is the absolute path to the removed worktree.
+	Path string
+
+	// PlanName is the derived plan name from the worktree directory name.
+	PlanName string
+
+	// Skipped is true if the worktree was not removed (e.g., has uncommitted changes).
+	Skipped bool
+
+	// SkipReason explains why the worktree was skipped.
+	SkipReason string
+}
+
+// Cleanup removes orphaned worktrees that no longer have associated plans.
+// A worktree is orphaned if it exists in .ralph/worktrees/ but has no matching
+// plan in pending/ or current/.
+// Worktrees with uncommitted changes are NOT removed (safety check).
+// Returns the list of cleanup results (removed and skipped worktrees).
+func (m *WorktreeManager) Cleanup(queue *plan.Queue) ([]CleanupResult, error) {
+	var results []CleanupResult
+
+	// List all directories in baseDir
+	entries, err := os.ReadDir(m.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No worktrees directory = nothing to clean
+			return results, nil
+		}
+		return nil, fmt.Errorf("reading worktrees directory: %w", err)
+	}
+
+	// Get active plan names (from pending and current)
+	activePlans := make(map[string]bool)
+
+	pending, err := queue.Pending()
+	if err != nil {
+		return nil, fmt.Errorf("listing pending plans: %w", err)
+	}
+	for _, p := range pending {
+		// Map plan name to directory name (matches Path() logic)
+		dirName := strings.TrimPrefix(p.Branch, "feat/")
+		activePlans[dirName] = true
+	}
+
+	current, err := queue.Current()
+	if err != nil {
+		return nil, fmt.Errorf("getting current plan: %w", err)
+	}
+	if current != nil {
+		dirName := strings.TrimPrefix(current.Branch, "feat/")
+		activePlans[dirName] = true
+	}
+
+	// Check each directory in baseDir
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue // Skip non-directories
+		}
+
+		dirName := entry.Name()
+		worktreePath := filepath.Join(m.baseDir, dirName)
+
+		// Check if this worktree has an associated active plan
+		if activePlans[dirName] {
+			continue // Not orphaned - skip
+		}
+
+		// This worktree appears orphaned - check for uncommitted changes
+		// Create a Git instance for this worktree to check its status
+		wtGit := git.NewGit(worktreePath)
+		isClean, err := wtGit.IsClean()
+		if err != nil {
+			// If we can't check status (e.g., not a valid git worktree),
+			// skip it to be safe and log the reason
+			results = append(results, CleanupResult{
+				Path:       worktreePath,
+				PlanName:   dirName,
+				Skipped:    true,
+				SkipReason: fmt.Sprintf("could not check status: %v", err),
+			})
+			continue
+		}
+
+		if !isClean {
+			// Has uncommitted changes - skip for safety
+			results = append(results, CleanupResult{
+				Path:       worktreePath,
+				PlanName:   dirName,
+				Skipped:    true,
+				SkipReason: "has uncommitted changes",
+			})
+			continue
+		}
+
+		// Safe to remove - use git worktree remove
+		if err := m.git.RemoveWorktree(worktreePath); err != nil {
+			// If git remove fails, try to clean up the directory directly
+			// This can happen if the worktree metadata is corrupted
+			if errors.Is(err, git.ErrWorktreeNotFound) {
+				// Not a valid worktree, just remove the directory
+				if removeErr := os.RemoveAll(worktreePath); removeErr != nil {
+					results = append(results, CleanupResult{
+						Path:       worktreePath,
+						PlanName:   dirName,
+						Skipped:    true,
+						SkipReason: fmt.Sprintf("failed to remove directory: %v", removeErr),
+					})
+					continue
+				}
+			} else {
+				results = append(results, CleanupResult{
+					Path:       worktreePath,
+					PlanName:   dirName,
+					Skipped:    true,
+					SkipReason: fmt.Sprintf("git worktree remove failed: %v", err),
+				})
+				continue
+			}
+		}
+
+		// Successfully removed
+		results = append(results, CleanupResult{
+			Path:     worktreePath,
+			PlanName: dirName,
+			Skipped:  false,
+		})
+	}
+
+	return results, nil
+}

@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- implement initialization hooks (T20)
 - implement file sync operations (T19)
 - implement dependency auto-detection (T18)
 - implement WorktreeManager (T17)

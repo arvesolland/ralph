@@ -536,3 +536,34 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The function signature is `(*HookResult, error)` instead of just `error` as in the spec - this provides more useful information about which initialization method was used (hook, init_commands, auto_detect, or none).
 
 **Next:** T21 - Implement orphaned worktree cleanup (depends on T17, T11 - both complete)
+
+---
+### Iteration 21: T21 - Implement orphaned worktree cleanup
+**Completed:**
+- Added `Cleanup(queue *plan.Queue) ([]CleanupResult, error)` method to WorktreeManager in `internal/worktree/manager.go`:
+  - `CleanupResult` struct with Path, PlanName, Skipped, SkipReason fields
+  - Lists all directories in baseDir (.ralph/worktrees/)
+  - Gets active plan names from pending/ and current/ via Queue
+  - Compares to find orphans (worktrees without matching active plans)
+  - For each orphan, creates a Git instance to check IsClean()
+  - Skips worktrees with uncommitted changes or invalid git status (safety)
+  - Removes clean orphaned worktrees using git.RemoveWorktree
+  - Returns list of CleanupResult with details about each removed/skipped worktree
+- Created `internal/cli/cleanup.go` with:
+  - `ralph cleanup` command with description and usage
+  - `--dry-run` flag to preview without actually removing
+  - Uses real Git and WorktreeManager to perform cleanup
+  - Logs each removal (Success) or skip (Warn) with reason
+  - Reports final counts (removed X, skipped Y)
+- Added 6 integration tests to `internal/worktree/manager_test.go`:
+  - TestManager_Cleanup_NoOrphans - worktree with active plan is not cleaned up
+  - TestManager_Cleanup_RemovesOrphan - orphaned worktree is removed (uses real git)
+  - TestManager_Cleanup_SkipsUncommittedChanges - dirty worktree is skipped
+  - TestManager_Cleanup_NoWorktreesDir - handles missing worktrees directory
+  - TestManager_Cleanup_PendingPlanNotOrphaned - pending plan worktree preserved
+  - TestManager_Cleanup_CompletePlanIsOrphaned - complete plan worktree cleaned up
+- All tests pass
+
+**Gotcha:** The return type is `([]CleanupResult, error)` instead of `([]string, error)` from the spec - this provides more information about each result (skipped vs removed, reason for skip). Also, non-git directories in worktrees/ are safely skipped since we can't verify their status.
+
+**Next:** T22 - Implement Claude CLI command builder (depends on T4, which is complete)

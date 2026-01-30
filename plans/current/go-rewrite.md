@@ -561,23 +561,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Remove worktrees that no longer have associated plans.
 
 **Requires:** T17, T11
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `Cleanup() ([]string, error)` in WorktreeManager removes orphaned worktrees
-- [ ] Worktree is orphaned if: exists in .ralph/worktrees/ but no matching plan in pending/ or current/
-- [ ] Does NOT remove worktrees with uncommitted changes (safety)
-- [ ] Returns list of removed worktree paths
-- [ ] Logs each removal
-- [ ] `ralph cleanup` command calls this function
-- [ ] Integration test creates orphan and verifies cleanup
+- [x] `Cleanup() ([]string, error)` in WorktreeManager removes orphaned worktrees
+- [x] Worktree is orphaned if: exists in .ralph/worktrees/ but no matching plan in pending/ or current/
+- [x] Does NOT remove worktrees with uncommitted changes (safety)
+- [x] Returns list of removed worktree paths
+- [x] Logs each removal
+- [x] `ralph cleanup` command calls this function
+- [x] Integration test creates orphan and verifies cleanup
 
 **Subtasks:**
-1. [ ] Implement orphan detection logic
-2. [ ] Implement uncommitted changes check
-3. [ ] Implement removal with logging
-4. [ ] Create internal/cli/cleanup.go
-5. [ ] Write integration test
+1. [x] Implement orphan detection logic
+2. [x] Implement uncommitted changes check
+3. [x] Implement removal with logging
+4. [x] Create internal/cli/cleanup.go
+5. [x] Write integration test
 
 ---
 
