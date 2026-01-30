@@ -301,27 +301,27 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > File-based queue: pending → current → complete lifecycle.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/queue.go` defines `Queue` struct with BaseDir field
-- [ ] `Pending() ([]*Plan, error)` lists plans in pending/ sorted by name
-- [ ] `Current() (*Plan, error)` returns plan in current/ (nil if empty)
-- [ ] `Activate(plan *Plan) error` moves from pending/ to current/
-- [ ] `Complete(plan *Plan) error` moves from current/ to complete/
-- [ ] `Reset(plan *Plan) error` moves from current/ back to pending/
-- [ ] `Status() (*QueueStatus, error)` returns counts for each queue
-- [ ] Activate fails if current/ already has a plan (single active plan)
-- [ ] Unit tests with temp directories verify all operations
+- [x] `internal/plan/queue.go` defines `Queue` struct with BaseDir field
+- [x] `Pending() ([]*Plan, error)` lists plans in pending/ sorted by name
+- [x] `Current() (*Plan, error)` returns plan in current/ (nil if empty)
+- [x] `Activate(plan *Plan) error` moves from pending/ to current/
+- [x] `Complete(plan *Plan) error` moves from current/ to complete/
+- [x] `Reset(plan *Plan) error` moves from current/ back to pending/
+- [x] `Status() (*QueueStatus, error)` returns counts for each queue
+- [x] Activate fails if current/ already has a plan (single active plan)
+- [x] Unit tests with temp directories verify all operations
 
 **Subtasks:**
-1. [ ] Define Queue and QueueStatus structs
-2. [ ] Implement Pending() with directory listing
-3. [ ] Implement Current()
-4. [ ] Implement Activate() with file move
-5. [ ] Implement Complete() and Reset()
-6. [ ] Implement Status()
-7. [ ] Write unit tests with temp directories
+1. [x] Define Queue and QueueStatus structs
+2. [x] Implement Pending() with directory listing
+3. [x] Implement Current()
+4. [x] Implement Activate() with file move
+5. [x] Implement Complete() and Reset()
+6. [x] Implement Status()
+7. [x] Write unit tests with temp directories
 
 ---
 

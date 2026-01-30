@@ -249,3 +249,31 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward implementation. Used regex capture groups to preserve exact formatting around the checkbox.
 
 **Next:** T11 - Implement Queue management (depends on T8, which is complete)
+
+---
+### Iteration 11: T11 - Implement Queue management
+**Completed:**
+- Created `internal/plan/queue.go` with:
+  - `Queue` struct with BaseDir field for base directory containing queue subdirectories
+  - `QueueStatus` struct with PendingCount, CurrentCount, CompleteCount, PendingPlans, CurrentPlan
+  - Error types: `ErrQueueFull`, `ErrNoCurrent`, `ErrPlanNotInPending`, `ErrPlanNotInCurrent`
+  - `NewQueue(baseDir string) *Queue` constructor
+  - `Pending() ([]*Plan, error)` lists plans in pending/ sorted by name, skips progress/feedback files
+  - `Current() (*Plan, error)` returns plan in current/ (nil if empty, error if multiple)
+  - `Activate(plan *Plan) error` moves from pending/ to current/, checks for queue full
+  - `Complete(plan *Plan) error` moves from current/ to complete/
+  - `Reset(plan *Plan) error` moves from current/ back to pending/
+  - `Status() (*QueueStatus, error)` returns counts and names for each queue
+  - Helper `listPlans(dir string)` for directory scanning with .md filtering
+- Created `internal/plan/queue_test.go` with 17 test functions:
+  - TestNewQueue, TestQueue_Pending, TestQueue_Pending_SkipsNonMdFiles
+  - TestQueue_Pending_SkipsProgressAndFeedback, TestQueue_Current_Empty, TestQueue_Current_WithPlan
+  - TestQueue_Activate, TestQueue_Activate_QueueFull, TestQueue_Activate_NotInPending
+  - TestQueue_Complete, TestQueue_Complete_NotInCurrent, TestQueue_Reset, TestQueue_Reset_NotInCurrent
+  - TestQueue_Status, TestQueue_FullLifecycle, TestQueue_NonExistentDirectory
+- All 85 tests pass (68 existing + 17 new)
+- Build succeeds, `ralph version` works
+
+**Gotcha:** The `listPlans()` helper needs to skip `.progress.md` and `.feedback.md` files which are sibling files to plans, not plans themselves. Used suffix matching for this.
+
+**Next:** T12 - Implement progress file handling (depends on T8, which is complete)
