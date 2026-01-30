@@ -513,23 +513,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Sync plan files between main worktree and execution worktree.
 
 **Requires:** T17, T12, T13
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/sync.go` defines sync operations
-- [ ] `SyncToWorktree(plan *Plan, worktreePath string) error` copies plan, progress, feedback files to worktree
-- [ ] `SyncFromWorktree(plan *Plan, worktreePath string) error` copies plan, progress files back to main
-- [ ] Sync preserves file permissions
-- [ ] SyncToWorktree also copies .env files based on config.worktree.copy_env_files
-- [ ] Missing source files are skipped (not error)
-- [ ] Unit tests verify file copying in both directions
+- [x] `internal/worktree/sync.go` defines sync operations
+- [x] `SyncToWorktree(plan *Plan, worktreePath string) error` copies plan, progress, feedback files to worktree
+- [x] `SyncFromWorktree(plan *Plan, worktreePath string) error` copies plan, progress files back to main
+- [x] Sync preserves file permissions
+- [x] SyncToWorktree also copies .env files based on config.worktree.copy_env_files
+- [x] Missing source files are skipped (not error)
+- [x] Unit tests verify file copying in both directions
 
 **Subtasks:**
-1. [ ] Implement SyncToWorktree
-2. [ ] Implement SyncFromWorktree
-3. [ ] Add .env file copying with config parsing
-4. [ ] Handle missing files gracefully
-5. [ ] Write unit tests
+1. [x] Implement SyncToWorktree
+2. [x] Implement SyncFromWorktree
+3. [x] Add .env file copying with config parsing
+4. [x] Handle missing files gracefully
+5. [x] Write unit tests
 
 ---
 

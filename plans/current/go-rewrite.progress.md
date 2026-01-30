@@ -478,3 +478,29 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Function signature is `DetectAndInstall(worktreePath string) (*InstallResult, error)` rather than just `error` - returning the result allows callers to know what was detected/installed.
 
 **Next:** T19 - Implement worktree file sync (depends on T17, T12, T13 - all complete)
+
+---
+### Iteration 19: T19 - Implement worktree file sync
+**Completed:**
+- Created `internal/worktree/sync.go` with:
+  - `SyncToWorktree(plan *Plan, worktreePath string, cfg *Config, mainWorktreePath string) error` - copies plan, progress, feedback files to worktree
+  - `SyncFromWorktree(plan *Plan, worktreePath string, mainWorktreePath string) error` - copies plan, progress files back to main (NOT feedback - human input stays in main)
+  - `copyFile(src, dst string) error` - copies file with permission preservation, creates destination directory
+  - `parseEnvFileList(list string) []string` - parses comma-separated env file list from config
+  - .env file copying based on `config.worktree.copy_env_files` setting
+  - Missing source files are silently skipped (not an error)
+- Created `internal/worktree/sync_test.go` with 10 test functions:
+  - TestSyncToWorktree - basic file syncing
+  - TestSyncToWorktree_WithEnvFiles - .env file copying
+  - TestSyncToWorktree_MissingFiles - graceful handling of missing optional files
+  - TestSyncFromWorktree - sync files back from worktree
+  - TestSyncFromWorktree_MissingFiles - graceful handling of missing files
+  - TestCopyFile - file copying with permission preservation
+  - TestCopyFile_NonExistent - error handling for missing source
+  - TestParseEnvFileList (6 subtests) - env file list parsing
+  - TestSyncToWorktree_PreservesPermissions - permission preservation verification
+- All tests pass (39 worktree tests, all project tests pass)
+
+**Gotcha:** The feedback file is synced TO the worktree but NOT synced back - feedback is human input that comes from the main worktree, not from the agent's execution.
+
+**Next:** T20 - Implement worktree initialization hooks (depends on T18, T19 - both complete)
