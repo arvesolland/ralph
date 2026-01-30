@@ -251,25 +251,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Extract checkbox tasks from markdown, track completion state.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/task.go` defines `Task` struct with Line, Text, Complete, Requires, Subtasks fields
-- [ ] `ExtractTasks(content string) []Task` parses markdown checkboxes
-- [ ] `- [ ] Task text` → Task{Complete: false, Text: "Task text"}
-- [ ] `- [x] Task text` → Task{Complete: true, Text: "Task text"}
-- [ ] Indented tasks become subtasks of previous non-indented task
-- [ ] `requires: T1, T2` in task text extracts dependencies
-- [ ] Line numbers tracked for in-place updates
-- [ ] Unit tests cover: simple tasks, nested subtasks, dependencies, mixed complete/incomplete
+- [x] `internal/plan/task.go` defines `Task` struct with Line, Text, Complete, Requires, Subtasks fields
+- [x] `ExtractTasks(content string) []Task` parses markdown checkboxes
+- [x] `- [ ] Task text` → Task{Complete: false, Text: "Task text"}
+- [x] `- [x] Task text` → Task{Complete: true, Text: "Task text"}
+- [x] Indented tasks become subtasks of previous non-indented task
+- [x] `requires: T1, T2` in task text extracts dependencies
+- [x] Line numbers tracked for in-place updates
+- [x] Unit tests cover: simple tasks, nested subtasks, dependencies, mixed complete/incomplete
 
 **Subtasks:**
-1. [ ] Define Task struct
-2. [ ] Implement checkbox regex matching
-3. [ ] Implement indentation-based subtask nesting
-4. [ ] Implement dependency extraction
-5. [ ] Track line numbers during parsing
-6. [ ] Write comprehensive unit tests
+1. [x] Define Task struct
+2. [x] Implement checkbox regex matching
+3. [x] Implement indentation-based subtask nesting
+4. [x] Implement dependency extraction
+5. [x] Track line numbers during parsing
+6. [x] Write comprehensive unit tests
 
 ---
 
@@ -277,23 +277,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Update task completion state without corrupting surrounding markdown.
 
 **Requires:** T9
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `UpdateCheckbox(content string, lineNum int, complete bool) (string, error)` modifies specific checkbox
-- [ ] `- [ ]` ↔ `- [x]` toggle preserves all other content on line
-- [ ] Preserves exact whitespace and formatting around checkbox
-- [ ] Returns error if line doesn't contain checkbox
-- [ ] `Save(plan *Plan) error` writes updated content to file
-- [ ] Atomic write (write to temp, rename) prevents corruption on crash
-- [ ] Unit tests verify preservation of surrounding markdown
+- [x] `UpdateCheckbox(content string, lineNum int, complete bool) (string, error)` modifies specific checkbox
+- [x] `- [ ]` ↔ `- [x]` toggle preserves all other content on line
+- [x] Preserves exact whitespace and formatting around checkbox
+- [x] Returns error if line doesn't contain checkbox
+- [x] `Save(plan *Plan) error` writes updated content to file
+- [x] Atomic write (write to temp, rename) prevents corruption on crash
+- [x] Unit tests verify preservation of surrounding markdown
 
 **Subtasks:**
-1. [ ] Implement UpdateCheckbox function
-2. [ ] Implement line-by-line content modification
-3. [ ] Implement atomic file save
-4. [ ] Test preservation of markdown formatting
-5. [ ] Test error cases (invalid line number, no checkbox)
+1. [x] Implement UpdateCheckbox function
+2. [x] Implement line-by-line content modification
+3. [x] Implement atomic file save
+4. [x] Test preservation of markdown formatting
+5. [x] Test error cases (invalid line number, no checkbox)
 
 ---
 

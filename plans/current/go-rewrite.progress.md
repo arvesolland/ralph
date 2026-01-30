@@ -226,3 +226,26 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The checkbox regex only matches dash-style lists (`- [ ]`), not numbered lists (`1. [ ]`). The actual plan format uses dashes for checkboxes, so this is correct behavior. Numbered lists in the plan are for subtask descriptions, not checkboxes.
 
 **Next:** T10 - Implement checkbox update in plans (depends on T9, now complete)
+
+---
+### Iteration 10: T10 - Implement checkbox update in plans
+**Completed:**
+- Updated T9 status to `complete` (was still marked `open` from previous iteration)
+- Created `internal/plan/update.go` with:
+  - `UpdateCheckbox(content string, lineNum int, complete bool) (string, error)` - modifies checkbox at specific line
+  - `checkboxUpdateRegex` that captures everything before/after the checkbox for exact preservation
+  - `ErrNoCheckbox` and `ErrInvalidLine` error types for proper error handling
+  - `Plan.SetCheckbox(lineNum int, complete bool)` convenience method that updates Content and re-extracts Tasks
+  - `Save(plan *Plan) error` with atomic write (temp file + rename) to prevent corruption
+- Created `internal/plan/update_test.go` with 13 test functions covering:
+  - Complete/uncomplete operations
+  - Whitespace preservation (various indent levels, tabs, extra spaces)
+  - Error cases (no checkbox on line, invalid line numbers)
+  - Surrounding markdown preservation
+  - Save operations (create, overwrite, permission preservation, atomic write verification)
+  - SetCheckbox integration with Plan struct
+- All 68 tests pass (55 existing + 13 new)
+
+**Gotcha:** None - straightforward implementation. Used regex capture groups to preserve exact formatting around the checkbox.
+
+**Next:** T11 - Implement Queue management (depends on T8, which is complete)
