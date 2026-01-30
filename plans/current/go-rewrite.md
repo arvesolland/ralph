@@ -40,22 +40,22 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Establish the foundational project layout that all other tasks build upon.
 
 **Requires:** —
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `go.mod` exists with module `github.com/arvesolland/ralph`
-- [ ] Go version set to 1.22 or later in go.mod
-- [ ] Directory structure created: `cmd/ralph/`, `internal/{cli,config,plan,runner,git,worktree,prompt,notify,log}/`
-- [ ] `cmd/ralph/main.go` exists with minimal main function
-- [ ] `go build ./cmd/ralph` succeeds and produces `ralph` binary
-- [ ] `.gitignore` updated to ignore Go artifacts (`ralph`, `*.exe`, `dist/`)
+- [x] `go.mod` exists with module `github.com/arvesolland/ralph`
+- [x] Go version set to 1.22 or later in go.mod
+- [x] Directory structure created: `cmd/ralph/`, `internal/{cli,config,plan,runner,git,worktree,prompt,notify,log}/`
+- [x] `cmd/ralph/main.go` exists with minimal main function
+- [x] `go build ./cmd/ralph` succeeds and produces `ralph` binary
+- [x] `.gitignore` updated to ignore Go artifacts (`ralph`, `*.exe`, `dist/`)
 
 **Subtasks:**
-1. [ ] Run `go mod init github.com/arvesolland/ralph`
-2. [ ] Create directory structure with placeholder `.go` files
-3. [ ] Create minimal main.go that prints "ralph dev"
-4. [ ] Verify build succeeds
-5. [ ] Update .gitignore
+1. [x] Run `go mod init github.com/arvesolland/ralph`
+2. [x] Create directory structure with placeholder `.go` files
+3. [x] Create minimal main.go that prints "ralph dev"
+4. [x] Verify build succeeds
+5. [x] Update .gitignore
 
 ---
 
