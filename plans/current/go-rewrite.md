@@ -612,24 +612,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Parse Claude CLI streaming JSON output line-by-line.
 
 **Requires:** T22
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/stream.go` defines `StreamParser` for incremental parsing
-- [ ] Parses JSON lines from Claude CLI output
-- [ ] Extracts content text for real-time display
-- [ ] Accumulates full response
-- [ ] Handles partial lines (buffer until newline)
-- [ ] Ignores non-JSON lines gracefully
-- [ ] Unit tests with sample Claude output
+- [x] `internal/runner/stream.go` defines `StreamParser` for incremental parsing
+- [x] Parses JSON lines from Claude CLI output
+- [x] Extracts content text for real-time display
+- [x] Accumulates full response
+- [x] Handles partial lines (buffer until newline)
+- [x] Ignores non-JSON lines gracefully
+- [x] Unit tests with sample Claude output
 
 **Subtasks:**
-1. [ ] Research Claude CLI JSON output format
-2. [ ] Define StreamParser struct
-3. [ ] Implement line-by-line parsing
-4. [ ] Implement content extraction
-5. [ ] Handle edge cases (partial lines, non-JSON)
-6. [ ] Write unit tests with real output samples
+1. [x] Research Claude CLI JSON output format
+2. [x] Define StreamParser struct
+3. [x] Implement line-by-line parsing
+4. [x] Implement content extraction
+5. [x] Handle edge cases (partial lines, non-JSON)
+6. [x] Write unit tests with real output samples
 
 ---
 

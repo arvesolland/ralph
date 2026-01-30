@@ -591,3 +591,41 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward implementation. Chose to return `*exec.Cmd` with Stdin unset rather than setting it in the function, allowing the caller to control how the prompt is provided (e.g., strings.NewReader or os.Pipe).
 
 **Next:** T23 - Implement streaming JSON parser (depends on T22, now complete)
+
+---
+### Iteration 23: T23 - Implement streaming JSON parser
+**Completed:**
+- Created `internal/runner/stream.go` with:
+  - `StreamEvent` struct for parsing JSON events (type, message, result fields)
+  - `ContentBlock` struct for message content (type, text)
+  - `StreamParser` struct with thread-safe parsing (sync.Mutex)
+  - `Parse(data []byte)` for incremental chunk parsing with line buffering
+  - `ParseReader(r io.Reader)` for complete stream parsing
+  - `parseLine()` for JSON parsing with event type handling
+  - Content extraction from `type: "assistant"` events at `message.content[].text`
+  - Result detection from `type: "result"` events
+  - Callbacks: `OnText`, `OnResult`, `OnError` for real-time handling
+  - `FullOutput()`, `TextContent()`, `HasResult()`, `ResultContent()`, `Reset()` methods
+- Handles edge cases:
+  - Partial lines buffered until newline received
+  - Non-JSON lines (error messages) gracefully ignored
+  - Empty lines skipped
+  - Empty content arrays handled
+  - Unknown event types ignored
+  - Invalid JSON triggers OnError callback (non-fatal)
+- Created `internal/runner/stream_test.go` with 20 test functions:
+  - TestStreamParser_ParseAssistantEvent, TestStreamParser_ParseResultEvent
+  - TestStreamParser_ParseMultipleEvents, TestStreamParser_SkipsNonJSONLines
+  - TestStreamParser_SkipsEmptyLines, TestStreamParser_HandlesPartialLines
+  - TestStreamParser_HandlesInvalidJSON, TestStreamParser_OnTextCallback
+  - TestStreamParser_OnResultCallback, TestStreamParser_SkipsToolUseContent
+  - TestStreamParser_ExtractsMixedContent, TestStreamParser_FullOutput
+  - TestStreamParser_Reset, TestStreamParser_ParseReader
+  - TestStreamParser_RealWorldSample, TestStreamParser_EmptyContentArray
+  - TestStreamParser_TextWithEmptyString, TestStreamParser_ConcurrentAccess
+  - TestStreamParser_UnknownEventTypes
+- All 36 runner tests pass (16 command + 20 stream)
+
+**Gotcha:** Claude CLI stream-json format has multiple event types: `assistant` (contains text/tool_use content), `result` (final result), `init`, `tool_result`, etc. Only `assistant` events contain extractable text in `message.content[]` with `type: "text"`.
+
+**Next:** T24 - Implement retry logic with exponential backoff (depends on T2, which is complete)
