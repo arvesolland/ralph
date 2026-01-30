@@ -196,26 +196,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Initialize a new project with config file. Uses detection from T5.
 
 **Requires:** T5, T6
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph init` creates `.ralph/` directory if not exists
-- [ ] `ralph init` creates `.ralph/config.yaml` with detected settings
-- [ ] `ralph init --detect` runs auto-detection and populates config
-- [ ] Existing config file prompts for confirmation before overwrite
-- [ ] Creates `plans/pending/`, `plans/current/`, `plans/complete/` directories
-- [ ] Creates `specs/` directory with INDEX.md
-- [ ] Prints summary of what was created/detected
-- [ ] Integration test verifies directory and file creation
+- [x] `ralph init` creates `.ralph/` directory if not exists
+- [x] `ralph init` creates `.ralph/config.yaml` with detected settings
+- [x] `ralph init --detect` runs auto-detection and populates config
+- [x] Existing config file prompts for confirmation before overwrite
+- [x] Creates `plans/pending/`, `plans/current/`, `plans/complete/` directories
+- [x] Creates `specs/` directory with INDEX.md
+- [x] Prints summary of what was created/detected
+- [x] Integration test verifies directory and file creation
 
 **Subtasks:**
-1. [ ] Create internal/cli/init.go
-2. [ ] Implement directory creation logic
-3. [ ] Implement config generation from detection
-4. [ ] Add --detect flag
-5. [ ] Add overwrite confirmation prompt
-6. [ ] Create starter INDEX.md for specs
-7. [ ] Write integration test
+1. [x] Create internal/cli/init.go
+2. [x] Implement directory creation logic
+3. [x] Implement config generation from detection
+4. [x] Add --detect flag
+5. [x] Add overwrite confirmation prompt
+6. [x] Create starter INDEX.md for specs
+7. [x] Write integration test
 
 ---
 

@@ -152,3 +152,26 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The `Build` method signature differs slightly from spec - it's a method on Builder rather than taking Config as parameter. This is cleaner since Builder already holds config reference and allows for additional state/caching if needed later.
 
 **Next:** T7 - Add `ralph init` command (depends on T5, T6 - both now complete)
+
+---
+### Iteration 7: T7 - Add `ralph init` command
+**Completed:**
+- Created `internal/cli/init.go` with complete init command implementation:
+  - `ralph init` creates full directory structure: `.ralph/`, `.ralph/worktrees/`, `plans/{pending,current,complete}/`, `specs/`
+  - Creates `.ralph/config.yaml` from defaults
+  - Creates `.ralph/worktrees/.gitignore` to exclude worktrees from git
+  - `--detect` flag runs project auto-detection and populates config with detected commands
+  - Existing config file prompts for confirmation before overwrite (y/N prompt)
+  - Creates `specs/INDEX.md` with comprehensive starter template
+  - Prints helpful summary with next steps
+- Created `internal/cli/init_test.go` with 4 integration tests:
+  - `TestRunInit_CreatesDirectoryStructure` - verifies all directories and files created
+  - `TestRunInit_WithDetection` - tests Node.js auto-detection populates config
+  - `TestRunInit_PreservesExistingSpecs` - verifies existing INDEX.md not overwritten
+  - `TestSpecsIndexContent` - verifies INDEX.md template has essential sections
+- All 35 tests pass (4 cli + 22 config/detect + 9 prompt)
+- Build succeeds, `ralph init --help` shows command and `--detect` flag
+
+**Gotcha:** Used existing `config.Defaults()` function rather than creating new `NewDefaultConfig()` to avoid duplication.
+
+**Next:** T8 - Implement Plan struct and parsing (depends on T4, now complete)
