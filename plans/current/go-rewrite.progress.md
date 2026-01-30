@@ -175,3 +175,27 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Used existing `config.Defaults()` function rather than creating new `NewDefaultConfig()` to avoid duplication.
 
 **Next:** T8 - Implement Plan struct and parsing (depends on T4, now complete)
+
+---
+### Iteration 8: T8 - Implement Plan struct and parsing
+**Completed:**
+- Created `internal/plan/plan.go` with:
+  - `Plan` struct with Path, Name, Content, Tasks, Status, Branch fields
+  - `Task` struct placeholder (for T9)
+  - `Load(path string) (*Plan, error)` reads plan file and extracts all fields
+  - `deriveName()` extracts plan name from filename (e.g., "go-rewrite.md" -> "go-rewrite")
+  - `extractStatus()` with regex to find `**Status:** value` in content, defaults to "pending"
+  - `deriveBranch()` creates git branch name from plan name (e.g., "go-rewrite" -> "feat/go-rewrite")
+  - `sanitizeBranchName()` converts special characters: lowercase, spaces->hyphens, removes special chars, collapses multiple hyphens
+- Created test fixtures in `internal/plan/testdata/`:
+  - `valid-plan.md` - plan with explicit status
+  - `no-status.md` - plan without status field (tests default)
+  - `my plan (v2).md` - plan with special characters in filename (tests sanitization)
+- Created `internal/plan/plan_test.go` with 8 test functions:
+  - TestLoad_ValidPlan, TestLoad_MissingStatus, TestLoad_SpecialCharactersInName, TestLoad_NonexistentFile
+  - TestDeriveName, TestExtractStatus, TestSanitizeBranchName, TestDeriveBranch
+- All 43 tests pass (8 new + 35 existing)
+
+**Gotcha:** The Task struct is defined as a placeholder here but will be fully implemented in T9. The regex for status extraction uses `(?m)` for multiline mode to match at start of any line.
+
+**Next:** T9 - Implement task extraction from plans (depends on T8, now complete)

@@ -225,25 +225,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Parse markdown plans into structured data. Foundation for queue management.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/plan.go` defines `Plan` struct with Path, Name, Content, Tasks, Status, Branch fields
-- [ ] `Load(path string) (*Plan, error)` reads and parses plan file
-- [ ] Name derived from filename: `go-rewrite.md` → `go-rewrite`
-- [ ] Branch derived from name: `go-rewrite` → `feat/go-rewrite`
-- [ ] Status extracted from `**Status:** value` in content
-- [ ] Handles plans without explicit Status (defaults to "pending")
-- [ ] Plan with special characters in name sanitizes branch: `my plan (v2)` → `feat/my-plan-v2`
-- [ ] Unit tests cover: valid plan, missing status, special characters in name
+- [x] `internal/plan/plan.go` defines `Plan` struct with Path, Name, Content, Tasks, Status, Branch fields
+- [x] `Load(path string) (*Plan, error)` reads and parses plan file
+- [x] Name derived from filename: `go-rewrite.md` → `go-rewrite`
+- [x] Branch derived from name: `go-rewrite` → `feat/go-rewrite`
+- [x] Status extracted from `**Status:** value` in content
+- [x] Handles plans without explicit Status (defaults to "pending")
+- [x] Plan with special characters in name sanitizes branch: `my plan (v2)` → `feat/my-plan-v2`
+- [x] Unit tests cover: valid plan, missing status, special characters in name
 
 **Subtasks:**
-1. [ ] Define Plan struct
-2. [ ] Implement Load() with file reading
-3. [ ] Implement name derivation from path
-4. [ ] Implement branch name sanitization
-5. [ ] Implement status extraction regex
-6. [ ] Write unit tests with fixtures
+1. [x] Define Plan struct
+2. [x] Implement Load() with file reading
+3. [x] Implement name derivation from path
+4. [x] Implement branch name sanitization
+5. [x] Implement status extraction regex
+6. [x] Write unit tests with fixtures
 
 ---
 
