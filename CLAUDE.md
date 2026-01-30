@@ -66,6 +66,42 @@ repo/                          # Main worktree (always on base branch)
 ```bash
 ralph-worker.sh --cleanup     # Remove orphaned worktrees
 ralph-worker.sh --status      # Show queue and worktree status
+ralph-worker.sh --reset       # Reset current plan to pending (start over)
+```
+
+**Worktree Initialization:**
+
+When a worktree is created, Ralph automatically initializes it:
+
+1. **Copy .env files**: Copies `.env` (and others via config) from main worktree
+2. **Custom hook**: Runs `.ralph/hooks/worktree-init` if executable
+3. **Config commands**: Runs `worktree.init_commands` from config.yaml
+4. **Auto-detection**: Installs dependencies based on lockfiles:
+   - Node.js: `npm ci`, `yarn install`, `pnpm install`, `bun install`
+   - PHP: `composer install`
+   - Python: `pip install -r requirements.txt`, `poetry install`
+   - Ruby: `bundle install`
+   - Go: `go mod download`
+   - Rust: `cargo fetch`
+
+Configure in `.ralph/config.yaml`:
+```yaml
+worktree:
+  # Files to copy from main worktree (default: .env)
+  copy_env_files: ".env, .env.local"
+
+  # Custom init commands (skips auto-detection)
+  init_commands: "npm ci && cp ../.env.example .env"
+```
+
+Or create `.ralph/hooks/worktree-init` (must be executable):
+```bash
+#!/bin/bash
+# Custom worktree initialization
+# $PWD = worktree path, $MAIN_WORKTREE = main repo path
+cp "$MAIN_WORKTREE/.env" .env
+npm ci
+php artisan key:generate
 ```
 
 ### Prompt System

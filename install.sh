@@ -115,7 +115,10 @@ SCRIPTS=(
   "ralph-init.sh"
   "ralph-update.sh"
   "ralph-reverse.sh"
+  "ralph-cron.sh"
+  "ralph-discover.sh"
   "lib/config.sh"
+  "lib/worktree.sh"
 )
 
 for script in "${SCRIPTS[@]}"; do
@@ -131,7 +134,10 @@ chmod +x "$PROJECT_ROOT/scripts/ralph/lib/"*.sh 2>/dev/null || true
 echo -e "${BLUE}Installing base prompts...${NC}"
 PROMPTS=(
   "prompts/base/prompt.md"
+  "prompts/base/worker_prompt.md"
   "prompts/base/plan_reviewer_prompt.md"
+  "prompts/base/plan-spec.md"
+  "prompts/base/discover_prompt.md"
   "prompts/base/reverse_discover_prompt.md"
   "prompts/base/reverse_generate_prompt.md"
   "prompts/base/reverse_spec_prompt.md"
@@ -181,6 +187,12 @@ commands:
   lint: "npm run lint"
   build: "npm run build"
   dev: "npm run dev"
+
+# Worktree initialization (runs when creating plan worktrees)
+# worktree:
+#   copy_env_files: ".env, .env.local"  # Files to copy (default: .env)
+#   init_commands: "npm ci"              # Custom commands (skips auto-detection)
+# Or create .ralph/hooks/worktree-init executable script for full control
 EOF
   echo "  - .ralph/config.yaml (created)"
 else

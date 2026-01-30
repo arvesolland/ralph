@@ -173,6 +173,165 @@ get_worktree_branch() {
     fi
 }
 
+# Initialize a worktree with project dependencies
+# Copies .env, runs package manager installs, custom hooks, etc.
+# Usage: init_worktree "/path/to/worktree" "/path/to/main-worktree"
+#
+# Initialization order:
+# 1. Copy .env file (if exists in main worktree)
+# 2. Copy other dotenv files (.env.local, etc.) if configured
+# 3. Run custom hook script (.ralph/hooks/worktree-init) if exists
+# 4. Run config-based init commands (worktree.init_commands) if configured
+# 5. Auto-detect and install dependencies if no custom commands
+init_worktree() {
+    local worktree_path="$1"
+    local main_worktree="$2"
+    local config_dir="${CONFIG_DIR:-$main_worktree/.ralph}"
+    local config_file="$config_dir/config.yaml"
+
+    if [[ ! -d "$worktree_path" ]]; then
+        log_error "Worktree does not exist: $worktree_path" >&2
+        return 1
+    fi
+
+    log_info "Initializing worktree: $worktree_path" >&2
+
+    # 1. Copy .env file if exists (and not already present)
+    _copy_env_files "$main_worktree" "$worktree_path" "$config_file"
+
+    # 2. Run custom hook script if exists
+    local hook_script="$config_dir/hooks/worktree-init"
+    if [[ -x "$hook_script" ]]; then
+        log_info "Running worktree-init hook..." >&2
+        (cd "$worktree_path" && MAIN_WORKTREE="$main_worktree" "$hook_script") >&2
+        return $?
+    fi
+
+    # 3. Run config-based init commands if configured
+    local init_commands=$(config_get "worktree.init_commands" "$config_file" 2>/dev/null)
+    if [[ -n "$init_commands" ]]; then
+        log_info "Running configured init commands..." >&2
+        (cd "$worktree_path" && eval "$init_commands") >&2
+        return $?
+    fi
+
+    # 4. Auto-detect and run dependency installation
+    _auto_install_dependencies "$worktree_path"
+
+    return 0
+}
+
+# Copy .env files from main worktree to plan worktree
+# Usage: _copy_env_files "/main/worktree" "/plan/worktree" "/path/to/config.yaml"
+_copy_env_files() {
+    local main_worktree="$1"
+    local worktree_path="$2"
+    local config_file="$3"
+
+    # Get list of env files to copy (default: .env)
+    local env_files=$(config_get "worktree.copy_env_files" "$config_file" 2>/dev/null)
+    env_files="${env_files:-.env}"
+
+    # Support both comma-separated and space-separated lists
+    env_files=$(echo "$env_files" | tr ',' ' ')
+
+    for env_file in $env_files; do
+        local src="$main_worktree/$env_file"
+        local dest="$worktree_path/$env_file"
+
+        if [[ -f "$src" ]] && [[ ! -f "$dest" ]]; then
+            log_info "Copying $env_file to worktree" >&2
+            cp "$src" "$dest"
+        fi
+    done
+}
+
+# Auto-detect project type and install dependencies
+# Usage: _auto_install_dependencies "/path/to/worktree"
+_auto_install_dependencies() {
+    local worktree_path="$1"
+    local installed=false
+
+    # Node.js: package.json
+    if [[ -f "$worktree_path/package.json" ]]; then
+        if [[ -f "$worktree_path/package-lock.json" ]] && command -v npm &>/dev/null; then
+            log_info "Installing Node.js dependencies (npm ci)..." >&2
+            (cd "$worktree_path" && npm ci --silent) >&2 || {
+                log_warn "npm ci failed, trying npm install..." >&2
+                (cd "$worktree_path" && npm install --silent) >&2
+            }
+            installed=true
+        elif [[ -f "$worktree_path/yarn.lock" ]] && command -v yarn &>/dev/null; then
+            log_info "Installing Node.js dependencies (yarn)..." >&2
+            (cd "$worktree_path" && yarn install --frozen-lockfile --silent) >&2
+            installed=true
+        elif [[ -f "$worktree_path/pnpm-lock.yaml" ]] && command -v pnpm &>/dev/null; then
+            log_info "Installing Node.js dependencies (pnpm)..." >&2
+            (cd "$worktree_path" && pnpm install --frozen-lockfile --silent) >&2
+            installed=true
+        elif [[ -f "$worktree_path/bun.lockb" ]] && command -v bun &>/dev/null; then
+            log_info "Installing Node.js dependencies (bun)..." >&2
+            (cd "$worktree_path" && bun install --frozen-lockfile) >&2
+            installed=true
+        elif command -v npm &>/dev/null; then
+            log_info "Installing Node.js dependencies (npm install)..." >&2
+            (cd "$worktree_path" && npm install --silent) >&2
+            installed=true
+        fi
+    fi
+
+    # PHP: composer.json
+    if [[ -f "$worktree_path/composer.json" ]] && command -v composer &>/dev/null; then
+        log_info "Installing PHP dependencies (composer install)..." >&2
+        (cd "$worktree_path" && composer install --no-interaction --quiet) >&2
+        installed=true
+    fi
+
+    # Python: requirements.txt or pyproject.toml
+    if [[ -f "$worktree_path/requirements.txt" ]]; then
+        if command -v pip &>/dev/null; then
+            log_info "Installing Python dependencies (pip)..." >&2
+            (cd "$worktree_path" && pip install -q -r requirements.txt) >&2
+            installed=true
+        fi
+    elif [[ -f "$worktree_path/pyproject.toml" ]]; then
+        if command -v poetry &>/dev/null && grep -q '\[tool.poetry\]' "$worktree_path/pyproject.toml" 2>/dev/null; then
+            log_info "Installing Python dependencies (poetry)..." >&2
+            (cd "$worktree_path" && poetry install --quiet) >&2
+            installed=true
+        elif command -v pip &>/dev/null; then
+            log_info "Installing Python dependencies (pip)..." >&2
+            (cd "$worktree_path" && pip install -q -e .) >&2
+            installed=true
+        fi
+    fi
+
+    # Ruby: Gemfile
+    if [[ -f "$worktree_path/Gemfile" ]] && command -v bundle &>/dev/null; then
+        log_info "Installing Ruby dependencies (bundle install)..." >&2
+        (cd "$worktree_path" && bundle install --quiet) >&2
+        installed=true
+    fi
+
+    # Go: go.mod
+    if [[ -f "$worktree_path/go.mod" ]] && command -v go &>/dev/null; then
+        log_info "Installing Go dependencies (go mod download)..." >&2
+        (cd "$worktree_path" && go mod download) >&2
+        installed=true
+    fi
+
+    # Rust: Cargo.toml
+    if [[ -f "$worktree_path/Cargo.toml" ]] && command -v cargo &>/dev/null; then
+        log_info "Fetching Rust dependencies (cargo fetch)..." >&2
+        (cd "$worktree_path" && cargo fetch --quiet) >&2
+        installed=true
+    fi
+
+    if [[ "$installed" == "false" ]]; then
+        log_info "No package manager detected - skipping dependency installation" >&2
+    fi
+}
+
 # Ensure worktree has latest from base branch (for long-running plans)
 # Usage: update_worktree_from_base "plan-name" ["base-branch"]
 update_worktree_from_base() {

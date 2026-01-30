@@ -94,6 +94,10 @@ while [[ $# -gt 0 ]]; do
       ACTION="cleanup"
       shift
       ;;
+    --reset)
+      ACTION="reset"
+      shift
+      ;;
     --review|-r)
       REVIEW_PLAN=true
       shift
@@ -113,6 +117,7 @@ while [[ $# -gt 0 ]]; do
       echo "  ./ralph-worker.sh --next       Activate next pending plan"
       echo "  ./ralph-worker.sh --loop       Process until queue empty"
       echo "  ./ralph-worker.sh --cleanup    Remove orphaned worktrees"
+      echo "  ./ralph-worker.sh --reset      Move current plan back to pending"
       echo ""
       echo "Options:"
       echo "  --status, -s       Show queue status"
@@ -126,6 +131,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --merge            Direct merge to base branch (skip PR)"
       echo "  --no-delete-branch Keep feature branch after merge"
       echo "  --cleanup          Remove orphaned worktrees"
+      echo "  --reset            Move current plan back to pending (keeps worktree)"
       echo "  --version, -v      Show version"
       echo "  --help, -h         Show this help"
       echo ""
@@ -311,6 +317,9 @@ setup_plan_worktree() {
   if [[ -f "$progress_file" ]]; then
     cp "$progress_file" "$worktree_path/plan.progress.md"
   fi
+
+  # Initialize worktree (copy .env, install dependencies, run hooks)
+  init_worktree "$worktree_path" "$PROJECT_ROOT"
 
   log_info "Worktree ready: $worktree_path" >&2
   log_info "Plan copied to: $worktree_path/plan.md" >&2
@@ -817,6 +826,60 @@ do_cleanup() {
   echo "Git worktree references pruned."
 }
 
+# Reset current plan back to pending (start over)
+do_reset() {
+  ensure_dirs
+
+  local current_plan=$(get_current_plan)
+
+  if [ -z "$current_plan" ]; then
+    echo -e "${YELLOW}No current plan to reset.${NC}"
+    return 1
+  fi
+
+  local plan_name=$(get_plan_name "$current_plan")
+  local feature_branch=$(get_feature_branch "$current_plan")
+  local worktree_path=$(get_worktree_path "$plan_name")
+
+  echo -e "${BLUE}Resetting plan:${NC} $(basename "$current_plan")"
+
+  # 1. Remove worktree if exists
+  if [[ -d "$worktree_path" ]]; then
+    echo "  Removing worktree: $worktree_path"
+    remove_plan_worktree "$plan_name"
+  fi
+
+  # 2. Delete feature branch if exists
+  if git show-ref --verify --quiet "refs/heads/$feature_branch" 2>/dev/null; then
+    echo "  Deleting branch: $feature_branch"
+    git branch -D "$feature_branch" 2>/dev/null || true
+  fi
+
+  # 3. Delete progress file (we're starting over)
+  local progress_file="${current_plan%.md}.progress.md"
+  if [[ -f "$progress_file" ]]; then
+    rm "$progress_file"
+    echo "  Deleted progress file"
+  fi
+
+  # 4. Move plan back to pending (at front of queue with fresh timestamp)
+  local timestamp=$(date +%Y%m%d-%H%M%S)
+  local basename=$(basename "$current_plan")
+  # Remove old timestamp prefix if present
+  basename=$(echo "$basename" | sed 's/^[0-9]\{8\}-[0-9]\{6\}-//')
+  local dest="$PENDING_DIR/${timestamp}-${basename}"
+
+  mv "$current_plan" "$dest"
+  echo "  Moved to: $dest"
+
+  # Commit the reset
+  git add "$CURRENT_DIR" "$PENDING_DIR" 2>/dev/null || true
+  git commit -m "chore: reset plan $plan_name to pending" --allow-empty 2>/dev/null || true
+
+  echo ""
+  echo -e "${GREEN}Plan reset.${NC} Run 'ralph-worker' to start fresh."
+}
+
 # Main
 case "$ACTION" in
   status)
@@ -833,6 +896,9 @@ case "$ACTION" in
     ;;
   cleanup)
     do_cleanup
+    ;;
+  reset)
+    do_reset
     ;;
   work)
     if [ "$LOOP_MODE" = true ]; then

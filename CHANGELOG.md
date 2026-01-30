@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Worktree initialization: auto-install dependencies when creating plan worktrees
+- Support for `.ralph/hooks/worktree-init` custom hook script
+- Auto-detection for npm, yarn, pnpm, bun, composer, pip, poetry, bundle, go, cargo
+- Automatic `.env` file copying to worktrees (configurable via `worktree.copy_env_files`)
+- Config option `worktree.init_commands` for custom initialization commands
+- `ralph-worker.sh --reset` to move current plan back to pending and start fresh
+
 ### Fixed
 - Handle Claude Code CLI hanging bug (GitHub Issue #19060) with timeout-based workaround
 - Add real-time streaming output using jq filtering (credit: Matt Pollock)
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Add worktree-based plan isolation
 - Update CHANGELOG.md to include recent changes
 - Add git pull and --review to ralph-cron.sh
 - Add ralph-cron.sh wrapper for scheduled runs

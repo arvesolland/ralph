@@ -60,6 +60,8 @@ SCRIPTS=(
   "ralph-init.sh"
   "ralph-update.sh"
   "ralph-reverse.sh"
+  "ralph-cron.sh"
+  "ralph-discover.sh"
 )
 
 for script in "${SCRIPTS[@]}"; do
@@ -72,17 +74,27 @@ done
 # Update lib
 echo -e "${BLUE}Updating lib...${NC}"
 mkdir -p "$SCRIPT_DIR/lib"
-echo -n "  - lib/config.sh "
-if download_file "lib/config.sh" "$SCRIPT_DIR/lib/config.sh"; then
-  echo -e "${GREEN}✓${NC}"
-fi
+LIB_FILES=(
+  "lib/config.sh"
+  "lib/worktree.sh"
+)
+
+for lib_file in "${LIB_FILES[@]}"; do
+  echo -n "  - $lib_file "
+  if download_file "$lib_file" "$SCRIPT_DIR/$lib_file"; then
+    echo -e "${GREEN}✓${NC}"
+  fi
+done
 
 # Update prompts
 echo -e "${BLUE}Updating base prompts...${NC}"
 mkdir -p "$SCRIPT_DIR/prompts/base"
 PROMPTS=(
   "prompts/base/prompt.md"
+  "prompts/base/worker_prompt.md"
   "prompts/base/plan_reviewer_prompt.md"
+  "prompts/base/plan-spec.md"
+  "prompts/base/discover_prompt.md"
   "prompts/base/reverse_discover_prompt.md"
   "prompts/base/reverse_generate_prompt.md"
   "prompts/base/reverse_spec_prompt.md"
