@@ -358,3 +358,32 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - used direct fmt.Print for status output instead of log package since log adds timestamps/levels which aren't appropriate for status display.
 
 **Next:** T15 - Implement Git interface and basic operations (depends on T2, which is complete)
+
+---
+### Iteration 15: T15 - Implement Git interface and basic operations
+**Completed:**
+- Created `internal/git/git.go` with:
+  - `Git` interface defining all required operations: Status, Add, Commit, Push, PushWithUpstream, Pull, CurrentBranch, CreateBranch, DeleteBranch, DeleteRemoteBranch, BranchExists, Checkout, Merge, RepoRoot, IsClean, WorkDir
+  - `CLIGit` struct implementing the interface by shelling out to git CLI
+  - `NewGit(workDir string) Git` constructor
+  - `Status` struct with Branch, Staged, Unstaged, Untracked fields and IsClean() method
+  - `run()` helper for command execution with trimmed output
+  - `runRaw()` helper for commands needing exact output (like status --porcelain)
+  - Error types: ErrNotGitRepo, ErrUncommittedChanges, ErrBranchNotFound, ErrBranchExists, ErrMergeConflict
+- Created `internal/git/git_test.go` with 19 integration tests:
+  - TestNewGit, TestStatus_CleanRepo, TestStatus_WithChanges
+  - TestAdd, TestAdd_EmptyFiles, TestCommit, TestCommit_NothingToCommit
+  - TestCurrentBranch, TestCreateBranch, TestCreateBranch_AlreadyExists
+  - TestDeleteBranch, TestBranchExists, TestCheckout, TestCheckout_BranchNotFound
+  - TestRepoRoot, TestRepoRoot_NotGitRepo, TestIsClean, TestMerge
+  - TestStatus_IsCleanMethod
+- All tests run against real temporary git repos created with setupTestRepo()
+- All 136 tests pass (117 existing + 19 new)
+
+**Gotcha:**
+- The `run()` helper does `strings.TrimSpace()` which broke status parsing (leading space in ` M file.txt` was trimmed). Added `runRaw()` for status --porcelain parsing.
+- In repos with no commits, `git rev-parse --abbrev-ref HEAD` fails. Used `git symbolic-ref --short HEAD` with fallback.
+- macOS `/tmp` is symlink to `/private/var/...` - used `filepath.EvalSymlinks()` in tests for comparison.
+- `git commit` with nothing to commit outputs to stdout, not stderr.
+
+**Next:** T16 - Implement git worktree operations (depends on T15, now complete)

@@ -404,26 +404,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Wrapper around git CLI for common operations.
 
 **Requires:** T2
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/git/git.go` defines `Git` interface with Status, Commit, Add, Push, Pull, CurrentBranch, CreateBranch, DeleteBranch, BranchExists, RepoRoot, IsClean
-- [ ] `NewGit(workDir string) Git` creates instance for specific directory
-- [ ] `Status() (*Status, error)` returns parsed git status (branch, staged, unstaged, untracked, IsClean)
-- [ ] `Commit(message string, files ...string) error` stages files and commits
-- [ ] `CurrentBranch() (string, error)` returns current branch name
-- [ ] `IsClean() (bool, error)` returns true if no uncommitted changes
-- [ ] All operations shell out to `git` CLI with proper error handling
-- [ ] Integration tests run in temp git repos
+- [x] `internal/git/git.go` defines `Git` interface with Status, Commit, Add, Push, Pull, CurrentBranch, CreateBranch, DeleteBranch, BranchExists, RepoRoot, IsClean
+- [x] `NewGit(workDir string) Git` creates instance for specific directory
+- [x] `Status() (*Status, error)` returns parsed git status (branch, staged, unstaged, untracked, IsClean)
+- [x] `Commit(message string, files ...string) error` stages files and commits
+- [x] `CurrentBranch() (string, error)` returns current branch name
+- [x] `IsClean() (bool, error)` returns true if no uncommitted changes
+- [x] All operations shell out to `git` CLI with proper error handling
+- [x] Integration tests run in temp git repos
 
 **Subtasks:**
-1. [ ] Define Git interface
-2. [ ] Implement command execution helper
-3. [ ] Implement Status() with output parsing
-4. [ ] Implement Commit() and Add()
-5. [ ] Implement branch operations
-6. [ ] Implement RepoRoot() and IsClean()
-7. [ ] Write integration tests with temp repos
+1. [x] Define Git interface
+2. [x] Implement command execution helper
+3. [x] Implement Status() with output parsing
+4. [x] Implement Commit() and Add()
+5. [x] Implement branch operations
+6. [x] Implement RepoRoot() and IsClean()
+7. [x] Write integration tests with temp repos
 
 ---
 
