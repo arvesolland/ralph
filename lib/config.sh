@@ -551,12 +551,13 @@ send_blocker_notification() {
 }
 
 # Send completion notification to plan thread
-# Usage: send_plan_complete "plan_name" "plan_file" "iterations" "config_dir"
+# Usage: send_plan_complete "plan_name" "plan_file" "iterations" "pr_url" "config_dir"
 send_plan_complete_notification() {
   local plan_name="$1"
   local plan_file="$2"
   local iterations="$3"
-  local config_dir="${4:-$CONFIG_DIR}"
+  local pr_url="$4"
+  local config_dir="${5:-$CONFIG_DIR}"
   local config_file="$config_dir/config.yaml"
 
   local should_notify=$(config_get "slack.notify_complete" "$config_file")
@@ -566,7 +567,13 @@ send_plan_complete_notification() {
   fi
 
   local thread_ts=$(get_plan_thread "$plan_file" "$config_dir")
-  local message="Plan *$plan_name* completed successfully after $iterations iterations!"
+  local message="Plan *$plan_name* completed!"
+  if [ -n "$iterations" ]; then
+    message="$message ($iterations iterations)"
+  fi
+  if [ -n "$pr_url" ]; then
+    message="$message\n<$pr_url|View PR>"
+  fi
 
   if [ -n "$thread_ts" ]; then
     slack_post_message "$message" "✅" "$thread_ts" "$config_dir" >/dev/null
