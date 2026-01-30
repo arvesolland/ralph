@@ -30,15 +30,6 @@ type Plan struct {
 	Branch string
 }
 
-// Task is a placeholder for task extraction (implemented in T9).
-type Task struct {
-	Line     int
-	Text     string
-	Complete bool
-	Requires []string
-	Subtasks []Task
-}
-
 // statusRegex matches **Status:** value patterns in markdown.
 var statusRegex = regexp.MustCompile(`(?m)^\*\*Status:\*\*\s*(\S+)`)
 
@@ -59,11 +50,13 @@ func Load(path string) (*Plan, error) {
 	name := deriveName(absPath)
 	status := extractStatus(string(content))
 	branch := deriveBranch(name)
+	tasks := ExtractTasks(string(content))
 
 	return &Plan{
 		Path:    absPath,
 		Name:    name,
 		Content: string(content),
+		Tasks:   tasks,
 		Status:  status,
 		Branch:  branch,
 	}, nil

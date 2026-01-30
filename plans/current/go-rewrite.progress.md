@@ -199,3 +199,30 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The Task struct is defined as a placeholder here but will be fully implemented in T9. The regex for status extraction uses `(?m)` for multiline mode to match at start of any line.
 
 **Next:** T9 - Implement task extraction from plans (depends on T8, now complete)
+
+---
+### Iteration 9: T9 - Implement task extraction from plans
+**Completed:**
+- Created `internal/plan/task.go` with:
+  - `Task` struct with Line, Text, Complete, Requires, Subtasks, Indent fields
+  - `checkboxRegex` matching `- [ ]` or `- [x]` patterns with indentation capture
+  - `requiresRegex` for "requires: T1, T2" pattern matching (case-insensitive)
+  - `ExtractTasks(content string) []Task` parses markdown content and extracts all checkboxes
+  - `extractRequires(text string) []string` extracts task IDs from requires clause
+  - `buildTaskTree(flat []Task) []Task` converts flat task list to nested tree based on indentation
+  - `CountComplete(tasks []Task) int` recursively counts completed tasks
+  - `CountTotal(tasks []Task) int` recursively counts all tasks
+  - `FindNextIncomplete(tasks []Task, completedIDs map[string]bool) *Task` finds next actionable task
+- Updated `internal/plan/plan.go`:
+  - Removed duplicate Task struct placeholder
+  - Updated `Load()` to call `ExtractTasks()` and populate Tasks field
+- Created `internal/plan/task_test.go` with 12 test functions:
+  - TestExtractTasks_SimpleTasks, TestExtractTasks_NestedSubtasks, TestExtractTasks_WithDependencies
+  - TestExtractTasks_MixedCompleteIncomplete, TestExtractTasks_EmptyContent, TestExtractTasks_NoCheckboxes
+  - TestExtractTasks_LineNumbers, TestExtractRequires, TestCountComplete, TestCountTotal
+  - TestFindNextIncomplete, TestExtractTasks_RealWorldPlan
+- All 55 tests pass (12 new + 43 existing)
+
+**Gotcha:** The checkbox regex only matches dash-style lists (`- [ ]`), not numbered lists (`1. [ ]`). The actual plan format uses dashes for checkboxes, so this is correct behavior. Numbered lists in the plan are for subtask descriptions, not checkboxes.
+
+**Next:** T10 - Implement checkbox update in plans (depends on T9, now complete)
