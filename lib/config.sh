@@ -302,6 +302,9 @@ slack_post_message() {
   local config_dir="${4:-$CONFIG_DIR}"
   local config_file="$config_dir/config.yaml"
 
+  # Load credentials from global file if needed
+  load_slack_credentials
+
   local bot_token="${SLACK_BOT_TOKEN:-}"
   local channel=$(config_get "slack.channel" "$config_file")
 
@@ -337,16 +340,54 @@ slack_post_message() {
   return 1
 }
 
+# Load Slack credentials from global file if not in environment
+# This is called early to ensure tokens are available
+load_slack_credentials() {
+  if [ -n "$SLACK_BOT_TOKEN" ] && [ -n "$SLACK_APP_TOKEN" ]; then
+    return 0  # Already have credentials
+  fi
+
+  local global_env="$HOME/.ralph/slack.env"
+  if [ -f "$global_env" ]; then
+    while IFS='=' read -r key value; do
+      [[ "$key" =~ ^#.*$ ]] && continue
+      [[ -z "$key" ]] && continue
+      value=$(echo "$value" | sed 's/^["'"'"']//;s/["'"'"']$//')
+      export "$key=$value"
+    done < "$global_env"
+  fi
+}
+
+# Check if we should use global mode (explicit config or using global credentials)
+should_use_global_bot() {
+  local config_dir="${1:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  # Explicit config takes precedence
+  local use_global=$(config_get "slack.global_bot" "$config_file")
+  if [ "$use_global" = "true" ]; then
+    echo "true"
+    return
+  fi
+  if [ "$use_global" = "false" ]; then
+    echo "false"
+    return
+  fi
+
+  # Default to global if global credentials exist and no local ones
+  if [ -f "$HOME/.ralph/slack.env" ]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
 # Get the thread tracker file path (global or local based on config)
 # Usage: get_thread_tracker_file "config_dir"
 get_thread_tracker_file() {
   local config_dir="${1:-$CONFIG_DIR}"
-  local config_file="$config_dir/config.yaml"
 
-  # Check if global mode is enabled
-  local use_global=$(config_get "slack.global_bot" "$config_file")
-
-  if [ "$use_global" = "true" ]; then
+  if [ "$(should_use_global_bot "$config_dir")" = "true" ]; then
     echo "$HOME/.ralph/slack_threads.json"
   else
     echo "$config_dir/slack_threads.json"

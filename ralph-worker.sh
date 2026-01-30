@@ -579,14 +579,39 @@ process_plan() {
 # Start Slack bot if configured and not running
 # Uses global bot mode (~/.ralph/) to handle multiple repos
 start_slack_bot_if_needed() {
-  # Check if Slack is configured
+  # Check if Slack channel is configured
+  local channel=$(config_get "slack.channel" "$CONFIG_DIR/config.yaml" 2>/dev/null)
+  if [ -z "$channel" ]; then
+    return 0  # No channel configured, skip silently
+  fi
+
+  # Check for tokens - try environment first, then global credentials
   local bot_token="${SLACK_BOT_TOKEN:-}"
   local app_token="${SLACK_APP_TOKEN:-}"
-  local channel=$(config_get "slack.channel" "$CONFIG_DIR/config.yaml" 2>/dev/null)
   local use_global=$(config_get "slack.global_bot" "$CONFIG_DIR/config.yaml" 2>/dev/null)
 
-  # Need both tokens and channel for bot functionality
-  if [ -z "$bot_token" ] || [ -z "$app_token" ] || [ -z "$channel" ]; then
+  # If no tokens in environment, try loading from global credentials
+  if [ -z "$bot_token" ] || [ -z "$app_token" ]; then
+    local global_env="$HOME/.ralph/slack.env"
+    if [ -f "$global_env" ]; then
+      # Source global credentials
+      while IFS='=' read -r key value; do
+        [[ "$key" =~ ^#.*$ ]] && continue
+        [[ -z "$key" ]] && continue
+        value=$(echo "$value" | sed 's/^["'"'"']//;s/["'"'"']$//')
+        export "$key=$value"
+      done < "$global_env"
+      bot_token="${SLACK_BOT_TOKEN:-}"
+      app_token="${SLACK_APP_TOKEN:-}"
+      # Default to global mode when using global credentials
+      if [ -z "$use_global" ]; then
+        use_global="true"
+      fi
+    fi
+  fi
+
+  # Need both tokens for bot functionality
+  if [ -z "$bot_token" ] || [ -z "$app_token" ]; then
     return 0  # Not configured, skip silently
   fi
 
