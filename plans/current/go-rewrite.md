@@ -114,25 +114,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Core configuration that all components depend on. Must handle all edge cases the bash version struggled with.
 
 **Requires:** T3
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/config/config.go` defines `Config` struct matching spec (Project, Git, Commands, Slack, Worktree, Completion)
-- [ ] `Load(path string) (*Config, error)` reads and parses YAML file
-- [ ] `LoadWithDefaults(path string) (*Config, error)` applies defaults for missing fields
-- [ ] YAML inline comments handled correctly: `name: "value" # comment` → value is "value", not "value # comment"
-- [ ] Missing config file returns config with all defaults (not error)
-- [ ] Empty config file returns config with all defaults (not error)
-- [ ] Nested access works: config loaded from `project:\n  name: "Test"` has `config.Project.Name == "Test"`
-- [ ] Unit tests cover: valid config, empty file, missing file, inline comments, nested keys, all field types
+- [x] `internal/config/config.go` defines `Config` struct matching spec (Project, Git, Commands, Slack, Worktree, Completion)
+- [x] `Load(path string) (*Config, error)` reads and parses YAML file
+- [x] `LoadWithDefaults(path string) (*Config, error)` applies defaults for missing fields
+- [x] YAML inline comments handled correctly: `name: "value" # comment` → value is "value", not "value # comment"
+- [x] Missing config file returns config with all defaults (not error)
+- [x] Empty config file returns config with all defaults (not error)
+- [x] Nested access works: config loaded from `project:\n  name: "Test"` has `config.Project.Name == "Test"`
+- [x] Unit tests cover: valid config, empty file, missing file, inline comments, nested keys, all field types
 
 **Subtasks:**
-1. [ ] Add yaml dependency: `go get gopkg.in/yaml.v3`
-2. [ ] Define all config structs with yaml tags
-3. [ ] Implement Load() function
-4. [ ] Implement defaults in separate defaults.go
-5. [ ] Implement LoadWithDefaults() that merges
-6. [ ] Write comprehensive unit tests
+1. [x] Add yaml dependency: `go get gopkg.in/yaml.v3`
+2. [x] Define all config structs with yaml tags
+3. [x] Implement Load() function
+4. [x] Implement defaults in separate defaults.go
+5. [x] Implement LoadWithDefaults() that merges
+6. [x] Write comprehensive unit tests
 
 ---
 

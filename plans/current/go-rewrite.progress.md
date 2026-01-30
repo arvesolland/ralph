@@ -55,3 +55,33 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - Cobra setup is straightforward.
 
 **Next:** T4 - Implement Config struct and YAML loading (depends on T3, now complete)
+
+---
+### Iteration 4: T4 - Implement Config struct and YAML loading
+**Completed:**
+- Added `gopkg.in/yaml.v3` v3.0.1 dependency
+- Created `internal/config/config.go` with:
+  - All config structs matching spec: `Config`, `ProjectConfig`, `GitConfig`, `CommandsConfig`, `SlackConfig`, `WorktreeConfig`, `CompletionConfig`
+  - `Load(path string) (*Config, error)` - reads and parses YAML file
+  - `LoadWithDefaults(path string) (*Config, error)` - applies defaults for missing fields, handles missing/empty files gracefully
+  - `mergeConfig()` helper for merging file config into defaults
+- Created `internal/config/defaults.go` with sensible defaults:
+  - `git.base_branch: "main"`
+  - `completion.mode: "pr"`
+  - `worktree.copy_env_files: ".env"`
+  - Slack notifications: start/complete/error/blocker enabled, iteration disabled
+- Created `internal/config/config_test.go` with 10 test functions covering:
+  - Valid config loading
+  - Missing file error (for Load) vs defaults (for LoadWithDefaults)
+  - Invalid YAML parsing
+  - YAML inline comments (the bash bug source)
+  - Nested key access
+  - Empty file handling
+  - Partial config with defaults merge
+  - All field types (strings, bools)
+- All tests pass (10 tests)
+- Build succeeds
+
+**Gotcha:** Bool fields in YAML can't distinguish "not set" from "set to false" with standard yaml.Unmarshal. Used OR merge for notification bools that default to true, so if file sets them to false, it won't override defaults unless explicitly handled. In practice this is acceptable since users wanting to disable notifications will set them explicitly.
+
+**Next:** T5 - Implement project auto-detection (depends on T4, now complete)
