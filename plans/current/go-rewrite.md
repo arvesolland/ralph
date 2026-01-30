@@ -88,23 +88,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > CLI skeleton that all subcommands attach to. Global flags defined here.
 
 **Requires:** T2
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/cli/root.go` defines root command with description
-- [ ] Global flags registered: `--config/-c`, `--verbose/-v`, `--quiet/-q`, `--no-color`
-- [ ] `cmd/ralph/main.go` calls `cli.Execute()`
-- [ ] `ralph --help` displays usage with all global flags
-- [ ] `ralph version` subcommand shows version, commit, build date (hardcoded "dev" for now)
-- [ ] Unknown commands return helpful error message
+- [x] `internal/cli/root.go` defines root command with description
+- [x] Global flags registered: `--config/-c`, `--verbose/-v`, `--quiet/-q`, `--no-color`
+- [x] `cmd/ralph/main.go` calls `cli.Execute()`
+- [x] `ralph --help` displays usage with all global flags
+- [x] `ralph version` subcommand shows version, commit, build date (hardcoded "dev" for now)
+- [x] Unknown commands return helpful error message
 
 **Subtasks:**
-1. [ ] Add cobra dependency: `go get github.com/spf13/cobra`
-2. [ ] Create root.go with root command
-3. [ ] Register global flags with defaults
-4. [ ] Create version.go with version subcommand
-5. [ ] Wire up in main.go
-6. [ ] Verify help output
+1. [x] Add cobra dependency: `go get github.com/spf13/cobra`
+2. [x] Create root.go with root command
+3. [x] Register global flags with defaults
+4. [x] Create version.go with version subcommand
+5. [x] Wire up in main.go
+6. [x] Verify help output
 
 ---
 

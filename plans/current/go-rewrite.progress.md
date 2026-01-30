@@ -31,3 +31,27 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Note that `log.go` is used instead of `logger.go` for idiomatic Go naming (the file defines the main `log` package functionality). The interface is still named `Logger` as specified.
 
 **Next:** T3 - Set up Cobra CLI framework with root command (depends on T2, now complete)
+
+---
+### Iteration 3: T3 - Set up Cobra CLI framework with root command
+**Completed:**
+- Added `github.com/spf13/cobra` v1.10.2 dependency (brings in `spf13/pflag` and `mousetrap`)
+- Created `internal/cli/root.go` with:
+  - Root command with description of Ralph's purpose
+  - Global persistent flags: `--config/-c`, `--verbose/-v`, `--quiet/-q`, `--no-color`
+  - `PersistentPreRun` hook that configures logging based on flags
+  - `Execute()` function for main.go to call
+- Created `internal/cli/version.go` with:
+  - `version` subcommand showing Version, Commit, BuildDate
+  - Variables set up for ldflags injection at build time (defaults to "dev"/"unknown")
+- Updated `cmd/ralph/main.go` to call `cli.Execute()`
+- Removed placeholder `internal/cli/cli.go` file
+- Verified all acceptance criteria:
+  - `ralph --help` shows usage with all global flags
+  - `ralph version` shows "ralph version dev" with commit/build info
+  - Unknown commands return helpful error message with exit code 1
+- All existing tests pass
+
+**Gotcha:** None - Cobra setup is straightforward.
+
+**Next:** T4 - Implement Config struct and YAML loading (depends on T3, now complete)
