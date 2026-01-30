@@ -44,13 +44,18 @@ type Result struct {
 }
 
 // Blocker represents extracted blocker information from Claude output.
-// This is a placeholder - full implementation in T27.
+// Used to signal that human input is required before continuing.
 type Blocker struct {
-	Content     string
+	// Content is the raw content between <blocker> tags
+	Content string
+	// Description is the blocker description (first part or Description: field)
 	Description string
-	Action      string
-	Resume      string
-	Hash        string
+	// Action is what the human should do (Action: field)
+	Action string
+	// Resume is what happens after the blocker is resolved (Resume: field)
+	Resume string
+	// Hash is the first 8 characters of MD5 of content (for deduplication)
+	Hash string
 }
 
 // CLIRunner implements Runner by executing the claude CLI.
@@ -200,6 +205,9 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 
 	// Check for completion marker
 	result.IsComplete = containsCompletionMarker(result.TextContent)
+
+	// Extract blocker if present
+	result.Blocker = ExtractBlocker(result.TextContent)
 
 	// Check exit status
 	if waitErr != nil {

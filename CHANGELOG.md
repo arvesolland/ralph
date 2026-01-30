@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- implement Runner interface with timeout handling (T25, T26)
 - implement retry logic with exponential backoff (T24)
 - implement streaming JSON parser (T23)
 - implement Claude CLI command builder (T22)

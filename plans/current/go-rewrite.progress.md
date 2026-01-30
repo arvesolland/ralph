@@ -695,3 +695,30 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The completion marker detection (T26) was implemented alongside T25 since it's used within the Result struct during execution. Marked both tasks complete.
 
 **Next:** T27 - Implement blocker extraction (depends on T25, now complete)
+
+---
+### Iteration 26: T27 - Implement blocker extraction
+**Completed:**
+- Created `internal/runner/blocker.go` with:
+  - `Blocker` struct already defined in runner.go (with Content, Description, Action, Resume, Hash fields)
+  - `blockerTagRegex` matching `<blocker>...</blocker>` content with (?s) for multiline
+  - `ExtractBlocker(output string) *Blocker` parses blocker marker, returns nil if not found
+  - `parseBlockerFields(content string)` extracts structured fields (Description:, Action:, Resume:)
+  - `computeBlockerHash(content string)` returns first 8 chars of MD5 hash
+  - `HasBlocker(output string) bool` utility for quick presence check
+- Updated `internal/runner/runner.go`:
+  - Added `result.Blocker = ExtractBlocker(result.TextContent)` in `runOnce()`
+  - Updated Blocker struct documentation (removed "placeholder" comment)
+- Created `internal/runner/blocker_test.go` with 14 test functions:
+  - TestExtractBlocker_NoBlocker (8 subtests: empty, partial tags, malformed, whitespace only)
+  - TestExtractBlocker_SimpleContent, TestExtractBlocker_StructuredFields
+  - TestExtractBlocker_WithExplicitDescriptionField, TestExtractBlocker_PartialFields (3 subtests)
+  - TestExtractBlocker_MultilineDescription, TestExtractBlocker_CaseInsensitiveFields
+  - TestExtractBlocker_Hash, TestExtractBlocker_InMiddleOfOutput, TestExtractBlocker_OnlyFirstMatch
+  - TestHasBlocker (4 subtests), TestComputeBlockerHash, TestParseBlockerFields (3 subtests)
+- All tests pass (91 runner tests total)
+- Also updated plan.md to mark T25, T26 as complete (were already done but not checked in plan)
+
+**Gotcha:** The Blocker struct was already defined in runner.go as a placeholder. Kept it there rather than moving to blocker.go to avoid import cycles and keep the Result struct definition close to its fields.
+
+**Next:** T28 - Implement completion verification with Haiku (depends on T25 and T8, both complete)
