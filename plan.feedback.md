@@ -2,7 +2,10 @@
 
 ## Pending
 
+
 ## Processed
+- [2026-01-31 08:31] **Verification failed:** (STALE - T1, T2, T3, T4 were already complete. T5 now complete. Verification was checking plan file that wasn't synced)
+  Analysis was based on stale plan file in plans/current/. T1-T4 were completed in iterations 1-4. T5 completed in iteration 5.
 - [2026-01-31 08:27] **Verification failed:** (STALE - T1, T2, T3 now complete, verification was checking the plan file in plans/current/ which wasn't being updated)
   Analysis was based on stale plan file. T1 completed in Iteration 1, T2 completed in Iteration 2, T3 completed in Iteration 3. The plan checkboxes were updated but may not have been synced to plans/current/.
 - [2026-01-31 08:24] **Verification failed:** (STALE - T1, T2, T3 now complete, analysis was based on pre-implementation state)

@@ -140,27 +140,27 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Detect project type, language, framework, and commands from files present.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/config/detect.go` defines `Detect(dir string) (*DetectedConfig, error)`
-- [ ] Detects Node.js from package.json, extracts test/lint/build scripts
-- [ ] Detects PHP from composer.json
-- [ ] Detects Python from pyproject.toml or requirements.txt
-- [ ] Detects Go from go.mod
-- [ ] Detects Rust from Cargo.toml
-- [ ] Detects Ruby from Gemfile
-- [ ] Returns appropriate test/lint/build commands for each language
-- [ ] Unit tests with fixture directories for each language
+- [x] `internal/config/detect.go` defines `Detect(dir string) (*DetectedConfig, error)`
+- [x] Detects Node.js from package.json, extracts test/lint/build scripts
+- [x] Detects PHP from composer.json
+- [x] Detects Python from pyproject.toml or requirements.txt
+- [x] Detects Go from go.mod
+- [x] Detects Rust from Cargo.toml
+- [x] Detects Ruby from Gemfile
+- [x] Returns appropriate test/lint/build commands for each language
+- [x] Unit tests with fixture directories for each language
 
 **Subtasks:**
-1. [ ] Define DetectedConfig struct
-2. [ ] Implement Node.js detection with package.json parsing
-3. [ ] Implement PHP detection
-4. [ ] Implement Python detection
-5. [ ] Implement Go, Rust, Ruby detection
-6. [ ] Create test fixtures in testdata/detect/
-7. [ ] Write unit tests for each language
+1. [x] Define DetectedConfig struct
+2. [x] Implement Node.js detection with package.json parsing
+3. [x] Implement PHP detection
+4. [x] Implement Python detection
+5. [x] Implement Go, Rust, Ruby detection
+6. [x] Create test fixtures in testdata/detect/
+7. [x] Write unit tests for each language
 
 ---
 

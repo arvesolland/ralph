@@ -85,3 +85,35 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Bool fields in YAML can't distinguish "not set" from "set to false" with standard yaml.Unmarshal. Used OR merge for notification bools that default to true, so if file sets them to false, it won't override defaults unless explicitly handled. In practice this is acceptable since users wanting to disable notifications will set them explicitly.
 
 **Next:** T5 - Implement project auto-detection (depends on T4, now complete)
+
+---
+### Iteration 5: T5 - Implement project auto-detection
+**Completed:**
+- Created `internal/config/detect.go` with:
+  - `DetectedConfig` struct with Language, Framework, PackageJSON, Commands fields
+  - `Detect(dir string) (*DetectedConfig, error)` - detects project type from files
+  - Node.js detection from package.json with script extraction (test/lint/build/dev)
+  - Framework detection (Next.js, Nuxt, Vite) from config files
+  - Go detection from go.mod with golangci-lint support
+  - Python detection from pyproject.toml or requirements.txt with flake8/ruff support
+  - PHP detection from composer.json with Laravel framework and PHPUnit/PHPStan support
+  - Rust detection from Cargo.toml with cargo test/build/clippy
+  - Ruby detection from Gemfile with Rails framework and RuboCop support
+- Created test fixtures in `internal/config/testdata/detect/`:
+  - `node/` - basic Node.js project
+  - `node-nextjs/` - Next.js project with next.config.js
+  - `go/` - Go module project
+  - `python/` - Python project with pyproject.toml
+  - `python-requirements/` - Python project with requirements.txt
+  - `php/` - PHP Composer project
+  - `php-laravel/` - Laravel project with artisan file
+  - `rust/` - Rust Cargo project
+  - `ruby/` - Ruby Bundler project
+  - `ruby-rails/` - Rails project with config/application.rb
+  - `empty/` - empty directory for no-detection test
+- Created `internal/config/detect_test.go` with 12 test functions covering all languages and edge cases
+- All 22 tests pass (10 config tests + 12 detect tests)
+
+**Gotcha:** Detection order matters - Node.js is checked first because package.json is common in polyglot repos. Each detector returns nil for "not this language" vs error for "this language but malformed".
+
+**Next:** T6 - Implement prompt template builder (depends on T4, now complete)
