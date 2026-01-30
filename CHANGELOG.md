@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Smart AI update: `ralph-update.sh --ai` regenerates only stub/placeholder config files
+- Auto-add new config sections (slack, worktree) to existing config.yaml during update
 - Slack bot files included in install.sh and ralph-update.sh
 - Slack configuration template in default config.yaml
 - Global Slack credentials detection during install
@@ -31,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Add Slack bot to install and update scripts
 - Auto-detect global Slack credentials
 - Add global Slack bot mode and auto-start
 - Add Slack bot for human input handling
