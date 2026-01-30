@@ -317,8 +317,8 @@ slack_post_message() {
 
   local full_message=$(printf '%s' "$emoji *[$project_name]* $message")
 
-  # Escape for JSON
-  full_message=$(echo "$full_message" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+  # Escape for JSON (macOS compatible)
+  full_message=$(printf '%s' "$full_message" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
 
   # Build JSON payload
   local payload="{\"channel\": \"$channel\", \"text\": \"$full_message\", \"unfurl_links\": false, \"unfurl_media\": false"

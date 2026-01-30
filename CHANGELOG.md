@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Clarify worktree plan location in reviewer prompt
 - Update CHANGELOG for smart AI update feature
 - Add smart AI update to ralph-update.sh
 - Add Slack bot to install and update scripts
