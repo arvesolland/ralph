@@ -159,8 +159,9 @@ echo ""
 cd "$PROJECT_ROOT"
 
 # Notify plan start (creates Slack thread for all updates)
-PLAN_NAME=$(basename "$PLAN_FILE" .md)
 QUEUE_PLAN_PATH="${RALPH_QUEUE_PLAN_PATH:-$PLAN_PATH}"
+# Use queue path for plan name (worktree uses plan.md, but queue has real name)
+PLAN_NAME=$(basename "$QUEUE_PLAN_PATH" .md)
 PLAN_THREAD_TS=$(send_plan_start_notification "$PLAN_NAME" "$QUEUE_PLAN_PATH" "$MAX_ITERATIONS" "$CONFIG_DIR")
 
 # No branch switching! ralph.sh now runs in whatever directory/worktree it's invoked in
