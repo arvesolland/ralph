@@ -482,30 +482,30 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Detect and install project dependencies in new worktrees.
 
 **Requires:** T17
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/deps.go` defines `DetectAndInstall(worktreePath string) error`
-- [ ] Detects package-lock.json → runs `npm ci`
-- [ ] Detects yarn.lock → runs `yarn install --frozen-lockfile`
-- [ ] Detects pnpm-lock.yaml → runs `pnpm install --frozen-lockfile`
-- [ ] Detects bun.lockb → runs `bun install --frozen-lockfile`
-- [ ] Detects composer.lock → runs `composer install`
-- [ ] Detects requirements.txt → runs `pip install -r requirements.txt`
-- [ ] Detects poetry.lock → runs `poetry install`
-- [ ] Detects Gemfile.lock → runs `bundle install`
-- [ ] Detects go.sum → runs `go mod download`
-- [ ] Detects Cargo.lock → runs `cargo fetch`
-- [ ] Returns nil if no lockfile found (skip install)
-- [ ] Integration tests with fixture directories
+- [x] `internal/worktree/deps.go` defines `DetectAndInstall(worktreePath string) error`
+- [x] Detects package-lock.json → runs `npm ci`
+- [x] Detects yarn.lock → runs `yarn install --frozen-lockfile`
+- [x] Detects pnpm-lock.yaml → runs `pnpm install --frozen-lockfile`
+- [x] Detects bun.lockb → runs `bun install --frozen-lockfile`
+- [x] Detects composer.lock → runs `composer install`
+- [x] Detects requirements.txt → runs `pip install -r requirements.txt`
+- [x] Detects poetry.lock → runs `poetry install`
+- [x] Detects Gemfile.lock → runs `bundle install`
+- [x] Detects go.sum → runs `go mod download`
+- [x] Detects Cargo.lock → runs `cargo fetch`
+- [x] Returns nil if no lockfile found (skip install)
+- [x] Integration tests with fixture directories
 
 **Subtasks:**
-1. [ ] Define lockfile detection order
-2. [ ] Implement detection logic
-3. [ ] Implement command execution for each package manager
-4. [ ] Handle errors (command not found vs install failure)
-5. [ ] Create test fixtures
-6. [ ] Write integration tests
+1. [x] Define lockfile detection order
+2. [x] Implement detection logic
+3. [x] Implement command execution for each package manager
+4. [x] Handle errors (command not found vs install failure)
+5. [x] Create test fixtures
+6. [x] Write integration tests
 
 ---
 

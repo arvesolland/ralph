@@ -435,3 +435,46 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The `Path()` method strips the `feat/` prefix from the branch name for cleaner directory names (`.ralph/worktrees/go-rewrite/` instead of `.ralph/worktrees/feat-go-rewrite/`).
 
 **Next:** T18 - Implement dependency auto-detection for worktrees (depends on T17, now complete)
+
+---
+### Iteration 18: T18 - Implement dependency auto-detection for worktrees
+**Completed:**
+- Created `internal/worktree/deps.go` with:
+  - `Lockfile` struct with Name, Command, Args, Description fields
+  - `lockfileOrder` slice defining detection priority (pnpm > bun > yarn > npm, then others)
+  - `DetectAndInstall(worktreePath string) (*InstallResult, error)` function
+  - `runInstallCommand()` helper that executes the package manager command
+  - `DetectLockfile()` helper for detection-only without running commands
+  - `GetLockfileInfo()` helper to get lockfile metadata by name
+  - `ErrCommandNotFound` error type for missing package managers
+  - `InstallResult` struct with Lockfile, Command, Output fields
+- Supported lockfiles in detection order:
+  1. pnpm-lock.yaml → `pnpm install --frozen-lockfile`
+  2. bun.lockb → `bun install --frozen-lockfile`
+  3. yarn.lock → `yarn install --frozen-lockfile`
+  4. package-lock.json → `npm ci`
+  5. composer.lock → `composer install`
+  6. poetry.lock → `poetry install`
+  7. requirements.txt → `pip install -r requirements.txt`
+  8. Gemfile.lock → `bundle install`
+  9. go.sum → `go mod download`
+  10. Cargo.lock → `cargo fetch`
+- Created test fixtures in `internal/worktree/testdata/deps/`:
+  - node-npm, node-yarn, node-pnpm, node-bun, php, python-pip, python-poetry, ruby, go, rust, empty
+- Created `internal/worktree/deps_test.go` with 12 test functions:
+  - TestDetectLockfile (11 subtests for each lockfile type)
+  - TestDetectLockfile_PriorityOrder (multiple lockfiles in same dir)
+  - TestDetectLockfile_NonexistentDirectory
+  - TestGetLockfileInfo (10 subtests)
+  - TestGetLockfileInfo_Unknown
+  - TestLockfileOrder_Coverage (verifies all expected lockfiles are defined)
+  - TestDetectAndInstall_NoLockfile
+  - TestDetectAndInstall_CommandNotFound
+  - TestLockfileArgs (verifies correct args for each lockfile)
+  - TestInstallResultCommand
+  - TestDetectAndInstall_Integration (skipped in short mode)
+- All tests pass
+
+**Gotcha:** Function signature is `DetectAndInstall(worktreePath string) (*InstallResult, error)` rather than just `error` - returning the result allows callers to know what was detected/installed.
+
+**Next:** T19 - Implement worktree file sync (depends on T17, T12, T13 - all complete)
