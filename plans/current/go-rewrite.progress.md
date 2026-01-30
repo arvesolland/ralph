@@ -567,3 +567,27 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The return type is `([]CleanupResult, error)` instead of `([]string, error)` from the spec - this provides more information about each result (skipped vs removed, reason for skip). Also, non-git directories in worktrees/ are safely skipped since we can't verify their status.
 
 **Next:** T22 - Implement Claude CLI command builder (depends on T4, which is complete)
+
+---
+### Iteration 22: T22 - Implement Claude CLI command builder
+**Completed:**
+- Created `internal/runner/command.go` with:
+  - `Options` struct with Model, MaxTokens, AllowedTools, WorkDir, Print, OutputFormat, SystemPrompt, NoPermissions, Timeout fields
+  - `DefaultOptions()` returning sensible defaults (OutputFormat: "stream-json")
+  - `BuildCommand(prompt string, opts Options) *exec.Cmd` for building claude CLI commands
+  - `buildArgs()` helper for constructing argument list
+  - Support for all flags: --model, --max-tokens, --allowedTools, --output-format, --system-prompt, --print, --dangerously-skip-permissions
+  - Working directory setting via cmd.Dir
+  - Prompt passed via stdin (not argument) to avoid shell escaping issues
+  - `CommandString()` helper for logging/debugging
+- Created `internal/runner/command_test.go` with 16 test functions covering:
+  - Default options, model, max tokens, allowed tools (single and multiple)
+  - Work directory, print mode, system prompt, no permissions mode
+  - All flags combined, empty options, command string generation
+  - Edge cases: zero max tokens, empty allowed tools list
+- All tests pass (16 runner tests)
+- Build succeeds, `ralph version` works
+
+**Gotcha:** None - straightforward implementation. Chose to return `*exec.Cmd` with Stdin unset rather than setting it in the function, allowing the caller to control how the prompt is provided (e.g., strings.NewReader or os.Pipe).
+
+**Next:** T23 - Implement streaming JSON parser (depends on T22, now complete)

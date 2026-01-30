@@ -587,24 +587,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Build claude CLI command with all options.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/command.go` defines `BuildCommand(prompt string, opts Options) *exec.Cmd`
-- [ ] Supports: --print (for prompt output), --output-format stream-json
-- [ ] Supports: --model flag from opts.Model
-- [ ] Supports: --max-tokens from opts.MaxTokens
-- [ ] Supports: --allowedTools from opts.AllowedTools (comma-separated)
-- [ ] Sets working directory from opts.WorkDir
-- [ ] Passes prompt via stdin (not argument, to avoid shell escaping issues)
-- [ ] Unit tests verify command construction
+- [x] `internal/runner/command.go` defines `BuildCommand(prompt string, opts Options) *exec.Cmd`
+- [x] Supports: --print (for prompt output), --output-format stream-json
+- [x] Supports: --model flag from opts.Model
+- [x] Supports: --max-tokens from opts.MaxTokens
+- [x] Supports: --allowedTools from opts.AllowedTools (comma-separated)
+- [x] Sets working directory from opts.WorkDir
+- [x] Passes prompt via stdin (not argument, to avoid shell escaping issues)
+- [x] Unit tests verify command construction
 
 **Subtasks:**
-1. [ ] Define Options struct
-2. [ ] Implement BuildCommand
-3. [ ] Handle stdin prompt passing
-4. [ ] Add all supported flags
-5. [ ] Write unit tests
+1. [x] Define Options struct
+2. [x] Implement BuildCommand
+3. [x] Handle stdin prompt passing
+4. [x] Add all supported flags
+5. [x] Write unit tests
 
 ---
 
