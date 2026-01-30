@@ -354,23 +354,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Handle feedback files for human input during blockers.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/feedback.go` defines feedback file operations
-- [ ] `FeedbackPath(plan *Plan) string` returns `<plan-path-without-ext>.feedback.md`
-- [ ] `ReadFeedback(plan *Plan) (string, error)` reads pending feedback section
-- [ ] `AppendFeedback(plan *Plan, source string, content string) error` adds timestamped entry to Pending section
-- [ ] `MarkProcessed(plan *Plan, entry string) error` moves entry from Pending to Processed
-- [ ] File format matches existing: `# Feedback\n## Pending\n...\n## Processed\n...`
-- [ ] Unit tests verify section parsing and updates
+- [x] `internal/plan/feedback.go` defines feedback file operations
+- [x] `FeedbackPath(plan *Plan) string` returns `<plan-path-without-ext>.feedback.md`
+- [x] `ReadFeedback(plan *Plan) (string, error)` reads pending feedback section
+- [x] `AppendFeedback(plan *Plan, source string, content string) error` adds timestamped entry to Pending section
+- [x] `MarkProcessed(plan *Plan, entry string) error` moves entry from Pending to Processed
+- [x] File format matches existing: `# Feedback\n## Pending\n...\n## Processed\n...`
+- [x] Unit tests verify section parsing and updates
 
 **Subtasks:**
-1. [ ] Implement path derivation
-2. [ ] Implement ReadFeedback (parse Pending section)
-3. [ ] Implement AppendFeedback
-4. [ ] Implement MarkProcessed
-5. [ ] Write unit tests with sample files
+1. [x] Implement path derivation
+2. [x] Implement ReadFeedback (parse Pending section)
+3. [x] Implement AppendFeedback
+4. [x] Implement MarkProcessed
+5. [x] Write unit tests with sample files
 
 ---
 

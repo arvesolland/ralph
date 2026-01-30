@@ -301,3 +301,32 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward implementation. Added `AppendProgressWithTime` for deterministic tests.
 
 **Next:** T13 - Implement feedback file handling (depends on T8, which is complete)
+
+---
+### Iteration 13: T13 - Implement feedback file handling
+**Completed:**
+- Created `internal/plan/feedback.go` with:
+  - `FeedbackPath(plan *Plan) string` returns `<plan-path-without-ext>.feedback.md`
+  - `ReadFeedback(plan *Plan) (string, error)` reads pending section content
+  - `extractPendingSection()` helper to parse `## Pending` section from file content
+  - `AppendFeedback(plan *Plan, source string, content string) error` adds timestamped entry
+  - `AppendFeedbackWithTime()` variant for testing with explicit timestamp
+  - `insertIntoPendingSection()` helper to insert entries in correct location
+  - `MarkProcessed(plan *Plan, entry string) error` moves entry from Pending to Processed
+  - `moveEntryToProcessed()` helper for the actual move logic
+  - `CreateFeedbackFile(plan *Plan) error` creates file with proper structure
+  - File format: `# Feedback: {name}\n\n## Pending\n...\n\n## Processed\n...`
+- Created `internal/plan/feedback_test.go` with 16 test functions:
+  - TestFeedbackPath (3 subtests: simple, nested, dots in name)
+  - TestReadFeedback_NonExistent, TestReadFeedback_Existing, TestReadFeedback_EmptyPendingSection
+  - TestAppendFeedback_NewFile, TestAppendFeedback_ExistingFile, TestAppendFeedback_NoSource
+  - TestMarkProcessed_Success, TestMarkProcessed_EntryNotFound, TestMarkProcessed_FileNotExists
+  - TestCreateFeedbackFile_NewFile, TestCreateFeedbackFile_AlreadyExists
+  - TestExtractPendingSection (5 subtests: normal, empty, no processed, no pending, with comments)
+  - TestFeedbackPath_PreservesDirectory
+- All tests pass (95 existing + 16 new = 111 total across plan package)
+- Build succeeds
+
+**Gotcha:** None - implementation follows the same patterns as progress.go with section-aware parsing.
+
+**Next:** T14 - Add `ralph status` command (depends on T11 and T3, both complete)
