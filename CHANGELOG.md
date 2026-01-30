@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Use queue plan path for plan name in notifications
 - Sync .ralph/config.yaml to worktree during init
 - Add Slack notification for plan review start
 - Include PR URL in Slack completion notification

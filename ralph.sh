@@ -242,6 +242,8 @@ fi
 echo -e "${BLUE}========================================"
 if [ "$REVIEW_PLAN" = true ]; then
   echo -e "Phase 2: Implementation"
+  # Notify implementation start (after review)
+  send_plan_progress "Starting implementation" "$QUEUE_PLAN_PATH" "🔨" "$CONFIG_DIR"
 else
   echo -e "Implementation"
 fi
