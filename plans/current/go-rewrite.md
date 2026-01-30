@@ -63,24 +63,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Logging foundation used by all other components. Must be in place before any other code.
 
 **Requires:** T1
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/log/logger.go` defines `Logger` interface with `Debug`, `Info`, `Warn`, `Error` methods
-- [ ] Default implementation writes to stderr with timestamps
-- [ ] `--verbose` enables Debug level, default is Info
-- [ ] `--quiet` suppresses Info (only Warn and Error)
-- [ ] Colors enabled when stdout is TTY: Debug=gray, Info=default, Warn=yellow, Error=red, Success=green
-- [ ] `--no-color` flag disables colors
-- [ ] Unit tests verify log level filtering and color codes
+- [x] `internal/log/logger.go` defines `Logger` interface with `Debug`, `Info`, `Warn`, `Error` methods
+- [x] Default implementation writes to stderr with timestamps
+- [x] `--verbose` enables Debug level, default is Info
+- [x] `--quiet` suppresses Info (only Warn and Error)
+- [x] Colors enabled when stdout is TTY: Debug=gray, Info=default, Warn=yellow, Error=red, Success=green
+- [x] `--no-color` flag disables colors
+- [x] Unit tests verify log level filtering and color codes
 
 **Subtasks:**
-1. [ ] Define Logger interface
-2. [ ] Implement ConsoleLogger with level filtering
-3. [ ] Add color support with TTY detection
-4. [ ] Add Success level (custom, not standard log level)
-5. [ ] Write unit tests for level filtering
-6. [ ] Write unit tests for color output
+1. [x] Define Logger interface
+2. [x] Implement ConsoleLogger with level filtering
+3. [x] Add color support with TTY detection
+4. [x] Add Success level (custom, not standard log level)
+5. [x] Write unit tests for level filtering
+6. [x] Write unit tests for color output
 
 ---
 
