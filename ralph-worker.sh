@@ -228,12 +228,13 @@ has_incomplete_tasks() {
   grep -q '^\s*-\s*\[ \]' "$plan_file" 2>/dev/null
 }
 
-# Move plan to completed with its progress file
+# Move plan to completed with its progress and feedback files
 complete_plan() {
   local plan_file="$1"
   local plan_name=$(basename "$plan_file" .md)
   local plan_dir=$(dirname "$plan_file")
   local progress_file="$plan_dir/${plan_name}.progress.md"
+  local feedback_file="$plan_dir/${plan_name}.feedback.md"
   local timestamp=$(date +%Y%m%d-%H%M%S)
   local completed_subdir="$COMPLETED_DIR/${timestamp}-${plan_name}"
 
@@ -245,6 +246,20 @@ complete_plan() {
   # Move the progress file if it exists (plan-specific learnings)
   if [ -f "$progress_file" ]; then
     mv "$progress_file" "$completed_subdir/progress.md"
+  fi
+
+  # Move the feedback file if it exists (human input from Slack)
+  if [ -f "$feedback_file" ]; then
+    mv "$feedback_file" "$completed_subdir/feedback.md"
+    echo "  Archived feedback file" >&2
+  fi
+
+  # Clean up Slack thread tracking for this plan
+  local thread_tracker="$CONFIG_DIR/slack_threads.json"
+  if [ -f "$thread_tracker" ] && command -v jq &> /dev/null; then
+    local tmp_file=$(mktemp)
+    jq --arg plan "$plan_file" 'del(.[$plan])' "$thread_tracker" > "$tmp_file" && mv "$tmp_file" "$thread_tracker"
+    echo "  Cleaned up Slack thread tracking" >&2
   fi
 
   # If this is a reverse-specs plan, also archive the discovery document
@@ -505,6 +520,12 @@ process_plan() {
   echo -e "${BLUE}Executing in worktree:${NC} $worktree_path"
   echo ""
 
+  # Sync feedback file TO worktree (human input from queue directory)
+  if [[ -f "${plan_file%.md}.feedback.md" ]]; then
+    cp "${plan_file%.md}.feedback.md" "$worktree_path/plan.feedback.md"
+    echo -e "${YELLOW}Synced feedback file to worktree${NC}"
+  fi
+
   # Build ralph.sh arguments - use plan.md inside worktree
   local ralph_args=("plan.md" --max "$MAX_ITERATIONS")
 
@@ -515,7 +536,8 @@ process_plan() {
 
   # Run ralph.sh INSIDE the worktree
   # This means ralph.sh operates on the feature branch without switching branches in main worktree
-  (cd "$worktree_path" && "$SCRIPT_DIR/ralph.sh" "${ralph_args[@]}")
+  # Export queue plan path so blocker notifications register with the correct path for feedback sync
+  (cd "$worktree_path" && RALPH_QUEUE_PLAN_PATH="$plan_file" "$SCRIPT_DIR/ralph.sh" "${ralph_args[@]}")
   local exit_code=$?
 
   # Sync plan file back to current/ (so queue state reflects progress)
@@ -524,6 +546,14 @@ process_plan() {
   fi
   if [[ -f "$worktree_path/plan.progress.md" ]]; then
     cp "$worktree_path/plan.progress.md" "${plan_file%.md}.progress.md" 2>/dev/null || true
+  fi
+  # Sync feedback file back (agent may have processed items)
+  if [[ -f "$worktree_path/plan.feedback.md" ]]; then
+    cp "$worktree_path/plan.feedback.md" "${plan_file%.md}.feedback.md" 2>/dev/null || true
+  fi
+  # Sync blockers tracking file (for deduplication)
+  if [[ -f "$worktree_path/plan.blockers" ]]; then
+    cp "$worktree_path/plan.blockers" "${plan_file%.md}.blockers" 2>/dev/null || true
   fi
 
   # If ralph.sh completed successfully (exit 0), trigger completion workflow
@@ -697,6 +727,9 @@ do_complete() {
     fi
     if [[ -f "$worktree_path/plan.progress.md" ]]; then
       cp "$worktree_path/plan.progress.md" "${current_plan%.md}.progress.md"
+    fi
+    if [[ -f "$worktree_path/plan.feedback.md" ]]; then
+      cp "$worktree_path/plan.feedback.md" "${current_plan%.md}.feedback.md"
     fi
   fi
 

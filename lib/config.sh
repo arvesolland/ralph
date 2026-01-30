@@ -199,7 +199,7 @@ log_info() {
 # Send notification to Slack webhook if configured
 # Usage: send_slack_notification "event_type" "message" ["config_dir"]
 #
-# Event types: start, complete, iteration, error
+# Event types: start, complete, iteration, error, blocker
 # Config in .ralph/config.yaml:
 #   slack:
 #     webhook_url: "https://hooks.slack.com/services/..."
@@ -207,6 +207,7 @@ log_info() {
 #     notify_complete: true   # notify on plan completion (default: true)
 #     notify_iteration: false # notify on each iteration (default: false)
 #     notify_error: true      # notify on errors (default: true)
+#     notify_blocker: true    # notify when human input needed (default: true)
 #
 send_slack_notification() {
   local event_type="$1"
@@ -239,6 +240,10 @@ send_slack_notification() {
       should_notify=$(config_get "slack.notify_error" "$config_file")
       should_notify=${should_notify:-true}
       ;;
+    blocker)
+      should_notify=$(config_get "slack.notify_blocker" "$config_file")
+      should_notify=${should_notify:-true}
+      ;;
   esac
 
   if [ "$should_notify" != "true" ]; then
@@ -256,6 +261,7 @@ send_slack_notification() {
     complete) emoji="✅" ;;
     iteration) emoji="🔄" ;;
     error)    emoji="❌" ;;
+    blocker)  emoji="🛑" ;;
   esac
 
   # Build JSON payload
@@ -272,6 +278,319 @@ EOF
   curl -s -X POST -H 'Content-type: application/json' \
     --data "$payload" \
     "$webhook_url" >/dev/null 2>&1 &
+}
+
+# ============================================
+# Slack Bot Notifications with Thread Tracking
+# ============================================
+# All plan notifications go to a single thread per plan.
+# This enables:
+# - All updates in one place (start, progress, blockers, completion)
+# - Reply to any message to provide feedback
+#
+# Thread tracking files:
+# - .ralph/slack_threads.json - maps plan files to their Slack threads
+#
+
+# Send a message to Slack via API (with optional thread)
+# Usage: slack_post_message "message" "emoji" ["thread_ts"]
+# Returns: message ts on stdout
+slack_post_message() {
+  local message="$1"
+  local emoji="${2:-🤖}"
+  local thread_ts="$3"
+  local config_dir="${4:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  local bot_token="${SLACK_BOT_TOKEN:-}"
+  local channel=$(config_get "slack.channel" "$config_file")
+
+  if [ -z "$bot_token" ] || [ -z "$channel" ]; then
+    return 1
+  fi
+
+  local project_name=$(config_get "project.name" "$config_file")
+  project_name=${project_name:-"Ralph"}
+
+  local full_message=$(printf '%s' "$emoji *[$project_name]* $message")
+
+  # Escape for JSON
+  full_message=$(echo "$full_message" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+
+  # Build JSON payload
+  local payload="{\"channel\": \"$channel\", \"text\": \"$full_message\", \"unfurl_links\": false, \"unfurl_media\": false"
+  if [ -n "$thread_ts" ]; then
+    payload="$payload, \"thread_ts\": \"$thread_ts\""
+  fi
+  payload="$payload}"
+
+  local response=$(curl -s -X POST "https://slack.com/api/chat.postMessage" \
+    -H "Authorization: Bearer $bot_token" \
+    -H "Content-Type: application/json" \
+    -d "$payload" 2>/dev/null)
+
+  if echo "$response" | grep -q '"ok":true'; then
+    echo "$response" | grep -o '"ts":"[^"]*"' | head -1 | sed 's/"ts":"//;s/"//'
+    return 0
+  fi
+
+  return 1
+}
+
+# Get or create a Slack thread for a plan
+# Usage: get_plan_thread "plan_file" "config_dir"
+# Returns: thread_ts on stdout (empty if no thread exists)
+get_plan_thread() {
+  local plan_file="$1"
+  local config_dir="${2:-$CONFIG_DIR}"
+  local tracker_file="$config_dir/slack_threads.json"
+
+  if [ ! -f "$tracker_file" ]; then
+    echo ""
+    return
+  fi
+
+  # Look up thread for this plan
+  if command -v jq &> /dev/null; then
+    jq -r --arg plan "$plan_file" '.[$plan].thread_ts // empty' "$tracker_file" 2>/dev/null
+  else
+    grep -o "\"$plan_file\"[^}]*\"thread_ts\":\"[^\"]*\"" "$tracker_file" 2>/dev/null | grep -o '"thread_ts":"[^"]*"' | sed 's/"thread_ts":"//;s/"//'
+  fi
+}
+
+# Register a plan's Slack thread
+# Usage: register_plan_thread "plan_file" "channel" "thread_ts" "config_dir"
+register_plan_thread() {
+  local plan_file="$1"
+  local channel="$2"
+  local thread_ts="$3"
+  local config_dir="${4:-$CONFIG_DIR}"
+  local tracker_file="$config_dir/slack_threads.json"
+
+  mkdir -p "$(dirname "$tracker_file")"
+
+  local threads="{}"
+  if [ -f "$tracker_file" ]; then
+    threads=$(cat "$tracker_file" 2>/dev/null || echo "{}")
+  fi
+
+  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  if command -v jq &> /dev/null; then
+    echo "$threads" | jq --arg plan "$plan_file" \
+      --arg channel "$channel" \
+      --arg ts "$thread_ts" \
+      --arg created "$timestamp" \
+      '. + {($plan): {"channel": $channel, "thread_ts": $ts, "created": $created}}' \
+      > "$tracker_file"
+  else
+    if [ "$threads" = "{}" ]; then
+      echo "{\"$plan_file\": {\"channel\": \"$channel\", \"thread_ts\": \"$thread_ts\", \"created\": \"$timestamp\"}}" > "$tracker_file"
+    else
+      echo "${threads%\}}, \"$plan_file\": {\"channel\": \"$channel\", \"thread_ts\": \"$thread_ts\", \"created\": \"$timestamp\"}}" > "$tracker_file"
+    fi
+  fi
+
+  log_info "Registered Slack thread $thread_ts for plan: $plan_file" >&2
+}
+
+# Send plan start notification and create thread
+# Usage: send_plan_start "plan_name" "plan_file" "max_iterations" "config_dir"
+# Returns: thread_ts on stdout
+send_plan_start_notification() {
+  local plan_name="$1"
+  local plan_file="$2"
+  local max_iterations="$3"
+  local config_dir="${4:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  local should_notify=$(config_get "slack.notify_start" "$config_file")
+  should_notify=${should_notify:-true}
+  if [ "$should_notify" != "true" ]; then
+    return 0
+  fi
+
+  local channel=$(config_get "slack.channel" "$config_file")
+  local message="Starting plan: *$plan_name* (max $max_iterations iterations)"
+
+  local thread_ts=$(slack_post_message "$message" "🚀" "" "$config_dir")
+
+  if [ -n "$thread_ts" ] && [ -n "$channel" ]; then
+    register_plan_thread "$plan_file" "$channel" "$thread_ts" "$config_dir"
+    echo "$thread_ts"
+  else
+    # Fallback to webhook
+    send_slack_notification "start" "Starting plan: *$plan_name* (max $max_iterations iterations)" "$config_dir"
+  fi
+}
+
+# Send progress update to plan thread
+# Usage: send_plan_progress "message" "plan_file" "emoji" "config_dir"
+send_plan_progress() {
+  local message="$1"
+  local plan_file="$2"
+  local emoji="${3:-🔄}"
+  local config_dir="${4:-$CONFIG_DIR}"
+
+  local thread_ts=$(get_plan_thread "$plan_file" "$config_dir")
+
+  if [ -n "$thread_ts" ]; then
+    slack_post_message "$message" "$emoji" "$thread_ts" "$config_dir" >/dev/null
+  fi
+}
+
+# Send blocker notification to plan thread
+# Usage: send_blocker_notification "message" "plan_file" "config_dir"
+send_blocker_notification() {
+  local message="$1"
+  local plan_file="$2"
+  local config_dir="${3:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  local should_notify=$(config_get "slack.notify_blocker" "$config_file")
+  should_notify=${should_notify:-true}
+  if [ "$should_notify" != "true" ]; then
+    return 0
+  fi
+
+  local thread_ts=$(get_plan_thread "$plan_file" "$config_dir")
+
+  if [ -n "$thread_ts" ]; then
+    # Post to existing plan thread
+    slack_post_message "$message\n\n_Reply to this thread to provide feedback._" "🛑" "$thread_ts" "$config_dir" >/dev/null
+    echo "$thread_ts"
+  else
+    # No plan thread - create one for this blocker
+    local project_name=$(config_get "project.name" "$config_file")
+    project_name=${project_name:-"Ralph"}
+    local channel=$(config_get "slack.channel" "$config_file")
+
+    local new_ts=$(slack_post_message "$message\n\n_Reply to this thread to provide feedback._" "🛑" "" "$config_dir")
+
+    if [ -n "$new_ts" ] && [ -n "$channel" ]; then
+      register_plan_thread "$plan_file" "$channel" "$new_ts" "$config_dir"
+      echo "$new_ts"
+    else
+      # Fallback to webhook
+      send_slack_notification "blocker" "$message" "$config_dir"
+    fi
+  fi
+}
+
+# Send completion notification to plan thread
+# Usage: send_plan_complete "plan_name" "plan_file" "iterations" "config_dir"
+send_plan_complete_notification() {
+  local plan_name="$1"
+  local plan_file="$2"
+  local iterations="$3"
+  local config_dir="${4:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  local should_notify=$(config_get "slack.notify_complete" "$config_file")
+  should_notify=${should_notify:-true}
+  if [ "$should_notify" != "true" ]; then
+    return 0
+  fi
+
+  local thread_ts=$(get_plan_thread "$plan_file" "$config_dir")
+  local message="Plan *$plan_name* completed successfully after $iterations iterations!"
+
+  if [ -n "$thread_ts" ]; then
+    slack_post_message "$message" "✅" "$thread_ts" "$config_dir" >/dev/null
+  else
+    send_slack_notification "complete" "$message" "$config_dir"
+  fi
+}
+
+# Send error notification to plan thread
+# Usage: send_plan_error "message" "plan_file" "config_dir"
+send_plan_error_notification() {
+  local message="$1"
+  local plan_file="$2"
+  local config_dir="${3:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  local should_notify=$(config_get "slack.notify_error" "$config_file")
+  should_notify=${should_notify:-true}
+  if [ "$should_notify" != "true" ]; then
+    return 0
+  fi
+
+  local thread_ts=$(get_plan_thread "$plan_file" "$config_dir")
+
+  if [ -n "$thread_ts" ]; then
+    slack_post_message "$message" "❌" "$thread_ts" "$config_dir" >/dev/null
+  else
+    send_slack_notification "error" "$message" "$config_dir"
+  fi
+}
+
+# ============================================
+# Blocker Detection
+# ============================================
+# Extract blocker information from Claude output
+# Blockers use format: <blocker>description</blocker>
+# Returns: blocker content or empty string
+#
+extract_blocker() {
+  local output="$1"
+
+  # Extract content between <blocker> tags (handles multiline)
+  echo "$output" | grep -ozP '<blocker>[\s\S]*?</blocker>' 2>/dev/null \
+    | sed 's/<blocker>//g' | sed 's/<\/blocker>//g' | tr '\0' '\n' | head -1
+}
+
+# Get short hash of blocker content (for deduplication)
+blocker_hash() {
+  local content="$1"
+  echo "$content" | md5sum 2>/dev/null | cut -c1-8 || echo "$content" | shasum | cut -c1-8
+}
+
+# Check if blocker has already been notified (stored in slack_threads.json)
+# Returns: 0 if already notified, 1 if new
+blocker_already_notified() {
+  local blocker_hash="$1"
+  local plan_file="$2"
+  local config_dir="${3:-$CONFIG_DIR}"
+  local tracker_file="$config_dir/slack_threads.json"
+
+  if [ ! -f "$tracker_file" ]; then
+    return 1  # New blocker
+  fi
+
+  # Check if this blocker hash is in the notified_blockers array for this plan
+  if command -v jq &> /dev/null; then
+    if jq -e --arg plan "$plan_file" --arg hash "$blocker_hash" \
+       '.[$plan].notified_blockers // [] | index($hash) != null' "$tracker_file" >/dev/null 2>&1; then
+      return 0  # Already notified
+    fi
+  else
+    if grep -q "\"$blocker_hash\"" "$tracker_file" 2>/dev/null; then
+      return 0  # Simple check
+    fi
+  fi
+
+  return 1  # New blocker
+}
+
+# Mark blocker as notified (stored in slack_threads.json)
+mark_blocker_notified() {
+  local blocker_hash="$1"
+  local plan_file="$2"
+  local config_dir="${3:-$CONFIG_DIR}"
+  local tracker_file="$config_dir/slack_threads.json"
+
+  if [ ! -f "$tracker_file" ]; then
+    return 0
+  fi
+
+  if command -v jq &> /dev/null; then
+    local tmp_file=$(mktemp)
+    jq --arg plan "$plan_file" --arg hash "$blocker_hash" \
+       'if .[$plan] then .[$plan].notified_blockers = ((.[$plan].notified_blockers // []) + [$hash] | unique) else . end' \
+       "$tracker_file" > "$tmp_file" && mv "$tmp_file" "$tracker_file"
+  fi
+  # Without jq, we just skip tracking (may cause duplicate notifications)
 }
 
 # Run claude with retry logic for transient errors

@@ -158,9 +158,10 @@ echo ""
 
 cd "$PROJECT_ROOT"
 
-# Notify plan start
+# Notify plan start (creates Slack thread for all updates)
 PLAN_NAME=$(basename "$PLAN_FILE" .md)
-send_slack_notification "start" "Starting plan: *$PLAN_NAME* (max $MAX_ITERATIONS iterations)" "$CONFIG_DIR"
+QUEUE_PLAN_PATH="${RALPH_QUEUE_PLAN_PATH:-$PLAN_PATH}"
+PLAN_THREAD_TS=$(send_plan_start_notification "$PLAN_NAME" "$QUEUE_PLAN_PATH" "$MAX_ITERATIONS" "$CONFIG_DIR")
 
 # No branch switching! ralph.sh now runs in whatever directory/worktree it's invoked in
 # Branch management is handled by ralph-worker.sh using git worktrees
@@ -290,15 +291,91 @@ $(cat "$PLAN_PATH")"
       echo "Plan file: $PLAN_FILE"
       rm -f "$SCRIPT_DIR/context.json"
 
-      # Notify completion
-      send_slack_notification "complete" "Plan *$PLAN_NAME* completed successfully after $i iterations! 🎉" "$CONFIG_DIR"
+      # Notify completion (to plan thread)
+      send_plan_complete_notification "$PLAN_NAME" "$QUEUE_PLAN_PATH" "$i" "$CONFIG_DIR"
 
       # Completion workflow is handled by ralph-worker.sh when running in worktree mode
       # ralph-worker.sh will detect exit code 0 and call do_complete
 
       exit 0
     else
-      log_warn "Verification failed: Plan has incomplete tasks. Continuing..."
+      log_warn "Verification failed: Plan has incomplete tasks."
+
+      # Get detailed explanation of what's incomplete
+      EXPLAIN_PROMPT="Read this plan file and explain what tasks are NOT complete.
+Be specific: list the task IDs/names and what criteria are not met.
+If all tasks appear complete, explain why you flagged it as incomplete.
+
+$(cat "$PLAN_PATH")"
+
+      EXPLANATION=$(run_claude_simple_with_retry "$EXPLAIN_PROMPT" --model haiku -p 2>/dev/null || echo "Could not get detailed explanation")
+
+      # Write explanation to feedback file so agent sees it next iteration
+      FEEDBACK_FILE="${PLAN_PATH%.md}.feedback.md"
+      TIMESTAMP=$(date "+%Y-%m-%d %H:%M")
+
+      if [ ! -f "$FEEDBACK_FILE" ]; then
+        cat > "$FEEDBACK_FILE" << EOF
+# Feedback: $(basename "${PLAN_PATH%.md}")
+
+## Pending
+
+## Processed
+EOF
+      fi
+
+      # Add verification failure to Pending section
+      # Format: timestamp header, then indented explanation block
+      {
+        # Read file, insert after ## Pending
+        while IFS= read -r line || [ -n "$line" ]; do
+          echo "$line"
+          if [ "$line" = "## Pending" ]; then
+            echo "- [$TIMESTAMP] **Verification failed:**"
+            echo "$EXPLANATION" | sed 's/^/  /'
+            echo ""
+          fi
+        done
+      } < "$FEEDBACK_FILE" > "${FEEDBACK_FILE}.tmp" && mv "${FEEDBACK_FILE}.tmp" "$FEEDBACK_FILE"
+
+      echo ""
+      echo -e "${YELLOW}Verification details written to: $FEEDBACK_FILE${NC}"
+      echo -e "${YELLOW}The agent will see this on the next iteration.${NC}"
+      echo ""
+      echo "Continuing..."
+    fi
+  fi
+
+  # Check for blocker (human input needed)
+  if echo "$OUTPUT" | grep -q "<blocker>"; then
+    BLOCKER_CONTENT=$(extract_blocker "$OUTPUT")
+    if [ -n "$BLOCKER_CONTENT" ]; then
+      BLOCKER_HASH=$(blocker_hash "$BLOCKER_CONTENT")
+
+      # Use queue path for blocker tracking (consistent across worktree iterations)
+      BLOCKER_PLAN_PATH="${RALPH_QUEUE_PLAN_PATH:-$PLAN_PATH}"
+
+      # Only notify if this is a new blocker (avoid spamming same message)
+      if ! blocker_already_notified "$BLOCKER_HASH" "$BLOCKER_PLAN_PATH" "$CONFIG_DIR"; then
+        echo ""
+        log_warn "Blocker detected - human input required"
+        echo -e "${YELLOW}$BLOCKER_CONTENT${NC}"
+
+        # Send Slack notification with blocker details (with thread tracking if API configured)
+        # Use queue path for thread registration (so bot writes to correct location for sync)
+        # Falls back to PLAN_PATH when running standalone (not via ralph-worker.sh)
+        BLOCKER_PLAN_PATH="${RALPH_QUEUE_PLAN_PATH:-$PLAN_PATH}"
+        BLOCKER_MSG=$(echo "$BLOCKER_CONTENT" | head -5 | tr '\n' ' ' | sed 's/  */ /g')
+        THREAD_TS=$(send_blocker_notification "Plan *$PLAN_NAME* needs human input (iteration $i):\n$BLOCKER_MSG\n\n_Reply to this thread to provide feedback._" "$BLOCKER_PLAN_PATH" "$CONFIG_DIR")
+
+        mark_blocker_notified "$BLOCKER_HASH" "$BLOCKER_PLAN_PATH" "$CONFIG_DIR"
+        echo ""
+        if [ -n "$THREAD_TS" ]; then
+          echo "Slack notification sent (thread: $THREAD_TS). Reply to the thread or edit: ${PLAN_PATH%.md}.feedback.md"
+        else
+          echo "Slack notification sent. Add response to: ${PLAN_PATH%.md}.feedback.md"
+        fi
+      fi
     fi
   fi
 
@@ -312,7 +389,7 @@ log_warn "Max iterations ($MAX_ITERATIONS) reached"
 echo "Check plan file for remaining tasks: $PLAN_FILE"
 rm -f "$SCRIPT_DIR/context.json"
 
-# Notify max iterations reached
-send_slack_notification "error" "Plan *$PLAN_NAME* hit max iterations ($MAX_ITERATIONS) without completing" "$CONFIG_DIR"
+# Notify max iterations reached (to plan thread)
+send_plan_error_notification "Plan *$PLAN_NAME* hit max iterations ($MAX_ITERATIONS) without completing" "$QUEUE_PLAN_PATH" "$CONFIG_DIR"
 
 exit 1

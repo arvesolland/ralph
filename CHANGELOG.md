@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Human input/blocker system: agent can signal `<blocker>` when human action required
+- Slack notification for blockers (`notify_blocker` config option, default: true)
+- Feedback file (`<plan>.feedback.md`) for human responses to blockers
+- Blocker deduplication to avoid Slack notification spam
+- Slack Socket Mode bot for handling thread replies (`slack-bot/`)
+- Thread tracking for blocker notifications (enables Slack reply → feedback file)
 - Worktree initialization: auto-install dependencies when creating plan worktrees
 - Support for `.ralph/hooks/worktree-init` custom hook script
 - Auto-detection for npm, yarn, pnpm, bun, composer, pip, poetry, bundle, go, cargo
@@ -16,11 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ralph-worker.sh --reset` to move current plan back to pending and start fresh
 
 ### Fixed
+- Verification loop now writes detailed failure reasons to feedback file (prevents infinite "incomplete tasks" loops)
 - Handle Claude Code CLI hanging bug (GitHub Issue #19060) with timeout-based workaround
 - Add real-time streaming output using jq filtering (credit: Matt Pollock)
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Add worktree initialization and reset command
 - Add worktree-based plan isolation
 - Update CHANGELOG.md to include recent changes
 - Add git pull and --review to ralph-cron.sh

@@ -140,7 +140,8 @@ Progress persists in:
 
 1. Agent outputs `<promise>COMPLETE</promise>` when all tasks done
 2. Haiku verification confirms plan is actually complete (prevents false positives)
-3. If plan is in `plans/current/`, triggers completion workflow (archive + optional PR)
+3. If verification fails, detailed reason is written to `<plan>.feedback.md` so agent can address it
+4. If plan is in `plans/current/`, triggers completion workflow (archive + optional PR)
 
 ### Slack Notifications (Optional)
 
@@ -153,9 +154,72 @@ slack:
   notify_complete: true   # plan completion (default: true)
   notify_iteration: false # each iteration (default: false)
   notify_error: true      # errors/max iterations (default: true)
+  notify_blocker: true    # when human input needed (default: true)
 ```
 
 Notifications are sent async and silently skip if `webhook_url` is not set.
+
+### Human Input / Blockers
+
+When the agent encounters a task requiring human action (e.g., making a GitHub package public, approving a deployment), it signals a blocker:
+
+```
+<blocker>
+Description of what is needed.
+Action: Steps the human should take.
+Resume: What happens once resolved.
+</blocker>
+```
+
+**How it works:**
+1. Agent outputs `<blocker>` marker when stuck on human-required task
+2. Ralph detects the marker and sends Slack notification (if configured)
+3. Human provides input via `<plan>.feedback.md` file
+4. Agent reads feedback file next iteration and continues
+
+**Feedback file format** (`plans/current/<plan>.feedback.md`):
+```markdown
+# Feedback: plan-name
+
+## Pending
+- [2024-01-30 14:32] Package is now public, you can verify the pull
+
+## Processed
+<!-- Agent moves items here after reading -->
+```
+
+**Files involved:**
+- `<plan>.feedback.md` - Human writes here, agent reads and acts
+- `<plan>.blockers` - Tracks notified blockers (avoids Slack spam)
+- `.ralph/slack_threads.json` - Maps Slack threads to plans (for reply tracking)
+
+Both feedback and blocker files are synced between queue directory and worktree.
+
+### Slack Bot (Reply Tracking)
+
+For automatic handling of Slack thread replies, run the Socket Mode bot:
+
+```bash
+# Install dependencies
+pip install -r slack-bot/requirements.txt
+
+# Set tokens
+export SLACK_BOT_TOKEN="xoxb-..."   # Bot User OAuth Token
+export SLACK_APP_TOKEN="xapp-..."   # App-Level Token (Socket Mode)
+
+# Run bot
+python slack-bot/ralph_slack_bot.py --project-root .
+```
+
+Configure in `.ralph/config.yaml`:
+```yaml
+slack:
+  webhook_url: "https://hooks.slack.com/services/..."
+  channel: "C0123456789"  # Channel ID (required for reply tracking)
+  notify_blocker: true
+```
+
+See `slack-bot/README.md` for full setup instructions.
 
 ### Skills (.claude/skills/)
 
@@ -245,5 +309,6 @@ git push && git push --tags
 - **Feature branches**: Created via worktree by bash, not Claude - prompt just tells agent the branch name
 - **Test workspace**: Must use `git init -b main` since config expects "main" branch
 - **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion - haiku verification catches this
+- **Verification failures**: When haiku says plan is incomplete, detailed explanation is written to feedback file for agent to address
 - **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph-worker.sh --cleanup` to remove them
 - **Plan file sync**: Plan file is copied into worktree; changes are synced back to `current/` after each iteration

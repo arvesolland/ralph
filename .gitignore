@@ -9,5 +9,17 @@ context.json
 # Test workspaces (created at runtime)
 test/workspaces/
 
+# Environment files (secrets)
+.env
+*.env
+slack-bot/.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
 # OS files
 .DS_Store

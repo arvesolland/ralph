@@ -91,6 +91,22 @@ Iteration log - what was done, gotchas, and next steps.
 
 This is faster and more reliable than searching the codebase to understand current state.
 
+### 6. Feedback File (Human Input)
+Check for `<plan-name>.feedback.md` in the same folder as the plan. This file contains human responses to blockers.
+
+**If it exists, read it.** Look for the `## Pending` section:
+```markdown
+## Pending
+- [2024-01-30 14:32] Package is now public, you can verify the pull
+- [2024-01-30 15:00] Use OAuth instead of API keys for auth
+```
+
+**Act on pending feedback:**
+1. Read and understand the human's input
+2. If it resolves a blocker, continue with the task
+3. Move processed items to `## Processed` section
+4. Log in progress file that you received and acted on feedback
+
 ---
 
 ## Task Selection
@@ -236,6 +252,40 @@ If tasks remain incomplete, end your response normally after completing your sub
 
 ---
 
+## Human Input Required (Blockers)
+
+When you encounter a task that **requires human action** and cannot be automated:
+- Making a GitHub package public via web UI
+- Approving a PR or deployment
+- Providing API keys or credentials
+- Making a decision that requires human judgment
+
+**Signal the blocker** by outputting:
+```
+<blocker>
+Brief description of what is needed.
+Action: Specific steps the human should take.
+Resume: What you will do once the blocker is resolved.
+</blocker>
+```
+
+Example:
+```
+<blocker>
+GitHub package visibility must be set to public via web UI.
+Action: Go to https://github.com/.../packages → Settings → Change visibility to Public
+Resume: Once public, I will verify anonymous pull works and complete T1.
+</blocker>
+```
+
+**Important:**
+- The orchestrator will send a Slack notification when it sees this marker
+- Continue working on other tasks if possible (don't stop the loop unnecessarily)
+- Check the feedback file each iteration for human responses
+- Once the blocker is resolved (via feedback file or by verifying the action was taken), continue normally
+
+---
+
 ## Summary: Execution Checklist
 
 1. ☐ Read CLAUDE.md
@@ -243,12 +293,13 @@ If tasks remain incomplete, end your response normally after completing your sub
 3. ☐ Read context.json
 4. ☐ Read plan file
 5. ☐ Read/create progress file (create with header if doesn't exist)
-6. ☐ Select next task/subtask
-7. ☐ Implement
-8. ☐ Validate (lint + test)
-9. ☐ Update plan checkboxes
-10. ☐ **Verify acceptance criteria if task may be complete**
-11. ☐ Update task status if ALL criteria met
-12. ☐ **Update progress file** (EVERY iteration - log what you did)
-13. ☐ **Commit ALL changes** (code + plan + progress file - always include progress file)
-14. ☐ Output `<promise>COMPLETE</promise>` if plan done, else end normally
+6. ☐ **Read feedback file** (if exists - check for human responses to blockers)
+7. ☐ Select next task/subtask
+8. ☐ Implement (or signal `<blocker>` if human action required)
+9. ☐ Validate (lint + test)
+10. ☐ Update plan checkboxes
+11. ☐ **Verify acceptance criteria if task may be complete**
+12. ☐ Update task status if ALL criteria met
+13. ☐ **Update progress file** (EVERY iteration - log what you did)
+14. ☐ **Commit ALL changes** (code + plan + progress file - always include progress file)
+15. ☐ Output `<promise>COMPLETE</promise>` if plan done, else end normally
