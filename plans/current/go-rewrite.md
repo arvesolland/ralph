@@ -637,26 +637,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Retry transient failures with configurable backoff.
 
 **Requires:** T2
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/retry.go` defines `Retrier` struct
-- [ ] `Do(fn func() error) error` executes function with retry
-- [ ] Configurable: MaxRetries (default 5), InitialDelay (default 5s), MaxDelay (default 60s)
-- [ ] Exponential backoff with jitter (±25%)
-- [ ] `IsRetryable(err error) bool` identifies transient errors
-- [ ] Retryable: context.DeadlineExceeded, rate limit errors, connection errors
-- [ ] Non-retryable: invalid arguments, auth failure
-- [ ] Logs each retry attempt with delay
-- [ ] Unit tests verify backoff timing and retry counts
+- [x] `internal/runner/retry.go` defines `Retrier` struct
+- [x] `Do(fn func() error) error` executes function with retry
+- [x] Configurable: MaxRetries (default 5), InitialDelay (default 5s), MaxDelay (default 60s)
+- [x] Exponential backoff with jitter (±25%)
+- [x] `IsRetryable(err error) bool` identifies transient errors
+- [x] Retryable: context.DeadlineExceeded, rate limit errors, connection errors
+- [x] Non-retryable: invalid arguments, auth failure
+- [x] Logs each retry attempt with delay
+- [x] Unit tests verify backoff timing and retry counts
 
 **Subtasks:**
-1. [ ] Define Retrier struct with config
-2. [ ] Implement Do() with retry loop
-3. [ ] Implement exponential backoff with jitter
-4. [ ] Implement IsRetryable error classification
-5. [ ] Add logging
-6. [ ] Write unit tests
+1. [x] Define Retrier struct with config
+2. [x] Implement Do() with retry loop
+3. [x] Implement exponential backoff with jitter
+4. [x] Implement IsRetryable error classification
+5. [x] Add logging
+6. [x] Write unit tests
 
 ---
 

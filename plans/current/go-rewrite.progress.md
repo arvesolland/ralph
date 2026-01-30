@@ -629,3 +629,31 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Claude CLI stream-json format has multiple event types: `assistant` (contains text/tool_use content), `result` (final result), `init`, `tool_result`, etc. Only `assistant` events contain extractable text in `message.content[]` with `type: "text"`.
 
 **Next:** T24 - Implement retry logic with exponential backoff (depends on T2, which is complete)
+
+---
+### Iteration 24: T24 - Implement retry logic with exponential backoff
+**Completed:**
+- Created `internal/runner/retry.go` with:
+  - `RetryConfig` struct with MaxRetries (default 5), InitialDelay (default 5s), MaxDelay (default 60s), JitterFactor (0.25)
+  - `Retrier` struct with config and clock interface (for testing)
+  - `Do(fn func() error) error` executes function with retry
+  - `DoWithContext(ctx context.Context, fn func() error) error` for cancellation support
+  - `calculateDelay(attempt int)` with exponential backoff (initialDelay * 2^attempt) and jitter (±25%)
+  - `IsRetryable(err error) bool` classifies errors:
+    - Retryable: context.DeadlineExceeded, ErrRateLimit, ErrConnectionFailed, ErrTimeout, net.Error (timeout/temporary), DNS errors, syscall errors, error messages containing rate limit/timeout/5xx patterns
+    - Non-retryable: context.Canceled, NonRetryableError wrapper, auth failures, 4xx errors
+  - `WrapNonRetryable(err error) error` for marking errors as non-retryable
+  - Custom error types: ErrRateLimit, ErrConnectionFailed, ErrTimeout
+  - Logging of each retry attempt with delay
+- Created `internal/runner/retry_test.go` with 26 test functions:
+  - TestDefaultRetryConfig, TestRetrier_Do_Success, TestRetrier_Do_SuccessAfterRetries
+  - TestRetrier_Do_MaxRetriesExhausted, TestRetrier_Do_NonRetryableError
+  - TestRetrier_DoWithContext_Cancellation, TestRetrier_ExponentialBackoff
+  - TestRetrier_MaxDelayCaped, TestRetrier_JitterRange, TestRetrier_Attempts
+  - TestIsRetryable_* (various error types, messages, wrappers)
+  - TestRetrier_ZeroRetries, TestRetrier_IntegrationTiming, TestIsRetryable_WrappedErrors
+- All 62 runner tests pass (16 command + 20 stream + 26 retry)
+
+**Gotcha:** Platform-specific syscall errors (ECONNREFUSED, ECONNRESET) don't work consistently with errors.Is on all platforms. The error message matching handles these cases reliably.
+
+**Next:** T25 - Implement Runner with timeout handling (depends on T22, T23, T24 - all complete)
