@@ -22,7 +22,7 @@ CONFIG_DIR=$(find_config_dir "$PROJECT_ROOT")
 PLAN_FILE=""
 MAX_ITERATIONS=30
 REVIEW_PLAN=false
-REVIEW_PASSES=2
+REVIEW_PASSES=5
 CREATE_PR=false
 
 # Parse arguments
@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
       echo ""
       echo "Options:"
       echo "  --review-plan, -r      Run plan reviewer first to optimize the plan"
-      echo "  --review-passes N      Number of review passes (default: 2)"
+      echo "  --review-passes N      Number of review passes (default: 5)"
       echo "  --max, -m N            Max worker iterations (default: 30)"
       echo "  --create-pr, --pr      Create PR via Claude Code after completion"
       echo "  --version, -v          Show version"
@@ -176,6 +176,9 @@ if [ "$REVIEW_PLAN" = true ]; then
   echo -e "Phase 1: Plan Review"
   echo -e "========================================${NC}"
   echo ""
+
+  # Notify plan review start
+  send_plan_progress "Starting plan review ($REVIEW_PASSES passes)" "$QUEUE_PLAN_PATH" "🔍" "$CONFIG_DIR"
 
   # Capture plan before review for diff
   PLAN_BEFORE_REVIEW=$(cat "$PLAN_PATH")
