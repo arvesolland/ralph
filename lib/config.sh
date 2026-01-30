@@ -337,13 +337,34 @@ slack_post_message() {
   return 1
 }
 
+# Get the thread tracker file path (global or local based on config)
+# Usage: get_thread_tracker_file "config_dir"
+get_thread_tracker_file() {
+  local config_dir="${1:-$CONFIG_DIR}"
+  local config_file="$config_dir/config.yaml"
+
+  # Check if global mode is enabled
+  local use_global=$(config_get "slack.global_bot" "$config_file")
+
+  if [ "$use_global" = "true" ]; then
+    echo "$HOME/.ralph/slack_threads.json"
+  else
+    echo "$config_dir/slack_threads.json"
+  fi
+}
+
 # Get or create a Slack thread for a plan
 # Usage: get_plan_thread "plan_file" "config_dir"
 # Returns: thread_ts on stdout (empty if no thread exists)
 get_plan_thread() {
   local plan_file="$1"
   local config_dir="${2:-$CONFIG_DIR}"
-  local tracker_file="$config_dir/slack_threads.json"
+  local tracker_file=$(get_thread_tracker_file "$config_dir")
+
+  # Convert to absolute path for global mode
+  if [[ "$plan_file" != /* ]]; then
+    plan_file="$(cd "$(dirname "$plan_file")" && pwd)/$(basename "$plan_file")"
+  fi
 
   if [ ! -f "$tracker_file" ]; then
     echo ""
@@ -365,7 +386,12 @@ register_plan_thread() {
   local channel="$2"
   local thread_ts="$3"
   local config_dir="${4:-$CONFIG_DIR}"
-  local tracker_file="$config_dir/slack_threads.json"
+  local tracker_file=$(get_thread_tracker_file "$config_dir")
+
+  # Convert to absolute path for global mode
+  if [[ "$plan_file" != /* ]]; then
+    plan_file="$(cd "$(dirname "$plan_file")" && pwd)/$(basename "$plan_file")"
+  fi
 
   mkdir -p "$(dirname "$tracker_file")"
 

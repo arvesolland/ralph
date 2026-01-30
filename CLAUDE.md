@@ -197,27 +197,36 @@ Both feedback and blocker files are synced between queue directory and worktree.
 
 ### Slack Bot (Reply Tracking)
 
-For automatic handling of Slack thread replies, run the Socket Mode bot:
+The Slack bot handles thread replies and writes them to feedback files. It auto-starts when `ralph-worker.sh` runs if configured.
 
-```bash
-# Install dependencies
-pip install -r slack-bot/requirements.txt
+**Setup:**
+1. Install: `pip install -r slack-bot/requirements.txt`
+2. Create `~/.ralph/slack.env` with your tokens (for global bot):
+   ```
+   SLACK_BOT_TOKEN=xoxb-...
+   SLACK_APP_TOKEN=xapp-...
+   ```
+3. Or export them as environment variables
 
-# Set tokens
-export SLACK_BOT_TOKEN="xoxb-..."   # Bot User OAuth Token
-export SLACK_APP_TOKEN="xapp-..."   # App-Level Token (Socket Mode)
-
-# Run bot
-python slack-bot/ralph_slack_bot.py --project-root .
-```
-
-Configure in `.ralph/config.yaml`:
+**Configuration in `.ralph/config.yaml`:**
 ```yaml
 slack:
-  webhook_url: "https://hooks.slack.com/services/..."
-  channel: "C0123456789"  # Channel ID (required for reply tracking)
+  webhook_url: "https://hooks.slack.com/services/..."  # Fallback
+  channel: "C0123456789"    # Channel ID (required for reply tracking)
+  global_bot: true          # Use single bot for all repos (recommended)
   notify_blocker: true
 ```
+
+**Modes:**
+- `global_bot: true` - One bot per machine at `~/.ralph/`, handles multiple repos
+- `global_bot: false` - One bot per repo at `.ralph/` (default)
+
+**Auto-start:** When `ralph-worker.sh` runs, it automatically starts the bot if:
+- `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are set
+- `slack.channel` is configured
+- Bot isn't already running
+
+**Manual start:** `python slack-bot/ralph_slack_bot.py --global`
 
 See `slack-bot/README.md` for full setup instructions.
 

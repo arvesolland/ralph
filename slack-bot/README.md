@@ -1,15 +1,52 @@
 # Ralph Slack Bot
 
-Socket Mode bot for handling human feedback on blockers via Slack thread replies.
+Socket Mode bot for handling human feedback via Slack thread replies. Supports both per-repo and global (multi-repo) modes.
 
 ## How It Works
 
 1. When Ralph encounters a task requiring human action, it outputs a `<blocker>` marker
-2. Ralph sends a Slack notification with the blocker details
-3. The notification is registered for thread tracking
+2. Ralph sends a Slack notification (creates a thread)
+3. All plan updates go to that thread (progress, blockers, completion)
 4. Humans reply to the Slack thread
 5. The bot writes replies to the plan's feedback file
 6. Ralph picks up the feedback on the next iteration
+
+## Quick Start (Global Mode - Recommended)
+
+```bash
+# 1. Install dependencies
+pip install -r slack-bot/requirements.txt
+
+# 2. Create global credentials file
+mkdir -p ~/.ralph
+cat > ~/.ralph/slack.env << 'EOF'
+SLACK_BOT_TOKEN=xoxb-your-token
+SLACK_APP_TOKEN=xapp-your-token
+EOF
+
+# 3. Configure your project's .ralph/config.yaml
+slack:
+  channel: "C0123456789"  # Your channel ID
+  global_bot: true        # Use single bot for all repos
+
+# 4. Bot auto-starts when ralph-worker.sh runs!
+```
+
+## Modes
+
+### Global Mode (`--global` or `global_bot: true`)
+
+- Single bot instance at `~/.ralph/`
+- Handles multiple repos simultaneously
+- Thread tracking uses absolute paths
+- Credentials from `~/.ralph/slack.env`
+- **Recommended for machines running multiple Ralph projects**
+
+### Local Mode (default)
+
+- One bot per repo at `.ralph/`
+- Only handles that repo
+- Credentials from `./slack-bot/.env` or environment
 
 ## Setup
 
@@ -35,6 +72,7 @@ Socket Mode bot for handling human feedback on blockers via Slack thread replies
    - `chat:write` - Send messages
    - `channels:history` - Read channel messages
    - `groups:history` - Read private channel messages
+   - `users:read` - Get user display names
 3. Install app to workspace
 4. Copy the Bot User OAuth Token (starts with `xoxb-`)
 
@@ -46,76 +84,59 @@ Socket Mode bot for handling human feedback on blockers via Slack thread replies
    - `message.channels` - Messages in public channels
    - `message.groups` - Messages in private channels
 
-### 5. Install the Bot
-
-```bash
-cd slack-bot
-pip install -r requirements.txt
-```
-
-### 6. Configure Ralph
+### 5. Configure Ralph
 
 Add to your `.ralph/config.yaml`:
 
 ```yaml
 slack:
-  webhook_url: "https://hooks.slack.com/services/..."  # For basic notifications
-  channel: "C0123456789"  # Channel ID for blocker notifications (required for thread tracking)
+  channel: "C0123456789"    # Channel ID (required)
+  global_bot: true          # Use global bot mode
+  notify_start: true
+  notify_complete: true
   notify_blocker: true
+  notify_error: true
 ```
 
-Set environment variables:
+## Running the Bot
+
+### Auto-Start (Recommended)
+
+When `ralph-worker.sh` runs, it automatically starts the bot if:
+- `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are available
+- `slack.channel` is configured
+- Bot isn't already running
+
+### Manual Start
 
 ```bash
-export SLACK_BOT_TOKEN="xoxb-..."   # Bot User OAuth Token
-export SLACK_APP_TOKEN="xapp-..."   # App-Level Token (for Socket Mode)
+# Global mode (handles all repos)
+python slack-bot/ralph_slack_bot.py --global
+
+# Local mode (current repo only)
+python slack-bot/ralph_slack_bot.py
+
+# Check status
+python slack-bot/ralph_slack_bot.py --status
+python slack-bot/ralph_slack_bot.py --global --status
 ```
-
-### 7. Run the Bot
-
-```bash
-# In your project directory
-python slack-bot/ralph_slack_bot.py --project-root .
-```
-
-Or run as a background service:
-
-```bash
-nohup python slack-bot/ralph_slack_bot.py --project-root /path/to/project > slack-bot.log 2>&1 &
-```
-
-## Usage Modes
-
-### With Thread Tracking (Recommended)
-
-When both `SLACK_BOT_TOKEN` and `slack.channel` are configured:
-- Blocker notifications are sent via Slack API
-- Thread IDs are tracked in `.ralph/slack_threads.json`
-- Running the bot enables reply handling
-
-### Without Thread Tracking (Webhook Only)
-
-When only `slack.webhook_url` is configured:
-- Blocker notifications are sent via webhook
-- No thread tracking (can't receive replies)
-- Humans must edit feedback file manually
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `ralph_slack_bot.py` | Main bot script (Socket Mode) |
-| `send_blocker.sh` | CLI tool to send blocker with tracking |
-| `requirements.txt` | Python dependencies |
+| `~/.ralph/slack.env` | Global credentials |
+| `~/.ralph/slack_threads.json` | Global thread tracking |
+| `~/.ralph/slack_bot.pid` | Global bot PID file |
+| `~/.ralph/slack_bot.log` | Global bot log |
 
 ## Thread Tracking
 
-Threads are tracked in `.ralph/slack_threads.json`:
+Threads are tracked with absolute paths (global mode):
 
 ```json
 {
-  "C0123456789:1234567890.123456": {
-    "plan_file": "plans/current/my-plan.md",
+  "/Users/dev/project-a/plans/current/my-plan.md": {
     "channel": "C0123456789",
     "thread_ts": "1234567890.123456",
     "created": "2024-01-30T14:32:00Z"
@@ -139,17 +160,17 @@ When the bot receives a thread reply, it writes to `<plan>.feedback.md`:
 
 ## Troubleshooting
 
+### Bot not starting automatically
+
+1. Check `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are set (or in `~/.ralph/slack.env`)
+2. Check `slack.channel` is configured
+3. Check logs: `tail -f ~/.ralph/slack_bot.log`
+
 ### Bot not receiving messages
 
-1. Check Socket Mode is enabled
+1. Check Socket Mode is enabled in Slack app settings
 2. Verify event subscriptions are set up
 3. Ensure bot is in the channel (invite with `/invite @Ralph Bot`)
-
-### Thread replies not working
-
-1. Verify `SLACK_BOT_TOKEN` is set and valid
-2. Check `slack.channel` is configured with the correct Channel ID
-3. Look for errors in bot logs
 
 ### Finding Channel ID
 

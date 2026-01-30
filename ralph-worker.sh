@@ -255,10 +255,19 @@ complete_plan() {
   fi
 
   # Clean up Slack thread tracking for this plan
+  local use_global=$(config_get "slack.global_bot" "$CONFIG_DIR/config.yaml" 2>/dev/null)
   local thread_tracker="$CONFIG_DIR/slack_threads.json"
+  local plan_key="$plan_file"
+
+  if [ "$use_global" = "true" ]; then
+    thread_tracker="$HOME/.ralph/slack_threads.json"
+    # Global mode uses absolute paths
+    plan_key="$(cd "$plan_dir" && pwd)/${plan_name}.md"
+  fi
+
   if [ -f "$thread_tracker" ] && command -v jq &> /dev/null; then
     local tmp_file=$(mktemp)
-    jq --arg plan "$plan_file" 'del(.[$plan])' "$thread_tracker" > "$tmp_file" && mv "$tmp_file" "$thread_tracker"
+    jq --arg plan "$plan_key" 'del(.[$plan])' "$thread_tracker" > "$tmp_file" && mv "$tmp_file" "$thread_tracker"
     echo "  Cleaned up Slack thread tracking" >&2
   fi
 
@@ -567,9 +576,78 @@ process_plan() {
   return $exit_code
 }
 
+# Start Slack bot if configured and not running
+# Uses global bot mode (~/.ralph/) to handle multiple repos
+start_slack_bot_if_needed() {
+  # Check if Slack is configured
+  local bot_token="${SLACK_BOT_TOKEN:-}"
+  local app_token="${SLACK_APP_TOKEN:-}"
+  local channel=$(config_get "slack.channel" "$CONFIG_DIR/config.yaml" 2>/dev/null)
+  local use_global=$(config_get "slack.global_bot" "$CONFIG_DIR/config.yaml" 2>/dev/null)
+
+  # Need both tokens and channel for bot functionality
+  if [ -z "$bot_token" ] || [ -z "$app_token" ] || [ -z "$channel" ]; then
+    return 0  # Not configured, skip silently
+  fi
+
+  # Determine mode and pid file
+  local global_flag=""
+  local pid_file="$CONFIG_DIR/slack_bot.pid"
+  if [ "$use_global" = "true" ]; then
+    global_flag="--global"
+    pid_file="$HOME/.ralph/slack_bot.pid"
+  fi
+
+  # Check if bot is already running
+  if [ -f "$pid_file" ]; then
+    local pid=$(cat "$pid_file" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      log_info "Slack bot already running (PID: $pid)" >&2
+      return 0
+    fi
+    # Stale pid file, remove it
+    rm -f "$pid_file"
+  fi
+
+  # Find the bot script
+  local bot_script="$SCRIPT_DIR/slack-bot/ralph_slack_bot.py"
+  if [ ! -f "$bot_script" ]; then
+    log_warn "Slack bot script not found: $bot_script" >&2
+    return 0
+  fi
+
+  # Check if python and slack-bolt are available
+  if ! command -v python3 &> /dev/null; then
+    log_warn "Python3 not found, cannot start Slack bot" >&2
+    return 0
+  fi
+
+  # Start the bot in background
+  local log_file="$HOME/.ralph/slack_bot.log"
+  if [ "$use_global" != "true" ]; then
+    log_file="$CONFIG_DIR/slack_bot.log"
+  fi
+  mkdir -p "$(dirname "$log_file")"
+
+  echo -e "${BLUE}Starting Slack bot...${NC}" >&2
+  nohup python3 "$bot_script" $global_flag >> "$log_file" 2>&1 &
+  local bot_pid=$!
+
+  # Wait a moment and verify it started
+  sleep 2
+  if kill -0 "$bot_pid" 2>/dev/null; then
+    log_success "Slack bot started (PID: $bot_pid, log: $log_file)" >&2
+  else
+    log_warn "Slack bot failed to start - check $log_file" >&2
+  fi
+}
+
 # Main work function
 do_work() {
   ensure_dirs
+
+  # Start Slack bot if configured
+  start_slack_bot_if_needed
 
   # Check for orphaned files before starting
   check_orphaned_files

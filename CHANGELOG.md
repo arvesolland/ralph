@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Add Slack bot for human input handling
 - Add worktree initialization and reset command
 - Add worktree-based plan isolation
 - Update CHANGELOG.md to include recent changes
