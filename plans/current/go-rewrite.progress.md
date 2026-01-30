@@ -277,3 +277,27 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The `listPlans()` helper needs to skip `.progress.md` and `.feedback.md` files which are sibling files to plans, not plans themselves. Used suffix matching for this.
 
 **Next:** T12 - Implement progress file handling (depends on T8, which is complete)
+
+---
+### Iteration 12: T12 - Implement progress file handling
+**Completed:**
+- Created `internal/plan/progress.go` with:
+  - `ProgressPath(plan *Plan) string` returns `<plan-path-without-ext>.progress.md`
+  - `ReadProgress(plan *Plan) (string, error)` reads existing content, returns empty string if not exists
+  - `AppendProgress(plan *Plan, iteration int, content string) error` adds timestamped entry with current time
+  - `AppendProgressWithTime()` variant for testing with explicit timestamp
+  - `CreateProgressFile(plan *Plan) error` creates file with header if not exists
+  - Entry format: `## Iteration N (YYYY-MM-DD HH:MM)\n{content}\n`
+  - All functions create parent directories if needed
+- Created `internal/plan/progress_test.go` with 10 test functions:
+  - TestProgressPath (3 subtests: simple, nested, multiple dots)
+  - TestReadProgress_NonExistent, TestReadProgress_Existing
+  - TestAppendProgress_NewFile, TestAppendProgress_ExistingFile, TestAppendProgress_MultipleIterations
+  - TestCreateProgressFile_NewFile, TestCreateProgressFile_AlreadyExists
+  - TestAppendProgress_CreatesParentDirectory, TestProgressPath_PreservesDirectory
+- All 95 tests pass (85 existing + 10 new)
+- Build succeeds
+
+**Gotcha:** None - straightforward implementation. Added `AppendProgressWithTime` for deterministic tests.
+
+**Next:** T13 - Implement feedback file handling (depends on T8, which is complete)

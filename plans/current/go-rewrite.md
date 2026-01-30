@@ -329,24 +329,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Read and append to progress files for plan execution history.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/progress.go` defines progress file operations
-- [ ] `ProgressPath(plan *Plan) string` returns `<plan-path-without-ext>.progress.md`
-- [ ] `ReadProgress(plan *Plan) (string, error)` reads existing progress (empty string if not exists)
-- [ ] `AppendProgress(plan *Plan, iteration int, content string) error` adds timestamped entry
-- [ ] Entry format: `## Iteration N (YYYY-MM-DD HH:MM)\n{content}\n`
-- [ ] Creates file if not exists
-- [ ] Appends without overwriting existing content
-- [ ] Unit tests verify format and append behavior
+- [x] `internal/plan/progress.go` defines progress file operations
+- [x] `ProgressPath(plan *Plan) string` returns `<plan-path-without-ext>.progress.md`
+- [x] `ReadProgress(plan *Plan) (string, error)` reads existing progress (empty string if not exists)
+- [x] `AppendProgress(plan *Plan, iteration int, content string) error` adds timestamped entry
+- [x] Entry format: `## Iteration N (YYYY-MM-DD HH:MM)\n{content}\n`
+- [x] Creates file if not exists
+- [x] Appends without overwriting existing content
+- [x] Unit tests verify format and append behavior
 
 **Subtasks:**
-1. [ ] Implement path derivation
-2. [ ] Implement ReadProgress
-3. [ ] Implement AppendProgress with timestamp
-4. [ ] Handle file creation
-5. [ ] Write unit tests
+1. [x] Implement path derivation
+2. [x] Implement ReadProgress
+3. [x] Implement AppendProgress with timestamp
+4. [x] Handle file creation
+5. [x] Write unit tests
 
 ---
 

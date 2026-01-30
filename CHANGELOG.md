@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- implement queue management for plan lifecycle
 - implement checkbox update and atomic save
 - implement task extraction from plans
 - implement Plan struct and parsing
