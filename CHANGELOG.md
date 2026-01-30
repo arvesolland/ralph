@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Slack bot files included in install.sh and ralph-update.sh
+- Slack configuration template in default config.yaml
+- Global Slack credentials detection during install
 - Human input/blocker system: agent can signal `<blocker>` when human action required
 - Slack notification for blockers (`notify_blocker` config option, default: true)
 - Feedback file (`<plan>.feedback.md`) for human responses to blockers
@@ -28,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- Auto-detect global Slack credentials
 - Add global Slack bot mode and auto-start
 - Add Slack bot for human input handling
 - Add worktree initialization and reset command

@@ -83,6 +83,7 @@ echo ""
 echo -e "${BLUE}Creating directory structure...${NC}"
 mkdir -p "$PROJECT_ROOT/scripts/ralph/lib"
 mkdir -p "$PROJECT_ROOT/scripts/ralph/prompts/base"
+mkdir -p "$PROJECT_ROOT/scripts/ralph/slack-bot"
 mkdir -p "$PROJECT_ROOT/.ralph"
 
 # Function to copy or download a file
@@ -119,6 +120,9 @@ SCRIPTS=(
   "ralph-discover.sh"
   "lib/config.sh"
   "lib/worktree.sh"
+  "slack-bot/ralph_slack_bot.py"
+  "slack-bot/requirements.txt"
+  "slack-bot/README.md"
 )
 
 for script in "${SCRIPTS[@]}"; do
@@ -193,6 +197,16 @@ commands:
 #   copy_env_files: ".env, .env.local"  # Files to copy (default: .env)
 #   init_commands: "npm ci"              # Custom commands (skips auto-detection)
 # Or create .ralph/hooks/worktree-init executable script for full control
+
+# Slack notifications (optional)
+# slack:
+#   channel: "C0123456789"    # Channel ID (required for notifications)
+#   global_bot: true          # Use global bot at ~/.ralph/ (recommended)
+#   notify_start: true
+#   notify_complete: true
+#   notify_blocker: true
+#   notify_error: true
+# Credentials: Set SLACK_BOT_TOKEN and SLACK_APP_TOKEN in ~/.ralph/slack.env
 EOF
   echo "  - .ralph/config.yaml (created)"
 else
@@ -310,6 +324,7 @@ IGNORE_ENTRIES=(
   "scripts/ralph/context.json"
   "scripts/ralph/.current_task.md"
   "scripts/ralph/.worker.lock"
+  "scripts/ralph/slack-bot/.env"
 )
 
 for entry in "${IGNORE_ENTRIES[@]}"; do
@@ -318,6 +333,17 @@ for entry in "${IGNORE_ENTRIES[@]}"; do
     echo "  - Added: $entry"
   fi
 done
+
+# Check for global Slack credentials
+GLOBAL_SLACK_ENV="$HOME/.ralph/slack.env"
+if [ -f "$GLOBAL_SLACK_ENV" ]; then
+  echo ""
+  echo -e "${GREEN}Found global Slack credentials at ~/.ralph/slack.env${NC}"
+  echo "To enable Slack notifications, add to .ralph/config.yaml:"
+  echo '  slack:'
+  echo '    channel: "YOUR_CHANNEL_ID"'
+  echo '    global_bot: true'
+fi
 
 echo ""
 echo -e "${GREEN}========================================"
@@ -341,6 +367,11 @@ echo "   ./scripts/ralph/ralph-init.sh --ai"
 echo ""
 echo "3. Create a plan file and run Ralph:"
 echo "   ./scripts/ralph/ralph.sh docs/my-plan.md"
+echo ""
+echo "4. (Optional) Set up Slack notifications:"
+echo "   - Create ~/.ralph/slack.env with SLACK_BOT_TOKEN and SLACK_APP_TOKEN"
+echo "   - Add slack.channel to .ralph/config.yaml"
+echo "   - See scripts/ralph/slack-bot/README.md for setup details"
 echo ""
 
 # Run AI init if requested

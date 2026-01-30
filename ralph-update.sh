@@ -126,6 +126,22 @@ for skill in "${SKILLS[@]}"; do
   fi
 done
 
+# Update Slack bot
+echo -e "${BLUE}Updating Slack bot...${NC}"
+mkdir -p "$SCRIPT_DIR/slack-bot"
+SLACK_BOT_FILES=(
+  "slack-bot/ralph_slack_bot.py"
+  "slack-bot/requirements.txt"
+  "slack-bot/README.md"
+)
+
+for bot_file in "${SLACK_BOT_FILES[@]}"; do
+  echo -n "  - $bot_file "
+  if download_file "$bot_file" "$SCRIPT_DIR/$bot_file"; then
+    echo -e "${GREEN}✓${NC}"
+  fi
+done
+
 # Make scripts executable
 chmod +x "$SCRIPT_DIR/"*.sh
 chmod +x "$SCRIPT_DIR/lib/"*.sh 2>/dev/null || true
@@ -139,6 +155,7 @@ echo "  - .ralph/patterns.md"
 echo "  - .ralph/boundaries.md"
 echo "  - .ralph/tech-stack.md"
 echo "  - scripts/ralph/progress.txt"
+echo "  - scripts/ralph/slack-bot/.env"
 
 echo ""
 echo -e "${GREEN}Update complete!${NC}"
