@@ -81,6 +81,12 @@ config_get() {
         if (key == child) {
           val = $0
           gsub(/^[^:]*: */, "", val)
+          # Strip inline comments (but not inside quotes)
+          if (match(val, /^"[^"]*"/)) {
+            val = substr(val, RSTART, RLENGTH)
+          } else {
+            gsub(/[[:space:]]*#.*$/, "", val)
+          }
           gsub(/^"/, "", val)
           gsub(/"$/, "", val)
           print val
