@@ -537,23 +537,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Run custom init commands after worktree creation.
 
 **Requires:** T18, T19
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/hooks.go` defines `RunInitHooks(worktreePath string, config *Config, mainWorktreePath string) error`
-- [ ] Checks for `.ralph/hooks/worktree-init` executable, runs if present
-- [ ] Sets `MAIN_WORKTREE` environment variable when running hook
-- [ ] If config.worktree.init_commands set, runs those (skips auto-detection)
-- [ ] If no hook and no init_commands, falls back to DetectAndInstall
-- [ ] Logs each step for debugging
-- [ ] Integration test with custom hook script
+- [x] `internal/worktree/hooks.go` defines `RunInitHooks(worktreePath string, config *Config, mainWorktreePath string) error`
+- [x] Checks for `.ralph/hooks/worktree-init` executable, runs if present
+- [x] Sets `MAIN_WORKTREE` environment variable when running hook
+- [x] If config.worktree.init_commands set, runs those (skips auto-detection)
+- [x] If no hook and no init_commands, falls back to DetectAndInstall
+- [x] Logs each step for debugging
+- [x] Integration test with custom hook script
 
 **Subtasks:**
-1. [ ] Implement hook file detection
-2. [ ] Implement hook execution with environment
-3. [ ] Implement init_commands execution
-4. [ ] Implement fallback to auto-detection
-5. [ ] Write integration test with hook
+1. [x] Implement hook file detection
+2. [x] Implement hook execution with environment
+3. [x] Implement init_commands execution
+4. [x] Implement fallback to auto-detection
+5. [x] Write integration test with hook
 
 ---
 

@@ -504,3 +504,35 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The feedback file is synced TO the worktree but NOT synced back - feedback is human input that comes from the main worktree, not from the agent's execution.
 
 **Next:** T20 - Implement worktree initialization hooks (depends on T18, T19 - both complete)
+
+---
+### Iteration 20: T20 - Implement worktree initialization hooks
+**Completed:**
+- Created `internal/worktree/hooks.go` with:
+  - `HookResult` struct with Method, Command, Output fields
+  - `RunInitHooks(worktreePath string, cfg *Config, mainWorktreePath string) (*HookResult, error)` main function
+  - Priority order: 1) custom hook, 2) init_commands, 3) auto-detection (DetectAndInstall)
+  - `isExecutable(path string) bool` for cross-platform executable check
+  - `runHook()` executes `.ralph/hooks/worktree-init` with MAIN_WORKTREE env var
+  - `runInitCommands()` runs config.worktree.init_commands in shell
+  - `HookExists(mainWorktreePath string) bool` utility function
+  - Windows support via cmd.exe (vs sh on Unix)
+  - Logs each step with log.Debug and log.Info
+- Created `internal/worktree/hooks_test.go` with 13 test functions:
+  - TestRunInitHooks_CustomHook - verifies hook execution and marker file creation
+  - TestRunInitHooks_InitCommands - verifies init_commands execution
+  - TestRunInitHooks_AutoDetect - verifies fallback to DetectAndInstall
+  - TestRunInitHooks_NoMethod - verifies "none" when no method applies
+  - TestRunInitHooks_HookPriorityOverInitCommands - verifies hook takes priority
+  - TestRunInitHooks_HookNotExecutable - verifies non-executable hook is skipped
+  - TestRunInitHooks_HookFailure - verifies error handling for failing hooks
+  - TestRunInitHooks_InitCommandsFailure - verifies error handling for failing commands
+  - TestRunInitHooks_MainWorktreeEnv - verifies MAIN_WORKTREE is set correctly
+  - TestIsExecutable - tests executable detection logic
+  - TestHookExists - tests hook existence check
+  - TestRunInitHooks_NilConfig - verifies nil config handling
+- All tests pass (51 worktree tests, all project tests pass)
+
+**Gotcha:** The function signature is `(*HookResult, error)` instead of just `error` as in the spec - this provides more useful information about which initialization method was used (hook, init_commands, auto_detect, or none).
+
+**Next:** T21 - Implement orphaned worktree cleanup (depends on T17, T11 - both complete)
