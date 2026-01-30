@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- implement project auto-detection
 - implement Config struct and YAML loading
 - implement structured logging with level filtering and color support
 - initialize Go module and project structure

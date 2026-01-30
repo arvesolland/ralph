@@ -168,27 +168,27 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Load prompt templates and substitute placeholders. Critical for Claude execution.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/prompt/builder.go` defines `Builder` struct
-- [ ] `Build(templatePath string, config *Config, overrides map[string]string) (string, error)` loads and processes template
-- [ ] `{{PLACEHOLDER}}` syntax replaced with config values
-- [ ] Supports all placeholders: PROJECT_NAME, PROJECT_DESCRIPTION, PRINCIPLES, PATTERNS, BOUNDARIES, TECH_STACK, TEST_COMMAND, LINT_COMMAND, BUILD_COMMAND
-- [ ] Missing placeholder files (e.g., .ralph/principles.md) result in empty string substitution (not error)
-- [ ] Unknown placeholders left as-is (for forward compatibility)
-- [ ] `internal/prompt/templates.go` embeds default prompts from `prompts/base/` using `//go:embed`
-- [ ] Falls back to embedded prompts if external file not found
-- [ ] Unit tests verify all placeholder substitutions
+- [x] `internal/prompt/builder.go` defines `Builder` struct
+- [x] `Build(templatePath string, config *Config, overrides map[string]string) (string, error)` loads and processes template
+- [x] `{{PLACEHOLDER}}` syntax replaced with config values
+- [x] Supports all placeholders: PROJECT_NAME, PROJECT_DESCRIPTION, PRINCIPLES, PATTERNS, BOUNDARIES, TECH_STACK, TEST_COMMAND, LINT_COMMAND, BUILD_COMMAND
+- [x] Missing placeholder files (e.g., .ralph/principles.md) result in empty string substitution (not error)
+- [x] Unknown placeholders left as-is (for forward compatibility)
+- [x] `internal/prompt/templates.go` embeds default prompts from `prompts/base/` using `//go:embed`
+- [x] Falls back to embedded prompts if external file not found
+- [x] Unit tests verify all placeholder substitutions
 
 **Subtasks:**
-1. [ ] Define Builder struct with config reference
-2. [ ] Implement placeholder detection regex
-3. [ ] Implement substitution logic
-4. [ ] Add embed directives for prompts/base/*.md
-5. [ ] Implement fallback to embedded prompts
-6. [ ] Load .ralph/*.md override files
-7. [ ] Write unit tests with sample templates
+1. [x] Define Builder struct with config reference
+2. [x] Implement placeholder detection regex
+3. [x] Implement substitution logic
+4. [x] Add embed directives for prompts/base/*.md
+5. [x] Implement fallback to embedded prompts
+6. [x] Load .ralph/*.md override files
+7. [x] Write unit tests with sample templates
 
 ---
 

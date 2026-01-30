@@ -117,3 +117,38 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Detection order matters - Node.js is checked first because package.json is common in polyglot repos. Each detector returns nil for "not this language" vs error for "this language but malformed".
 
 **Next:** T6 - Implement prompt template builder (depends on T4, now complete)
+
+---
+### Iteration 6: T6 - Implement prompt template builder
+**Completed:**
+- Created `internal/prompt/builder.go` with:
+  - `Builder` struct with config, configDir, promptsDir fields
+  - `NewBuilder(cfg *Config, configDir, promptsDir string) *Builder` constructor
+  - `Build(templatePath string, overrides map[string]string) (string, error)` method
+  - `placeholderRegex` matching `{{PLACEHOLDER}}` syntax
+  - All placeholders supported: PROJECT_NAME, PROJECT_DESCRIPTION, PRINCIPLES, PATTERNS, BOUNDARIES, TECH_STACK, TEST_COMMAND, LINT_COMMAND, BUILD_COMMAND, DEV_COMMAND
+  - Missing override files (principles.md, etc.) return empty string, not error
+  - Unknown placeholders left as-is for forward compatibility
+  - Template loading: absolute path → external prompts dir → embedded fallback
+- Created `internal/prompt/templates.go` with:
+  - `//go:embed prompts/*.md` directive for embedding templates
+  - `loadEmbeddedPrompt(templatePath string)` function
+  - `ListEmbeddedPrompts()` utility function
+- Copied all prompts from `prompts/base/*.md` to `internal/prompt/prompts/` for embedding
+- Removed placeholder `internal/prompt/prompt.go` file
+- Created `internal/prompt/builder_test.go` with 9 test functions:
+  - TestBuilder_Build_WithConfig - config-based placeholders
+  - TestBuilder_Build_WithOverrideFiles - .ralph/*.md file loading
+  - TestBuilder_Build_MissingOverrideFiles - empty string for missing files
+  - TestBuilder_Build_UnknownPlaceholders - unknown left as-is
+  - TestBuilder_Build_WithExplicitOverrides - override map precedence
+  - TestBuilder_Build_EmbeddedPrompt - embedded prompt fallback
+  - TestBuilder_Build_AbsolutePath - absolute path support
+  - TestListEmbeddedPrompts - embedded listing
+  - TestPlaceholderRegex - regex pattern matching
+- All 31 tests pass (22 existing + 9 new)
+- Build succeeds, `ralph version` works
+
+**Gotcha:** The `Build` method signature differs slightly from spec - it's a method on Builder rather than taking Config as parameter. This is cleaner since Builder already holds config reference and allows for additional state/caching if needed later.
+
+**Next:** T7 - Add `ralph init` command (depends on T5, T6 - both now complete)
