@@ -6,7 +6,43 @@ This file provides guidance to Claude Code when working on the Ralph repository.
 
 Ralph is an autonomous AI development loop orchestration system implementing the "Ralph Wiggum technique" - fresh context per iteration with progress persisted in files and git.
 
-## Commands
+## Versions
+
+Ralph has two implementations:
+- **Go version** (recommended) - Single binary at `cmd/ralph/`
+- **Bash version** (legacy) - Shell scripts in `scripts/ralph/`
+
+Both use the same config format (`.ralph/config.yaml`) and plan format.
+
+## Commands (Go Version)
+
+```bash
+# Build the Go binary
+make build              # Production build with version info
+make build-dev          # Fast development build
+
+# Run tests
+make test               # Run all unit tests
+make test-short         # Run tests without integration tests
+make test-race          # Run tests with race detector
+go test ./... -v        # Verbose test output
+
+# Run ralph commands
+./ralph init --detect   # Initialize project with auto-detection
+./ralph status          # Show queue status
+./ralph run plan.md     # Run implementation loop on a plan
+./ralph worker          # Process queue (continuous)
+./ralph worker --once   # Process one plan and exit
+./ralph reset           # Move current plan back to pending
+./ralph cleanup         # Remove orphaned worktrees
+./ralph version         # Show version info
+
+# Release (requires goreleaser)
+make release-snapshot   # Test release build
+make release-dry-run    # Dry run release
+```
+
+## Commands (Bash Version - Legacy)
 
 ```bash
 # Run integration tests (real Claude execution, no mocking)
@@ -27,7 +63,29 @@ cd $(mktemp -d) && git init && /path/to/ralph/install.sh --local
 
 ## Architecture
 
-### Core Components
+### Go Version Structure
+
+```
+cmd/ralph/              # Main entry point
+internal/
+├── cli/                # Cobra commands (init, run, worker, status, reset, cleanup, version)
+├── config/             # Config loading, YAML parsing, project detection
+├── plan/               # Plan parsing, task extraction, queue management
+├── runner/             # Claude execution, streaming, retry logic, verification
+├── git/                # Git operations (commit, branch, worktree)
+├── worktree/           # Worktree management, file sync, hooks
+├── notify/             # Slack notifications (webhook, bot API, Socket Mode)
+├── prompt/             # Prompt template building with embedded defaults
+└── log/                # Structured logging with color support
+```
+
+Key packages:
+- `internal/runner/loop.go` - Main iteration loop (prompt → Claude → verify → commit)
+- `internal/worker/worker.go` - Queue processor (pending → current → execute → complete)
+- `internal/worktree/manager.go` - Worktree creation, cleanup, file sync
+- `internal/notify/slack.go` - Slack Bot API with thread tracking
+
+### Bash Version Components (Legacy)
 
 ```
 ralph.sh            # Main implementation loop - iterates until plan complete
@@ -240,6 +298,26 @@ ralph-spec-to-plan/  # Generate plans from specs
 
 ## Key Files
 
+### Go Version
+
+| File | Purpose |
+|------|---------|
+| `cmd/ralph/main.go` | Entry point |
+| `internal/cli/root.go` | Cobra root command and global flags |
+| `internal/cli/run.go` | `ralph run` command |
+| `internal/cli/worker.go` | `ralph worker` command |
+| `internal/runner/loop.go` | Main iteration loop |
+| `internal/worker/worker.go` | Queue processor |
+| `internal/config/config.go` | Config struct and YAML loading |
+| `internal/plan/plan.go` | Plan parsing and task extraction |
+| `internal/git/git.go` | Git CLI wrapper |
+| `internal/worktree/manager.go` | Worktree lifecycle management |
+| `internal/prompt/templates.go` | Embedded prompt templates |
+| `.goreleaser.yaml` | Release configuration |
+| `Makefile` | Build targets |
+
+### Bash Version (Legacy)
+
 | File | Purpose |
 |------|---------|
 | `ralph.sh` | Main entry point - runs implementation loop |
@@ -252,6 +330,32 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `install.sh` | Installer script |
 
 ## Testing
+
+### Go Version
+
+```bash
+# Run all unit tests
+make test
+
+# Run tests with verbose output
+go test ./... -v
+
+# Run specific package tests
+go test ./internal/runner/... -v
+
+# Run tests with race detector
+make test-race
+
+# Run short tests (skip integration)
+make test-short
+
+# Test coverage
+make test-coverage
+```
+
+Test fixtures are in `internal/*/testdata/` directories.
+
+### Bash Version (Legacy)
 
 Tests run real Claude against test plans in isolated git workspaces:
 
@@ -296,6 +400,26 @@ Plans automatically get feature branches via worktree isolation:
 
 ## Releasing
 
+### Go Version
+
+```bash
+# Test release build locally
+make release-snapshot
+
+# Create a release (requires git tag)
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+
+# GoReleaser will automatically:
+# - Build binaries for all platforms (linux, darwin, windows × amd64, arm64)
+# - Create GitHub release with binaries
+# - Update Homebrew formula (if configured)
+```
+
+Release configuration is in `.goreleaser.yaml`.
+
+### Bash Version (Legacy)
+
 ```bash
 # Install hooks (one time)
 ./hooks/install-hooks.sh
@@ -313,11 +437,44 @@ git push && git push --tags
 
 ## Gotchas
 
-- **stdout pollution**: Worker functions that return values must redirect output to stderr (`>&2`)
+### Both Versions
+
 - **Plan validation removed**: Plans can be any markdown format; Claude handles parsing
-- **Feature branches**: Created via worktree by bash, not Claude - prompt just tells agent the branch name
-- **Test workspace**: Must use `git init -b main` since config expects "main" branch
-- **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion - haiku verification catches this
-- **Verification failures**: When haiku says plan is incomplete, detailed explanation is written to feedback file for agent to address
-- **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph-worker.sh --cleanup` to remove them
+- **Feature branches**: Created via worktree by Ralph, not Claude - prompt just tells agent the branch name
+- **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion - Haiku verification catches this
+- **Verification failures**: When Haiku says plan is incomplete, detailed explanation is written to feedback file for agent to address
+- **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph cleanup` (Go) or `ralph-worker.sh --cleanup` (bash)
 - **Plan file sync**: Plan file is copied into worktree; changes are synced back to `current/` after each iteration
+
+### Go Version Specific
+
+- **Build artifacts**: Binary is named `ralph` (no extension on Unix, `.exe` on Windows). Add `ralph` to `.gitignore`
+- **Test fixtures**: Located in `internal/*/testdata/` - some tests create temp directories that may need cleanup on failure
+- **Mock scripts**: Integration tests use mock scripts in `internal/runner/testdata/mock-*.sh` - must be executable
+- **Embedded prompts**: Default prompts are embedded via `//go:embed` in `internal/prompt/templates.go`
+
+### Bash Version Specific (Legacy)
+
+- **stdout pollution**: Worker functions that return values must redirect output to stderr (`>&2`)
+- **Test workspace**: Must use `git init -b main` since config expects "main" branch
+
+## Migration from Bash to Go
+
+The Go version is a drop-in replacement for the bash scripts. Both share:
+- Same config format (`.ralph/config.yaml`)
+- Same plan format (markdown with checkboxes)
+- Same directory structure (`plans/pending|current|complete/`)
+- Same completion modes (`--pr`, `--merge`)
+
+Command mapping:
+
+| Bash | Go |
+|------|----|
+| `./ralph.sh plan.md` | `ralph run plan.md` |
+| `./ralph-worker.sh` | `ralph worker` |
+| `./ralph-worker.sh --status` | `ralph status` |
+| `./ralph-worker.sh --reset` | `ralph reset` |
+| `./ralph-worker.sh --cleanup` | `ralph cleanup` |
+| `./ralph-init.sh --detect` | `ralph init --detect` |
+
+**Note:** The bash scripts will be deprecated in a future release. New development should use the Go version.

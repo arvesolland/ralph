@@ -1,0 +1,9 @@
+{
+  "name": "test-node-project",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint .",
+    "build": "tsc",
+    "dev": "node server.js"
+  }
+}

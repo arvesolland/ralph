@@ -1,0 +1,95 @@
+# GoReleaser configuration for Ralph
+# https://goreleaser.com
+
+version: 2
+
+project_name: ralph
+
+# Build configuration
+builds:
+  - id: ralph
+    main: ./cmd/ralph
+    binary: ralph
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Skip arm64 windows (not commonly needed)
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/arvesolland/ralph/internal/cli.Version={{.Version}}
+      - -X github.com/arvesolland/ralph/internal/cli.Commit={{.Commit}}
+      - -X github.com/arvesolland/ralph/internal/cli.BuildDate={{.Date}}
+
+# Archive configuration
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    # Use zip for windows
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE*
+      - README.md
+      - CHANGELOG.md
+
+# Checksum generation
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Snapshot configuration (for testing)
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Changelog generation
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "^Merge pull request"
+      - "^Merge branch"
+
+# Release configuration
+release:
+  github:
+    owner: arvesolland
+    name: ralph
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+
+# Homebrew cask configuration
+homebrew_casks:
+  - name: ralph
+    binaries:
+      - ralph
+    repository:
+      owner: arvesolland
+      name: homebrew-ralph
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/arvesolland/ralph"
+    description: "Autonomous AI development loop orchestration system"
+    license: MIT
+
+# Announce configuration (optional - disabled by default)
+# announce:
+#   slack:
+#     enabled: false

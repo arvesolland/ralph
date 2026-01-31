@@ -1,0 +1,9 @@
+{
+  "name": "test-nextjs-project",
+  "scripts": {
+    "test": "jest",
+    "lint": "next lint",
+    "build": "next build",
+    "dev": "next dev"
+  }
+}

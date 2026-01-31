@@ -1,0 +1,25 @@
+# Ralph Configuration
+
+project:
+  name: "ralph"
+  description: "Autonomous AI development loop orchestration system implementing the Ralph Wiggum technique - fresh context per iteration with progress persisted in files and git"
+
+git:
+  base_branch: "main"
+
+commands:
+  test: "./test/run-tests.sh"
+  lint: ""
+  build: ""
+  dev: ""
+
+completion:
+  mode: "pr"
+
+slack:
+  channel: "C11B5KJRZ"
+  global_bot: true
+  notify_start: true
+  notify_complete: true
+  notify_blocker: true
+  notify_error: true

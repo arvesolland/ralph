@@ -27,12 +27,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ralph-worker.sh --reset` to move current plan back to pending and start fresh
 
 ### Fixed
+- correct gitignore to not exclude cmd/ralph directory
+- migrate from deprecated brews to homebrew_casks in goreleaser
+- use directory instead of deprecated folder in goreleaser config
+- use goreleaser v2 and enable homebrew tap token
 - Verification loop now writes detailed failure reasons to feedback file (prevents infinite "incomplete tasks" loops)
 - Handle Claude Code CLI hanging bug (GitHub Issue #19060) with timeout-based workaround
 - Add real-time streaming output using jq filtering (credit: Matt Pollock)
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- update all task checkboxes to reflect completed implementation
+- final completion verification for Go rewrite
+- complete T43 - Homebrew tap setup verified
+- update goreleaser homebrew_casks config with binaries field
+- sync plan checkboxes with actual state (T44-T46 complete)
+- update progress log for T43 blocker status
+- add integration test suite (T45)
+- update CLAUDE.md for Go version (T46)
+- comprehensive README for Go version (T44)
+- add Homebrew tap config to GoReleaser (T43 partial)
+- add GoReleaser and Makefile for builds (T42)
+- integrate notifications into worker (T41)
+- implement Slack Socket Mode bot for replies (T40)
+- implement Slack Bot API notifications (T39)
+- implement Slack thread tracking (T38)
+- implement Slack webhook notifications (T37)
+- add ralph reset command (T36)
+- add ralph worker command (T35)
+- implement completion workflow merge mode (T34)
+- implement completion workflow PR mode (T33)
+- implement worker queue loop (T32)
+- add ralph run command (T31)
+- implement iteration loop (T30)
+- implement iteration context management (T29)
+- implement completion verification with Haiku (T28)
+- implement blocker extraction (T27)
+- implement Runner interface with timeout handling (T25, T26)
+- implement retry logic with exponential backoff (T24)
+- implement streaming JSON parser (T23)
+- implement Claude CLI command builder (T22)
+- implement orphaned worktree cleanup (T21)
+- implement initialization hooks (T20)
+- implement file sync operations (T19)
+- implement dependency auto-detection (T18)
+- implement WorktreeManager (T17)
+- implement worktree operations (T16)
+- implement Git interface and basic operations
+- add ralph status command
+- implement feedback file handling
+- implement progress file handling
+- implement queue management for plan lifecycle
+- implement checkbox update and atomic save
+- implement task extraction from plans
+- implement Plan struct and parsing
+- add ralph init command
+- implement prompt template builder
+- implement project auto-detection
+- implement Config struct and YAML loading
+- implement structured logging with level filtering and color support
+- initialize Go module and project structure
+- Add Go rewrite spec and implementation plan
+- Add Slack notification when implementation phase starts
 - Use queue plan path for plan name in notifications
 - Sync .ralph/config.yaml to worktree during init
 - Add Slack notification for plan review start

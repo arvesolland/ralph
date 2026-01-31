@@ -3,6 +3,11 @@ context.json
 .current_task.md
 .worker.lock
 
+# Go build artifacts
+/ralph
+*.exe
+dist/
+
 # Worktrees for plan execution (created at runtime)
 .ralph/worktrees/
 
