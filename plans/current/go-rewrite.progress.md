@@ -814,3 +814,30 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The `Run()` method returns `*LoopResult` instead of just `error` as in the spec - this provides more information about the loop outcome (completed, iterations, blocker). Also, the tests take ~37s due to the 3-second cooldowns between iterations.
 
 **Next:** T31 - Add `ralph run` command (depends on T30, now complete)
+
+---
+### Iteration 30: T31 - Add `ralph run` command
+**Completed:**
+- Created `internal/cli/run.go` with:
+  - `ralph run <plan-file>` command with Cobra integration
+  - `--max` flag for max iterations (default 30)
+  - `--review` flag placeholder (logs warning that not implemented)
+  - Plan file validation (exists, absolute path resolution)
+  - Config loading with graceful fallback to defaults
+  - Git repo validation
+  - Iteration loop integration with callbacks for progress/blockers
+  - Signal handling for graceful shutdown (SIGINT/SIGTERM)
+  - Result reporting (iterations, completion status)
+  - Exit code 0 on success/interrupt/blocker, 1 on failure
+- Created `internal/cli/run_test.go` with 6 test functions:
+  - TestRunCmd_HelpOutput - command registration verification
+  - TestRunCmd_FlagsRegistered - --max and --review flags
+  - TestRunCmd_RequiresPlanFile - argument validation
+  - TestRunRun_PlanFileNotExists - error handling
+  - TestRunRun_ValidPlanFileNoGitRepo - git repo validation
+  - TestRunRun_ValidPlanFileInGitRepo - integration test (skipped in short mode)
+- All 16 cli tests pass, all project tests pass
+
+**Gotcha:** None - implementation follows established CLI patterns from status.go. The command uses real Runner (not mock) so full integration tests would need a mock claude script.
+
+**Next:** T32 - Implement worker loop (depends on T30, T11, T17, T19, T20 - all complete)

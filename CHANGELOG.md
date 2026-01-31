@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- implement iteration loop (T30)
 - implement iteration context management (T29)
 - implement completion verification with Haiku (T28)
 - implement blocker extraction (T27)

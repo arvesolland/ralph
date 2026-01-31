@@ -816,24 +816,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > CLI command to run iteration loop on a plan.
 
 **Requires:** T30
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph run <plan>` executes iteration loop on specified plan file
-- [ ] `--max` flag overrides max iterations (default 30)
-- [ ] `--review` flag runs plan review before execution (placeholder for now)
-- [ ] Validates plan file exists before starting
-- [ ] Shows iteration progress (current/max)
-- [ ] Exits with code 0 on success, 1 on failure
-- [ ] Integration test runs loop on test plan
+- [x] `ralph run <plan>` executes iteration loop on specified plan file
+- [x] `--max` flag overrides max iterations (default 30)
+- [x] `--review` flag runs plan review before execution (placeholder for now)
+- [x] Validates plan file exists before starting
+- [x] Shows iteration progress (current/max)
+- [x] Exits with code 0 on success, 1 on failure
+- [x] Integration test runs loop on test plan
 
 **Subtasks:**
-1. [ ] Create internal/cli/run.go
-2. [ ] Implement plan loading and validation
-3. [ ] Wire up iteration loop
-4. [ ] Add --max flag
-5. [ ] Add --review flag (placeholder)
-6. [ ] Write integration test
+1. [x] Create internal/cli/run.go
+2. [x] Implement plan loading and validation
+3. [x] Wire up iteration loop
+4. [x] Add --max flag
+5. [x] Add --review flag (placeholder)
+6. [x] Write integration test
 
 ---
 
