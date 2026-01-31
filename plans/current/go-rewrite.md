@@ -1147,24 +1147,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Document installation, usage, migration from bash.
 
 **Requires:** T35
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] README.md includes installation instructions (brew, binary download)
-- [ ] Quick start section with basic usage
-- [ ] Command reference for all subcommands
-- [ ] Configuration reference (config.yaml format)
-- [ ] Migration guide from bash version
-- [ ] Troubleshooting section
-- [ ] Badge showing latest release version
+- [x] README.md includes installation instructions (brew, binary download)
+- [x] Quick start section with basic usage
+- [x] Command reference for all subcommands
+- [x] Configuration reference (config.yaml format)
+- [x] Migration guide from bash version
+- [x] Troubleshooting section
+- [x] Badge showing latest release version
 
 **Subtasks:**
-1. [ ] Write installation section
-2. [ ] Write quick start
-3. [ ] Write command reference
-4. [ ] Write configuration reference
-5. [ ] Write migration guide
-6. [ ] Add release badge
+1. [x] Write installation section
+2. [x] Write quick start
+3. [x] Write command reference
+4. [x] Write configuration reference
+5. [x] Write migration guide
+6. [x] Add release badge
 
 ---
 

@@ -1,5 +1,8 @@
 # Ralph
 
+[![Release](https://img.shields.io/github/v/release/arvesolland/ralph)](https://github.com/arvesolland/ralph/releases)
+[![License](https://img.shields.io/github/license/arvesolland/ralph)](LICENSE)
+
 An implementation of the Ralph Wiggum technique for autonomous AI development.
 
 ## Why It Works
@@ -26,251 +29,219 @@ Fresh context window (clean slate)
 
 ## Features
 
+- **Single Binary** - Cross-platform Go binary with no dependencies
 - **Structured Plans** - Tasks with dependencies, status tracking, and acceptance criteria
-- **Plan Review** - AI-powered optimization catches overengineering before implementation
+- **Worktree Isolation** - Each plan runs in its own git worktree (no branch switching conflicts)
 - **Task Queue** - File-based queue for processing multiple plans
-- **Auto PR Creation** - Create pull requests via Claude Code on completion
-- **AI-Assisted Setup** - Let Claude analyze your codebase and generate config
+- **Auto PR Creation** - Create pull requests via `gh` CLI on completion
+- **Slack Notifications** - Real-time updates via webhooks or Bot API
+- **Progress Tracking** - Per-plan learnings that future iterations read
 - **Config-Driven** - Customize prompts via config files, not code
-- **Progress Tracking** - Per-plan learnings that future iterations read to avoid repeating mistakes
 
 ## Installation
 
-### Quick Install
+### Homebrew (macOS/Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/arvesolland/ralph/main/install.sh | bash
+brew install arvesolland/tap/ralph
 ```
 
-### With AI-Assisted Configuration
+### Binary Download
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/arvesolland/ralph/releases).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/arvesolland/ralph/main/install.sh | bash -s -- --ai
+# macOS (Apple Silicon)
+curl -LO https://github.com/arvesolland/ralph/releases/latest/download/ralph_darwin_arm64.tar.gz
+tar xzf ralph_darwin_arm64.tar.gz
+sudo mv ralph /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/arvesolland/ralph/releases/latest/download/ralph_darwin_amd64.tar.gz
+tar xzf ralph_darwin_amd64.tar.gz
+sudo mv ralph /usr/local/bin/
+
+# Linux (x64)
+curl -LO https://github.com/arvesolland/ralph/releases/latest/download/ralph_linux_amd64.tar.gz
+tar xzf ralph_linux_amd64.tar.gz
+sudo mv ralph /usr/local/bin/
 ```
 
-### From Local Clone
+### Build from Source
 
 ```bash
 git clone https://github.com/arvesolland/ralph.git
-cd your-project
-../ralph/install.sh --local
+cd ralph
+make build
+sudo mv ralph /usr/local/bin/
 ```
-
-### Shell Aliases (Optional)
-
-After installation, add Ralph aliases to your shell:
-
-```bash
-./scripts/ralph/install-aliases.sh
-```
-
-This adds:
-- `ralph` - Run implementation loop
-- `ralph-worker` - Queue management
-- `ralph-status` - Show queue status
-- `ralph-loop` - Process all plans in queue
-- `ralph-loop-pr` - Process all plans and create PRs
 
 ## Quick Start
 
-### 1. Initialize Configuration
+### 1. Initialize a Project
 
 ```bash
-# Auto-detect project settings
-./scripts/ralph/ralph-init.sh --detect
-
-# Or use AI to analyze your codebase (recommended)
-./scripts/ralph/ralph-init.sh --ai
+cd your-project
+ralph init --detect
 ```
 
-### 2. Create a Plan File
+This creates:
+- `.ralph/config.yaml` - Project configuration
+- `plans/` - Queue directories (pending, current, complete)
+- `specs/INDEX.md` - Feature specification index
 
-Plans follow a structured format with tasks, dependencies, and acceptance criteria:
+### 2. Create a Plan
+
+Create a plan file at `plans/pending/my-feature.md`:
 
 ```markdown
-# Plan: User Authentication
+# Plan: My Feature
+
+**Status:** pending
 
 ## Context
-Add JWT-based authentication to the API. Must be backward compatible with existing sessions.
-
----
-
-## Rules
-1. **Pick task:** First task (by number) where status ≠ `complete` and all `Requires` are `complete`
-2. **Subtasks are sequential.** Complete 1 before 2.
-3. **Task complete when:** All "Done when" + all subtasks checked → set Status: `complete`
-4. **Update file after each checkbox.**
-5. **New work found?** Add to Discovered section, continue current task.
+Brief description of what this plan implements.
 
 ---
 
 ## Tasks
 
-### T1: Create Token Service
-> Core JWT generation and validation
+### T1: First Task
+> Description of the task
 
 **Requires:** —
 **Status:** open
 
 **Done when:**
-- [ ] TokenService with generate() and validate() methods
-- [ ] Unit tests pass
+- [ ] Acceptance criterion 1
+- [ ] Acceptance criterion 2
 
 **Subtasks:**
-1. [ ] Implement generate() with standard claims
-2. [ ] Implement validate() with expiry handling
-3. [ ] Write unit tests
+1. [ ] First implementation step
+2. [ ] Second implementation step
 
 ---
 
-### T2: Update Login Endpoint
-> Modify /auth/login to return JWT
+### T2: Second Task
+> Description of the second task
 
 **Requires:** T1
-**Status:** blocked
+**Status:** open
 
 **Done when:**
-- [ ] /auth/login returns { accessToken, refreshToken }
+- [ ] Task 2 acceptance criterion
 
 **Subtasks:**
-1. [ ] Modify LoginController response
-2. [ ] Update API documentation
+1. [ ] Implementation step
 
 ---
 
 ## Discovered
-<!-- New work found during implementation goes here -->
+<!-- New work found during implementation -->
 ```
 
 ### 3. Run Ralph
 
 ```bash
-# Single plan
-./scripts/ralph/ralph.sh path/to/plan.md
+# Run a single plan
+ralph run plans/pending/my-feature.md
 
-# With plan review first (recommended)
-./scripts/ralph/ralph.sh path/to/plan.md --review-plan
-
-# With PR creation on completion
-./scripts/ralph/ralph.sh path/to/plan.md --create-pr
+# Or use the worker to process the queue
+ralph worker --once
 ```
 
 Ralph will:
-1. Read the plan file
+1. Create a worktree for the plan's feature branch
 2. Find the first task with met dependencies
-3. Find the first unchecked subtask
-4. Implement it
-5. Run validation (lint, tests)
-6. Commit changes
-7. Update the plan file
-8. Repeat until all tasks are complete
-9. Output `<promise>COMPLETE</promise>`
+3. Execute Claude Code with the implementation prompt
+4. Verify completion and commit changes
+5. Repeat until all tasks are complete
+6. Create a PR (if configured)
 
-## Usage
+## Commands
 
-### Main Implementation Loop
+### `ralph init`
 
-```bash
-./scripts/ralph/ralph.sh <plan-file> [options]
-
-Options:
-  --review-plan, -r      Run plan reviewer first (catches overengineering)
-  --review-passes N      Number of review passes (default: 2)
-  --max, -m N            Max iterations (default: 30)
-  --create-pr, --pr      Create PR via Claude Code after completion
-  --version, -v          Show version
-  --help, -h             Show help
-```
-
-### Task Queue (Worker)
-
-For processing multiple plans:
+Initialize Ralph configuration in a project.
 
 ```bash
-# Add plan to queue
-./scripts/ralph/ralph-worker.sh --add path/to/plan.md
+ralph init [flags]
 
-# Check queue status
-./scripts/ralph/ralph-worker.sh --status
-
-# Process current/next plan
-./scripts/ralph/ralph-worker.sh
-
-# Process all plans until queue empty
-./scripts/ralph/ralph-worker.sh --loop
-
-# Process all plans with PR creation
-./scripts/ralph/ralph-worker.sh --loop --create-pr
+Flags:
+  --detect    Auto-detect project type and commands
 ```
 
-Queue folder structure:
+### `ralph run`
+
+Run the implementation loop on a specific plan.
+
+```bash
+ralph run <plan-file> [flags]
+
+Flags:
+  --max int       Max iterations (default 30)
+  --review        Run plan review before execution
 ```
-plans/
-├── pending/      # Plans waiting to be processed
-├── current/      # Currently active plan (0-1 files)
-└── complete/     # Finished plans with logs
+
+### `ralph worker`
+
+Process plans from the queue.
+
+```bash
+ralph worker [flags]
+
+Flags:
+  --once              Process one plan and exit
+  --pr                Create PR on completion (default)
+  --merge             Merge to base branch on completion
+  --interval duration Poll interval when queue empty (default 30s)
+  --max int           Max iterations per plan (default 30)
 ```
 
-## Plan File Format
+### `ralph status`
 
-### Required Sections
+Display queue status and current plan information.
 
-| Section | Description |
-|---------|-------------|
-| `## Context` | Background, constraints, goals |
-| `## Rules` | Task selection rules (embedded in plan) |
-| `## Tasks` | Task definitions with T1, T2 numbering |
-| `## Discovered` | New work found during implementation |
-
-### Task Fields
-
-| Field | Description | Values |
-|-------|-------------|--------|
-| `**Requires:**` | Dependencies | `—` (none), `T1`, `T1, T2` |
-| `**Status:**` | Current state | `open`, `in_progress`, `blocked`, `complete` |
-| `**Done when:**` | Acceptance criteria | Checkboxes |
-| `**Subtasks:**` | Implementation steps | Numbered checkboxes |
-
-### Task Selection Logic
-
+```bash
+ralph status
 ```
-Find first T[n] where:
-  - Status ≠ complete
-  - Every task in "Requires" has Status = complete
 
-Within that task, find first unchecked subtask.
+### `ralph reset`
+
+Move the current plan back to pending.
+
+```bash
+ralph reset [flags]
+
+Flags:
+  --force, -f       Skip confirmation prompt
+  --keep-worktree   Don't remove the worktree
+```
+
+### `ralph cleanup`
+
+Remove orphaned worktrees.
+
+```bash
+ralph cleanup [flags]
+
+Flags:
+  --dry-run    Show what would be removed without removing
+```
+
+### `ralph version`
+
+Show version information.
+
+```bash
+ralph version
 ```
 
 ## Configuration
 
-Configuration lives in `.ralph/`, with specs and plans at repo root:
-
-```
-# Repo root
-specs/               # Feature specifications (see ralph-spec skill)
-├── INDEX.md         # Lookup table for all features
-└── feature/
-    └── SPEC.md
-
-plans/               # Task execution (see ralph-plan skill)
-├── pending/         # Plans waiting to be processed
-├── current/         # Currently active plan (0-1 files)
-└── complete/        # Finished plans with logs
-
-.ralph/              # Ralph configuration
-├── config.yaml      # Project settings
-├── principles.md    # Development principles
-├── patterns.md      # Code patterns to follow
-├── boundaries.md    # Files to never modify
-└── tech-stack.md    # Technology description
-
-.claude/skills/      # Claude Code skills
-├── ralph-spec/      # Working with feature specs
-├── ralph-plan/      # Working with task plans
-└── ralph-spec-to-plan/  # Generating plans from specs
-```
-
 ### config.yaml
+
+Main configuration file at `.ralph/config.yaml`:
 
 ```yaml
 project:
@@ -284,139 +255,188 @@ commands:
   test: "npm test"
   lint: "npm run lint"
   build: "npm run build"
+
+completion:
+  mode: "pr"  # or "merge"
+
+worktree:
+  copy_env_files: ".env, .env.local"
+  init_commands: ""  # Custom init (skips auto-detection if set)
+
+slack:
+  webhook_url: "https://hooks.slack.com/services/..."
+  bot_token: "xoxb-..."  # Optional: for thread replies
+  app_token: "xapp-..."  # Optional: for Socket Mode
+  channel: "C0123456789"  # Required for bot features
+  notify_start: true
+  notify_complete: true
+  notify_error: true
+  notify_blocker: true
+  notify_iteration: false
 ```
 
-### principles.md
+### Prompt Customization
 
-Development principles injected into all prompts:
+Override default prompts by creating files in `.ralph/`:
 
-```markdown
-# Project Principles
+| File | Purpose |
+|------|---------|
+| `principles.md` | Development principles injected into prompts |
+| `patterns.md` | Code patterns for your project |
+| `boundaries.md` | Files Ralph should never modify |
+| `tech-stack.md` | Technology stack description |
 
-- Keep functions small and focused
-- Write tests for all new features
-- Never commit secrets
-```
-
-### patterns.md
-
-Code patterns for your project:
-
-```markdown
-# Code Patterns
-
-## Error Handling
-Use the custom AppError class:
-```typescript
-throw new AppError('Not found', 404);
-```
-```
-
-### boundaries.md
-
-Files Ralph should never modify:
-
-```markdown
-# Boundaries
-
-- `*.lock` files
-- `node_modules/`
-- `.env*` files
-```
-
-## How It Works
-
-### Prompt Injection
-
-Base prompts contain placeholders like `{{PRINCIPLES}}` that get replaced with your config files:
+### Directory Structure
 
 ```
-prompts/base/prompt.md + .ralph/principles.md → Final prompt
+your-project/
+├── .ralph/
+│   ├── config.yaml       # Project configuration
+│   ├── principles.md     # Development principles
+│   ├── patterns.md       # Code patterns
+│   ├── boundaries.md     # Protected files
+│   ├── tech-stack.md     # Technology description
+│   └── worktrees/        # Git worktrees (gitignored)
+├── plans/
+│   ├── pending/          # Plans waiting to be processed
+│   ├── current/          # Currently active plan (0-1)
+│   └── complete/         # Finished plans
+└── specs/
+    └── INDEX.md          # Feature specification index
 ```
 
-### Context Files
+## Queue Workflow
 
-Ralph uses `context.json` to pass state between iterations:
-
-```json
-{
-  "planFile": "docs/plan.md",
-  "planPath": "/full/path/to/plan.md",
-  "iteration": 3,
-  "maxIterations": 30
-}
-```
-
-### Completion Detection
-
-Claude signals completion with `<promise>COMPLETE</promise>` when all tasks are complete.
-
-When running via the worker queue, this triggers:
-1. Move plan to `completed/` folder
-2. Create PR (if `--create-pr` flag set)
-3. Activate next pending plan
-
-### Progress & Learnings
-
-Each plan has a companion `<plan-name>.progress.md` file that accumulates gotchas:
-
-```markdown
----
-### T1.2: Implement validation
-**Gotcha:** Tried using Joi but project already uses Zod - use existing patterns
-**Pattern:** Validation schemas live in src/validators/, one per domain
-```
-
-Future iterations read this file to avoid repeating mistakes. Archived with completed plans.
-
-## Updating
-
-Update Ralph scripts while preserving your config:
+1. **Pending** - Plans waiting to be processed
+2. **Current** - One plan being actively worked on
+3. **Complete** - Finished plans (archived)
 
 ```bash
-./scripts/ralph/ralph-update.sh
+# Add a plan to the queue
+mv my-plan.md plans/pending/
+
+# Process the queue
+ralph worker
+
+# Check status
+ralph status
+
+# Reset current plan (start over)
+ralph reset
 ```
 
-Or re-run the installer:
+## Worktree Isolation
 
+Each plan runs in its own git worktree:
+- No branch switching in main worktree
+- Parallel plan execution (different workers)
+- Clean separation of work
+
+```
+.ralph/worktrees/
+└── feat-my-plan/    # Worktree for plan "my-plan"
+```
+
+Worktrees are automatically:
+- Created when a plan is activated
+- Initialized with dependencies (`npm ci`, `go mod download`, etc.)
+- Removed when the plan completes
+
+## Slack Integration
+
+### Webhook Notifications
+
+Basic notifications via incoming webhook:
+
+```yaml
+slack:
+  webhook_url: "https://hooks.slack.com/services/..."
+```
+
+### Bot API with Thread Replies
+
+Full-featured notifications with thread tracking:
+
+```yaml
+slack:
+  bot_token: "xoxb-..."
+  app_token: "xapp-..."
+  channel: "C0123456789"
+```
+
+This enables:
+- Thread-based notifications per plan
+- Reply tracking (human replies become feedback)
+- Blocker deduplication
+
+## Migration from Bash Version
+
+If you were using the bash scripts (`ralph.sh`, `ralph-worker.sh`):
+
+1. **Install the Go binary** (see Installation above)
+2. **Update paths** - Commands are now just `ralph` instead of `./scripts/ralph/ralph.sh`
+3. **Config unchanged** - `.ralph/config.yaml` format is identical
+4. **Plans unchanged** - Plan file format is identical
+5. **Remove old scripts** - Delete `scripts/ralph/` directory
+
+### Command Mapping
+
+| Bash | Go |
+|------|----|
+| `./scripts/ralph/ralph.sh plan.md` | `ralph run plan.md` |
+| `./scripts/ralph/ralph-worker.sh` | `ralph worker` |
+| `./scripts/ralph/ralph-worker.sh --status` | `ralph status` |
+| `./scripts/ralph/ralph-worker.sh --reset` | `ralph reset` |
+| `./scripts/ralph/ralph-worker.sh --cleanup` | `ralph cleanup` |
+| `./scripts/ralph/ralph-init.sh --detect` | `ralph init --detect` |
+
+## Troubleshooting
+
+### "claude: command not found"
+
+Ensure Claude Code CLI is installed and in your PATH:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/arvesolland/ralph/main/install.sh | bash
+which claude
 ```
+
+### "gh: command not found" (PR creation fails)
+
+Install GitHub CLI for PR creation:
+```bash
+brew install gh
+gh auth login
+```
+
+Or use merge mode instead:
+```bash
+ralph worker --merge
+```
+
+### "branch is already checked out"
+
+Another worktree has the branch checked out. Either:
+- Wait for the other worker to finish
+- Run `ralph cleanup` to remove orphaned worktrees
+- Manually remove the conflicting worktree
+
+### Worktree has uncommitted changes
+
+Ralph won't clean up worktrees with uncommitted changes for safety. Either:
+- Commit or discard the changes manually
+- The changes will be preserved for review
+
+### Plan verification keeps failing
+
+If Claude outputs `<promise>COMPLETE</promise>` but verification fails:
+1. Check `<plan>.feedback.md` for the reason
+2. The next iteration will read this and address it
+3. If it keeps failing, the plan may have unclear acceptance criteria
 
 ## Requirements
 
 - **Claude Code CLI** - `claude` command must be available
 - **Git** - For version control
 - **GitHub CLI** (optional) - For PR creation (`gh`)
-
-## Project Structure
-
-```
-ralph/
-├── VERSION                 # Semantic version
-├── install.sh              # Installer
-├── ralph.sh                # Main implementation loop
-├── ralph-worker.sh         # Queue management
-├── ralph-init.sh           # Project initialization
-├── ralph-update.sh         # Update scripts
-├── aliases.sh              # Shell aliases
-├── install-aliases.sh      # Alias installer
-├── lib/
-│   └── config.sh           # Shared functions
-└── prompts/
-    └── base/
-        ├── prompt.md              # Implementation prompt
-        ├── plan_reviewer_prompt.md # Plan review prompt
-        └── plan-spec.md           # Plan format specification
-```
-
-## Versioning
-
-Ralph uses semantic versioning. Check version with:
-
-```bash
-./scripts/ralph/ralph.sh --version
-```
 
 ## License
 

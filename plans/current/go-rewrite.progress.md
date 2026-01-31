@@ -1191,3 +1191,25 @@ Iteration log - what was done, gotchas, and next steps.
 **Blocker:** T43 requires human action to create the GitHub repository `arvesolland/homebrew-ralph` before formula generation can be tested. Goreleaser will automatically push the formula to this repo on release, but the repo must exist first.
 
 **Next:** T44 - Create comprehensive README (not blocked, can proceed in parallel)
+
+---
+### Iteration 42 (continued): T44 - Create comprehensive README for Go version
+**Completed:**
+- Completely rewrote README.md for the Go version:
+  - Added release and license badges
+  - Installation section: Homebrew, binary download (macOS/Linux), build from source
+  - Quick Start: init, plan creation, running ralph
+  - Complete command reference for all 7 commands (init, run, worker, status, reset, cleanup, version)
+  - Configuration reference: full config.yaml example with all sections (project, git, commands, completion, worktree, slack)
+  - Prompt customization table
+  - Directory structure diagram
+  - Queue workflow explanation
+  - Worktree isolation documentation
+  - Slack integration (webhook and Bot API)
+  - Migration guide from bash version with command mapping table
+  - Troubleshooting section (5 common issues)
+  - Requirements section
+
+**Gotcha:** None - straightforward documentation task.
+
+**Next:** T45 - Add integration test suite, or T46 - Update CLAUDE.md (T46 requires T44, which is now complete)
