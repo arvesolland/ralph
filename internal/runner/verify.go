@@ -64,7 +64,8 @@ func Verify(ctx context.Context, p *plan.Plan, runner Runner) (*VerificationResu
 	// Set up options for Haiku model
 	opts := DefaultOptions()
 	opts.Model = VerificationModel
-	opts.Print = true // Use --print mode for simple prompt/response
+	opts.Print = true        // Use --print mode for simple prompt/response
+	opts.OutputFormat = "text" // Use text format for verification (stream-json requires --verbose with --print)
 
 	// Use shorter timeout for verification if not already set
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {

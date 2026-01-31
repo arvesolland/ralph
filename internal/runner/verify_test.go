@@ -98,6 +98,9 @@ func TestVerify_UsesPrintMode(t *testing.T) {
 	if !mock.lastOpts.Print {
 		t.Errorf("expected Print=true, got false")
 	}
+	if mock.lastOpts.OutputFormat != "text" {
+		t.Errorf("expected OutputFormat=text, got %s", mock.lastOpts.OutputFormat)
+	}
 }
 
 func TestVerify_RunnerError(t *testing.T) {

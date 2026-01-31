@@ -68,9 +68,19 @@ func BuildCommand(prompt string, opts Options) *exec.Cmd {
 func buildArgs(opts Options) []string {
 	var args []string
 
-	// Output format (default is stream-json for real-time output)
+	// Print mode - required when using --output-format
+	// Also add --print explicitly if requested
+	if opts.OutputFormat != "" || opts.Print {
+		args = append(args, "--print")
+	}
+
+	// Output format (requires --print mode)
 	if opts.OutputFormat != "" {
 		args = append(args, "--output-format", opts.OutputFormat)
+		// stream-json requires --verbose flag
+		if opts.OutputFormat == "stream-json" {
+			args = append(args, "--verbose")
+		}
 	}
 
 	// Model selection
@@ -91,11 +101,6 @@ func buildArgs(opts Options) []string {
 	// System prompt
 	if opts.SystemPrompt != "" {
 		args = append(args, "--system-prompt", opts.SystemPrompt)
-	}
-
-	// Print mode (dry-run, outputs prompt)
-	if opts.Print {
-		args = append(args, "--print")
 	}
 
 	// No permissions mode (skip prompts)

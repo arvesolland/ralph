@@ -13,10 +13,16 @@ func TestBuildCommand_DefaultOptions(t *testing.T) {
 		t.Error("expected command path to be set")
 	}
 
-	// Default should include stream-json output format
+	// Default should include stream-json output format with --print and --verbose
 	args := strings.Join(cmd.Args, " ")
 	if !strings.Contains(args, "--output-format stream-json") {
 		t.Errorf("expected --output-format stream-json in args, got: %s", args)
+	}
+	if !strings.Contains(args, "--print") {
+		t.Errorf("expected --print in args (required for output-format), got: %s", args)
+	}
+	if !strings.Contains(args, "--verbose") {
+		t.Errorf("expected --verbose in args (required for stream-json), got: %s", args)
 	}
 }
 
@@ -140,6 +146,7 @@ func TestBuildCommand_AllFlags(t *testing.T) {
 	args := strings.Join(cmd.Args, " ")
 
 	checks := []string{
+		"--print", // output-format requires print mode
 		"--model claude-sonnet-4-20250514",
 		"--max-tokens 8192",
 		"--allowedTools Read,Write,Bash,Glob",
@@ -152,6 +159,11 @@ func TestBuildCommand_AllFlags(t *testing.T) {
 		if !strings.Contains(args, check) {
 			t.Errorf("expected %q in args, got: %s", check, args)
 		}
+	}
+
+	// json format should NOT have --verbose (only stream-json needs it)
+	if strings.Contains(args, "--verbose") {
+		t.Errorf("did not expect --verbose for json format, got: %s", args)
 	}
 
 	if cmd.Dir != "/workspace" {
@@ -190,6 +202,12 @@ func TestCommandString(t *testing.T) {
 	}
 	if !strings.Contains(cmdStr, "--output-format stream-json") {
 		t.Errorf("expected command string to contain output format, got: %s", cmdStr)
+	}
+	if !strings.Contains(cmdStr, "--print") {
+		t.Errorf("expected command string to contain --print, got: %s", cmdStr)
+	}
+	if !strings.Contains(cmdStr, "--verbose") {
+		t.Errorf("expected command string to contain --verbose for stream-json, got: %s", cmdStr)
 	}
 }
 
