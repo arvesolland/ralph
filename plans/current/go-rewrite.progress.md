@@ -1284,3 +1284,11 @@ Iteration log - what was done, gotchas, and next steps.
 - Verify formula generation in the homebrew-ralph repo
 - Test `brew install arvesolland/tap/ralph`
 - Mark remaining T43 checkboxes complete
+
+---
+### Iteration 47: T43 blocker re-confirmation
+**Completed:** Reviewed plan and progress state. Confirmed T43 remains the only incomplete task, blocked on human action to create the `arvesolland/homebrew-ralph` GitHub repository.
+
+**Status:** Signaled `<blocker>` marker with clear instructions for human action.
+
+**Next:** Waiting for blocker resolution. Human must create `arvesolland/homebrew-ralph` repository.
