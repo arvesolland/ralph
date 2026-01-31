@@ -1231,3 +1231,30 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - followed the pattern established by README.md, keeping both versions documented during transition period.
 
 **Next:** T45 - Add integration test suite (T43 blocked waiting for human to create homebrew-ralph repo)
+
+---
+### Iteration 44: T45 - Add integration test suite
+**Completed:**
+- Created `internal/integration/testdata/plans/` with 4 test plan files:
+  - `01-single-task.md` - basic completion test
+  - `02-dependencies.md` - task dependency ordering test
+  - `03-progress-tracking.md` - progress file creation test
+  - `04-loose-format.md` - non-strict plan format test
+- Created `internal/integration/integration_test.go` with 7 integration tests:
+  - `TestSingleTask` - verifies basic plan completion
+  - `TestDependencies` - verifies task dependency ordering
+  - `TestProgress` - verifies progress file creation
+  - `TestLooseFormat` - verifies non-strict plan format works
+  - `TestWorkerQueue` - verifies queue management with worktree isolation
+  - `TestDirtyState` - verifies dirty main worktree handling
+  - `TestWorktreeCleanup` - verifies orphaned worktree cleanup
+- Tests use build tag `//go:build integration`
+- Added `make test-integration` target to Makefile
+- Created `.github/workflows/ci.yml` with test, lint, and integration jobs
+- Created `.github/workflows/release.yml` for GoReleaser releases
+- Integration test job is disabled by default (requires mock claude)
+- All tests compile successfully with `-tags=integration`
+
+**Gotcha:** Integration tests require real Claude CLI or mock script. The CI job is disabled (`if: false`) until mock claude is implemented. Tests support `RALPH_MOCK_CLAUDE=1` env var for future mock implementation.
+
+**Next:** T43 is blocked on human creating homebrew-ralph repo. All other tasks complete.

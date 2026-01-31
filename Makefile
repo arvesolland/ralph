@@ -18,7 +18,7 @@ LDFLAGS=-s -w \
 	-X github.com/arvesolland/ralph/internal/cli.Commit=$(COMMIT) \
 	-X github.com/arvesolland/ralph/internal/cli.BuildDate=$(BUILD_DATE)
 
-.PHONY: all build build-dev test test-short test-verbose clean deps lint release-snapshot release-dry-run help
+.PHONY: all build build-dev test test-short test-integration test-verbose clean deps lint release-snapshot release-dry-run help
 
 # Default target
 all: build
@@ -47,6 +47,10 @@ test-race:
 test-coverage:
 	$(GOTEST) -v -coverprofile=coverage.out ./...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
+
+# Run integration tests (requires Claude CLI or RALPH_MOCK_CLAUDE=1)
+test-integration: build
+	$(GOTEST) -v -tags=integration ./internal/integration/...
 
 # Clean build artifacts
 clean:
@@ -86,6 +90,7 @@ help:
 	@echo "  test-short       Run tests (skip slow tests)"
 	@echo "  test-race        Run tests with race detection"
 	@echo "  test-coverage    Run tests with coverage report"
+	@echo "  test-integration Run integration tests (requires claude CLI)"
 	@echo "  clean            Remove build artifacts"
 	@echo "  deps             Download and tidy dependencies"
 	@echo "  lint             Run golangci-lint"

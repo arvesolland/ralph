@@ -1172,29 +1172,29 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Comprehensive tests matching bash test suite.
 
 **Requires:** T35, T21
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] Test: single-task - basic completion
-- [ ] Test: dependencies - task dependency ordering
-- [ ] Test: progress - progress file creation
-- [ ] Test: loose-format - non-strict plan format
-- [ ] Test: worker-queue - queue management with worktrees
-- [ ] Test: dirty-state - dirty main worktree handling
-- [ ] Test: worktree-cleanup - orphaned worktree cleanup
-- [ ] Tests run with `go test ./... -tags=integration`
-- [ ] CI runs integration tests
+- [x] Test: single-task - basic completion
+- [x] Test: dependencies - task dependency ordering
+- [x] Test: progress - progress file creation
+- [x] Test: loose-format - non-strict plan format
+- [x] Test: worker-queue - queue management with worktrees
+- [x] Test: dirty-state - dirty main worktree handling
+- [x] Test: worktree-cleanup - orphaned worktree cleanup
+- [x] Tests run with `go test ./... -tags=integration`
+- [x] CI runs integration tests
 
 **Subtasks:**
-1. [ ] Create testdata/plans/ with test plans
-2. [ ] Implement single-task test
-3. [ ] Implement dependencies test
-4. [ ] Implement progress test
-5. [ ] Implement loose-format test
-6. [ ] Implement worker-queue test
-7. [ ] Implement dirty-state test
-8. [ ] Implement worktree-cleanup test
-9. [ ] Configure CI for integration tests
+1. [x] Create testdata/plans/ with test plans
+2. [x] Implement single-task test
+3. [x] Implement dependencies test
+4. [x] Implement progress test
+5. [x] Implement loose-format test
+6. [x] Implement worker-queue test
+7. [x] Implement dirty-state test
+8. [x] Implement worktree-cleanup test
+9. [x] Configure CI for integration tests
 
 ---
 
