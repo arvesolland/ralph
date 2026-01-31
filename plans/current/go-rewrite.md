@@ -843,28 +843,28 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Process queue: pending → current → execute → complete.
 
 **Requires:** T30, T11, T17, T19, T20
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worker/worker.go` defines `Worker` struct
-- [ ] `Run(ctx context.Context) error` processes queue continuously
-- [ ] `RunOnce(ctx context.Context) error` processes one plan and exits
-- [ ] Workflow: take from pending → activate → create worktree → run loop → complete → cleanup worktree
-- [ ] Syncs files to/from worktree at appropriate points
-- [ ] Runs worktree init hooks after creation
-- [ ] Waits and polls when queue is empty (configurable interval)
-- [ ] Handles interrupts gracefully (finish current iteration, then stop)
-- [ ] Integration test with queue of 2 plans
+- [x] `internal/worker/worker.go` defines `Worker` struct
+- [x] `Run(ctx context.Context) error` processes queue continuously
+- [x] `RunOnce(ctx context.Context) error` processes one plan and exits
+- [x] Workflow: take from pending → activate → create worktree → run loop → complete → cleanup worktree
+- [x] Syncs files to/from worktree at appropriate points
+- [x] Runs worktree init hooks after creation
+- [x] Waits and polls when queue is empty (configurable interval)
+- [x] Handles interrupts gracefully (finish current iteration, then stop)
+- [x] Integration test with queue of 2 plans
 
 **Subtasks:**
-1. [ ] Define Worker struct
-2. [ ] Implement single plan processing
-3. [ ] Implement RunOnce
-4. [ ] Implement Run with polling
-5. [ ] Integrate worktree management
-6. [ ] Integrate file sync
-7. [ ] Add interrupt handling
-8. [ ] Write integration test
+1. [x] Define Worker struct
+2. [x] Implement single plan processing
+3. [x] Implement RunOnce
+4. [x] Implement Run with polling
+5. [x] Integrate worktree management
+6. [x] Integrate file sync
+7. [x] Add interrupt handling
+8. [x] Write integration test
 
 ---
 

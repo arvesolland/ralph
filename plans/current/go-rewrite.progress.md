@@ -841,3 +841,35 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - implementation follows established CLI patterns from status.go. The command uses real Runner (not mock) so full integration tests would need a mock claude script.
 
 **Next:** T32 - Implement worker loop (depends on T30, T11, T17, T19, T20 - all complete)
+
+---
+### Iteration 31: T32 - Implement worker loop
+**Completed:**
+- Created `internal/worker/worker.go` with:
+  - `Worker` struct with queue, config, worktreeManager, git, runner, promptBuilder fields
+  - `WorkerConfig` struct for dependency injection
+  - `NewWorker(cfg WorkerConfig) *Worker` constructor with sensible defaults
+  - `Run(ctx context.Context) error` processes queue continuously with polling
+  - `RunOnce(ctx context.Context) error` processes single plan from pending or resumes current
+  - `processPlan()` orchestrates full lifecycle: worktree creation → file sync → hooks → iteration loop → sync back → complete
+  - `ensureWorktree()` creates or reuses existing worktree for plan
+  - `loadOrCreateContext()` loads existing context.json or creates new one
+  - `completePlan()` archives plan and cleans up worktree
+  - Interrupt handling via signal.Notify for SIGINT/SIGTERM with graceful shutdown
+  - Callbacks: `OnPlanStart`, `OnPlanComplete`, `OnPlanError`, `OnBlocker`
+  - Error types: `ErrQueueEmpty`, `ErrInterrupted`
+  - Constants: `DefaultPollInterval` (30s), `DefaultMaxIterations` (30)
+- Created `internal/worker/worker_test.go` with 8 test functions:
+  - TestNewWorker, TestNewWorker_Defaults
+  - TestWorker_RunOnce_QueueEmpty
+  - TestWorker_RunOnce_ActivatesPlan - full integration with worktree creation
+  - TestWorker_Run_ContextCancellation
+  - TestWorker_RunOnce_ResumesCurrent - resumes plan already in current/
+  - TestConstants, TestErrors
+- All 8 worker tests pass
+
+**Gotcha:**
+- `errors.Is(err, os.ErrNotExist)` is needed instead of `os.IsNotExist(err)` for wrapped errors (e.g., from `fmt.Errorf("...: %w", err)`).
+- Mock runner needs to handle verification calls differently (check `opts.Print`) since verification uses Haiku model in print mode and expects YES/NO response.
+
+**Next:** T33 - Implement completion workflow (PR mode) (depends on T32, T15 - both complete)
