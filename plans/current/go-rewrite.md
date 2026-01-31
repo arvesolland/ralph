@@ -999,24 +999,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Track Slack threads per plan for reply threading.
 
 **Requires:** T37
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/threads.go` defines `ThreadTracker` struct
-- [ ] `Get(planName string) *ThreadInfo` returns thread info for plan
-- [ ] `Set(planName string, info *ThreadInfo) error` saves thread info
-- [ ] `ThreadInfo` contains PlanName, ThreadTS, ChannelID, NotifiedBlockers
-- [ ] Persists to `.ralph/slack_threads.json`
-- [ ] Loads from file on initialization
-- [ ] Handles concurrent access with file locking
-- [ ] Unit tests verify persistence
+- [x] `internal/notify/threads.go` defines `ThreadTracker` struct
+- [x] `Get(planName string) *ThreadInfo` returns thread info for plan
+- [x] `Set(planName string, info *ThreadInfo) error` saves thread info
+- [x] `ThreadInfo` contains PlanName, ThreadTS, ChannelID, NotifiedBlockers
+- [x] Persists to `.ralph/slack_threads.json`
+- [x] Loads from file on initialization
+- [x] Handles concurrent access with file locking
+- [x] Unit tests verify persistence
 
 **Subtasks:**
-1. [ ] Define ThreadTracker and ThreadInfo structs
-2. [ ] Implement JSON file persistence
-3. [ ] Implement Get/Set
-4. [ ] Add file locking for concurrency
-5. [ ] Write unit tests
+1. [x] Define ThreadTracker and ThreadInfo structs
+2. [x] Implement JSON file persistence
+3. [x] Implement Get/Set
+4. [x] Add file locking for concurrency
+5. [x] Write unit tests
 
 ---
 

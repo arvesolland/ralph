@@ -1008,3 +1008,38 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward implementation using standard library net/http and httptest for testing.
 
 **Next:** T38 - Implement thread tracking (depends on T37, now complete)
+
+---
+### Iteration 37: T38 - Implement thread tracking
+**Completed:**
+- Created `internal/notify/threads.go` with:
+  - `ThreadInfo` struct with PlanName, ThreadTS, ChannelID, NotifiedBlockers, CreatedAt, UpdatedAt fields
+  - `ThreadTracker` struct with filePath, threads map, and sync.RWMutex for thread safety
+  - `NewThreadTracker(filePath string) (*ThreadTracker, error)` constructor
+  - `ThreadTrackerPath(configDir string) string` helper
+  - `Get(planName string) *ThreadInfo` returns copy of thread info (nil if not found)
+  - `Set(planName string, info *ThreadInfo) error` saves thread info with timestamps
+  - `Delete(planName string) error` removes thread info
+  - `AddNotifiedBlocker(planName, blockerHash string) (bool, error)` for deduplication
+  - `HasNotifiedBlocker(planName, blockerHash string) bool` for checking
+  - `List() []*ThreadInfo` returns all tracked threads
+  - `Reload() error` for reloading from file (multi-process sync)
+  - JSON file persistence to `.ralph/slack_threads.json` with atomic write (temp file + rename)
+  - File locking via sync.Mutex for safe concurrent access
+  - Get/Set return copies to prevent external modification
+- Created `internal/notify/threads_test.go` with 13 test functions:
+  - TestNewThreadTracker (4 subtests: empty file, existing data, invalid JSON, empty file)
+  - TestThreadTrackerPath (2 subtests)
+  - TestThreadTracker_Get (2 subtests: non-existent, returns copy)
+  - TestThreadTracker_Set (4 subtests: saves new, timestamps, preserves CreatedAt, creates dir)
+  - TestThreadTracker_Delete (2 subtests)
+  - TestThreadTracker_AddNotifiedBlocker (3 subtests)
+  - TestThreadTracker_HasNotifiedBlocker (3 subtests)
+  - TestThreadTracker_List, TestThreadTracker_Reload, TestThreadTracker_Persistence
+  - TestThreadTracker_ConcurrentAccess, TestThreadTracker_AtomicWrite
+- All 27 notify tests pass (15 webhook + 12 threads)
+- Build succeeds
+
+**Gotcha:** None - straightforward implementation following the same patterns as other persistent stores in the codebase. Added extra methods (Delete, List, Reload, HasNotifiedBlocker, AddNotifiedBlocker) beyond the spec for utility.
+
+**Next:** T39 - Implement Slack Bot API notifications (depends on T38, now complete)
