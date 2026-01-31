@@ -754,3 +754,28 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The function signature is `Verify(ctx context.Context, p *plan.Plan, runner Runner) (*VerificationResult, error)` rather than `(bool, string, error)` from spec - returning a struct provides more flexibility and allows access to raw response for debugging. Also added `BuildPlanSummary` utility for when full plan content is too large.
 
 **Next:** T29 - Implement iteration context (depends on T8, which is complete)
+
+---
+### Iteration 28: T29 - Implement iteration context
+**Completed:**
+- Created `internal/runner/context.go` with:
+  - `Context` struct with PlanFile, FeatureBranch, BaseBranch, Iteration, MaxIterations fields (JSON-tagged)
+  - `DefaultMaxIterations` constant (30) and `ContextFilename` constant ("context.json")
+  - `NewContext(plan *Plan, baseBranch string, maxIterations int) *Context` constructor
+  - `LoadContext(path string) (*Context, error)` reads and parses JSON
+  - `SaveContext(ctx *Context, path string) error` with atomic write (temp file + rename)
+  - `ContextPath(worktreePath string) string` returns `.ralph/context.json` path
+  - `Increment()` method returns new Context with iteration+1
+  - `IsMaxReached()` method checks if iteration > maxIterations
+- Created `internal/runner/context_test.go` with 12 test functions:
+  - TestNewContext (3 subtests: default, custom, negative max iterations)
+  - TestContext_Increment, TestContext_IsMaxReached
+  - TestLoadContext_Success, TestLoadContext_NonexistentFile, TestLoadContext_InvalidJSON
+  - TestSaveContext_Success, TestSaveContext_Overwrite, TestSaveContext_AtomicWrite
+  - TestContextPath, TestJSONSerialization, TestRoundTrip
+- All runner tests pass (121 total including new context tests)
+- Build succeeds
+
+**Gotcha:** None - straightforward implementation. Added helper methods Increment() and IsMaxReached() not in the spec but useful for the iteration loop.
+
+**Next:** T30 - Implement main iteration loop (depends on T25, T26, T27, T28, T29, T6, T15, T12 - all complete)

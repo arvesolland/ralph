@@ -764,21 +764,21 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Manage context.json for execution state between iterations.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/context.go` defines `Context` struct with PlanFile, FeatureBranch, BaseBranch, Iteration, MaxIterations
-- [ ] `LoadContext(path string) (*Context, error)` reads context.json
-- [ ] `SaveContext(ctx *Context, path string) error` writes context.json
-- [ ] `NewContext(plan *Plan, baseBranch string, maxIterations int) *Context` creates new context
-- [ ] Context path is `.ralph/context.json` in worktree
-- [ ] Unit tests verify JSON serialization
+- [x] `internal/runner/context.go` defines `Context` struct with PlanFile, FeatureBranch, BaseBranch, Iteration, MaxIterations
+- [x] `LoadContext(path string) (*Context, error)` reads context.json
+- [x] `SaveContext(ctx *Context, path string) error` writes context.json
+- [x] `NewContext(plan *Plan, baseBranch string, maxIterations int) *Context` creates new context
+- [x] Context path is `.ralph/context.json` in worktree
+- [x] Unit tests verify JSON serialization
 
 **Subtasks:**
-1. [ ] Define Context struct with JSON tags
-2. [ ] Implement Load/Save
-3. [ ] Implement NewContext
-4. [ ] Write unit tests
+1. [x] Define Context struct with JSON tags
+2. [x] Implement Load/Save
+3. [x] Implement NewContext
+4. [x] Write unit tests
 
 ---
 
