@@ -2,7 +2,7 @@
 
 **Spec:** [/specs/go-rewrite/SPEC.md](/specs/go-rewrite/SPEC.md)
 **Created:** 2026-01-31
-**Status:** pending
+**Status:** complete
 
 ## Context
 
@@ -40,22 +40,22 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Establish the foundational project layout that all other tasks build upon.
 
 **Requires:** —
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `go.mod` exists with module `github.com/arvesolland/ralph`
-- [ ] Go version set to 1.22 or later in go.mod
-- [ ] Directory structure created: `cmd/ralph/`, `internal/{cli,config,plan,runner,git,worktree,prompt,notify,log}/`
-- [ ] `cmd/ralph/main.go` exists with minimal main function
-- [ ] `go build ./cmd/ralph` succeeds and produces `ralph` binary
-- [ ] `.gitignore` updated to ignore Go artifacts (`ralph`, `*.exe`, `dist/`)
+- [x] `go.mod` exists with module `github.com/arvesolland/ralph`
+- [x] Go version set to 1.22 or later in go.mod
+- [x] Directory structure created: `cmd/ralph/`, `internal/{cli,config,plan,runner,git,worktree,prompt,notify,log}/`
+- [x] `cmd/ralph/main.go` exists with minimal main function
+- [x] `go build ./cmd/ralph` succeeds and produces `ralph` binary
+- [x] `.gitignore` updated to ignore Go artifacts (`ralph`, `*.exe`, `dist/`)
 
 **Subtasks:**
-1. [ ] Run `go mod init github.com/arvesolland/ralph`
-2. [ ] Create directory structure with placeholder `.go` files
-3. [ ] Create minimal main.go that prints "ralph dev"
-4. [ ] Verify build succeeds
-5. [ ] Update .gitignore
+1. [x] Run `go mod init github.com/arvesolland/ralph`
+2. [x] Create directory structure with placeholder `.go` files
+3. [x] Create minimal main.go that prints "ralph dev"
+4. [x] Verify build succeeds
+5. [x] Update .gitignore
 
 ---
 
@@ -63,24 +63,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Logging foundation used by all other components. Must be in place before any other code.
 
 **Requires:** T1
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/log/logger.go` defines `Logger` interface with `Debug`, `Info`, `Warn`, `Error` methods
-- [ ] Default implementation writes to stderr with timestamps
-- [ ] `--verbose` enables Debug level, default is Info
-- [ ] `--quiet` suppresses Info (only Warn and Error)
-- [ ] Colors enabled when stdout is TTY: Debug=gray, Info=default, Warn=yellow, Error=red, Success=green
-- [ ] `--no-color` flag disables colors
-- [ ] Unit tests verify log level filtering and color codes
+- [x] `internal/log/logger.go` defines `Logger` interface with `Debug`, `Info`, `Warn`, `Error` methods
+- [x] Default implementation writes to stderr with timestamps
+- [x] `--verbose` enables Debug level, default is Info
+- [x] `--quiet` suppresses Info (only Warn and Error)
+- [x] Colors enabled when stdout is TTY: Debug=gray, Info=default, Warn=yellow, Error=red, Success=green
+- [x] `--no-color` flag disables colors
+- [x] Unit tests verify log level filtering and color codes
 
 **Subtasks:**
-1. [ ] Define Logger interface
-2. [ ] Implement ConsoleLogger with level filtering
-3. [ ] Add color support with TTY detection
-4. [ ] Add Success level (custom, not standard log level)
-5. [ ] Write unit tests for level filtering
-6. [ ] Write unit tests for color output
+1. [x] Define Logger interface
+2. [x] Implement ConsoleLogger with level filtering
+3. [x] Add color support with TTY detection
+4. [x] Add Success level (custom, not standard log level)
+5. [x] Write unit tests for level filtering
+6. [x] Write unit tests for color output
 
 ---
 
@@ -88,23 +88,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > CLI skeleton that all subcommands attach to. Global flags defined here.
 
 **Requires:** T2
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/cli/root.go` defines root command with description
-- [ ] Global flags registered: `--config/-c`, `--verbose/-v`, `--quiet/-q`, `--no-color`
-- [ ] `cmd/ralph/main.go` calls `cli.Execute()`
-- [ ] `ralph --help` displays usage with all global flags
-- [ ] `ralph version` subcommand shows version, commit, build date (hardcoded "dev" for now)
-- [ ] Unknown commands return helpful error message
+- [x] `internal/cli/root.go` defines root command with description
+- [x] Global flags registered: `--config/-c`, `--verbose/-v`, `--quiet/-q`, `--no-color`
+- [x] `cmd/ralph/main.go` calls `cli.Execute()`
+- [x] `ralph --help` displays usage with all global flags
+- [x] `ralph version` subcommand shows version, commit, build date (hardcoded "dev" for now)
+- [x] Unknown commands return helpful error message
 
 **Subtasks:**
-1. [ ] Add cobra dependency: `go get github.com/spf13/cobra`
-2. [ ] Create root.go with root command
-3. [ ] Register global flags with defaults
-4. [ ] Create version.go with version subcommand
-5. [ ] Wire up in main.go
-6. [ ] Verify help output
+1. [x] Add cobra dependency: `go get github.com/spf13/cobra`
+2. [x] Create root.go with root command
+3. [x] Register global flags with defaults
+4. [x] Create version.go with version subcommand
+5. [x] Wire up in main.go
+6. [x] Verify help output
 
 ---
 
@@ -114,25 +114,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Core configuration that all components depend on. Must handle all edge cases the bash version struggled with.
 
 **Requires:** T3
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/config/config.go` defines `Config` struct matching spec (Project, Git, Commands, Slack, Worktree, Completion)
-- [ ] `Load(path string) (*Config, error)` reads and parses YAML file
-- [ ] `LoadWithDefaults(path string) (*Config, error)` applies defaults for missing fields
-- [ ] YAML inline comments handled correctly: `name: "value" # comment` → value is "value", not "value # comment"
-- [ ] Missing config file returns config with all defaults (not error)
-- [ ] Empty config file returns config with all defaults (not error)
-- [ ] Nested access works: config loaded from `project:\n  name: "Test"` has `config.Project.Name == "Test"`
-- [ ] Unit tests cover: valid config, empty file, missing file, inline comments, nested keys, all field types
+- [x] `internal/config/config.go` defines `Config` struct matching spec (Project, Git, Commands, Slack, Worktree, Completion)
+- [x] `Load(path string) (*Config, error)` reads and parses YAML file
+- [x] `LoadWithDefaults(path string) (*Config, error)` applies defaults for missing fields
+- [x] YAML inline comments handled correctly: `name: "value" # comment` → value is "value", not "value # comment"
+- [x] Missing config file returns config with all defaults (not error)
+- [x] Empty config file returns config with all defaults (not error)
+- [x] Nested access works: config loaded from `project:\n  name: "Test"` has `config.Project.Name == "Test"`
+- [x] Unit tests cover: valid config, empty file, missing file, inline comments, nested keys, all field types
 
 **Subtasks:**
-1. [ ] Add yaml dependency: `go get gopkg.in/yaml.v3`
-2. [ ] Define all config structs with yaml tags
-3. [ ] Implement Load() function
-4. [ ] Implement defaults in separate defaults.go
-5. [ ] Implement LoadWithDefaults() that merges
-6. [ ] Write comprehensive unit tests
+1. [x] Add yaml dependency: `go get gopkg.in/yaml.v3`
+2. [x] Define all config structs with yaml tags
+3. [x] Implement Load() function
+4. [x] Implement defaults in separate defaults.go
+5. [x] Implement LoadWithDefaults() that merges
+6. [x] Write comprehensive unit tests
 
 ---
 
@@ -140,27 +140,27 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Detect project type, language, framework, and commands from files present.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/config/detect.go` defines `Detect(dir string) (*DetectedConfig, error)`
-- [ ] Detects Node.js from package.json, extracts test/lint/build scripts
-- [ ] Detects PHP from composer.json
-- [ ] Detects Python from pyproject.toml or requirements.txt
-- [ ] Detects Go from go.mod
-- [ ] Detects Rust from Cargo.toml
-- [ ] Detects Ruby from Gemfile
-- [ ] Returns appropriate test/lint/build commands for each language
-- [ ] Unit tests with fixture directories for each language
+- [x] `internal/config/detect.go` defines `Detect(dir string) (*DetectedConfig, error)`
+- [x] Detects Node.js from package.json, extracts test/lint/build scripts
+- [x] Detects PHP from composer.json
+- [x] Detects Python from pyproject.toml or requirements.txt
+- [x] Detects Go from go.mod
+- [x] Detects Rust from Cargo.toml
+- [x] Detects Ruby from Gemfile
+- [x] Returns appropriate test/lint/build commands for each language
+- [x] Unit tests with fixture directories for each language
 
 **Subtasks:**
-1. [ ] Define DetectedConfig struct
-2. [ ] Implement Node.js detection with package.json parsing
-3. [ ] Implement PHP detection
-4. [ ] Implement Python detection
-5. [ ] Implement Go, Rust, Ruby detection
-6. [ ] Create test fixtures in testdata/detect/
-7. [ ] Write unit tests for each language
+1. [x] Define DetectedConfig struct
+2. [x] Implement Node.js detection with package.json parsing
+3. [x] Implement PHP detection
+4. [x] Implement Python detection
+5. [x] Implement Go, Rust, Ruby detection
+6. [x] Create test fixtures in testdata/detect/
+7. [x] Write unit tests for each language
 
 ---
 
@@ -168,27 +168,27 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Load prompt templates and substitute placeholders. Critical for Claude execution.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/prompt/builder.go` defines `Builder` struct
-- [ ] `Build(templatePath string, config *Config, overrides map[string]string) (string, error)` loads and processes template
-- [ ] `{{PLACEHOLDER}}` syntax replaced with config values
-- [ ] Supports all placeholders: PROJECT_NAME, PROJECT_DESCRIPTION, PRINCIPLES, PATTERNS, BOUNDARIES, TECH_STACK, TEST_COMMAND, LINT_COMMAND, BUILD_COMMAND
-- [ ] Missing placeholder files (e.g., .ralph/principles.md) result in empty string substitution (not error)
-- [ ] Unknown placeholders left as-is (for forward compatibility)
-- [ ] `internal/prompt/templates.go` embeds default prompts from `prompts/base/` using `//go:embed`
-- [ ] Falls back to embedded prompts if external file not found
-- [ ] Unit tests verify all placeholder substitutions
+- [x] `internal/prompt/builder.go` defines `Builder` struct
+- [x] `Build(templatePath string, config *Config, overrides map[string]string) (string, error)` loads and processes template
+- [x] `{{PLACEHOLDER}}` syntax replaced with config values
+- [x] Supports all placeholders: PROJECT_NAME, PROJECT_DESCRIPTION, PRINCIPLES, PATTERNS, BOUNDARIES, TECH_STACK, TEST_COMMAND, LINT_COMMAND, BUILD_COMMAND
+- [x] Missing placeholder files (e.g., .ralph/principles.md) result in empty string substitution (not error)
+- [x] Unknown placeholders left as-is (for forward compatibility)
+- [x] `internal/prompt/templates.go` embeds default prompts from `prompts/base/` using `//go:embed`
+- [x] Falls back to embedded prompts if external file not found
+- [x] Unit tests verify all placeholder substitutions
 
 **Subtasks:**
-1. [ ] Define Builder struct with config reference
-2. [ ] Implement placeholder detection regex
-3. [ ] Implement substitution logic
-4. [ ] Add embed directives for prompts/base/*.md
-5. [ ] Implement fallback to embedded prompts
-6. [ ] Load .ralph/*.md override files
-7. [ ] Write unit tests with sample templates
+1. [x] Define Builder struct with config reference
+2. [x] Implement placeholder detection regex
+3. [x] Implement substitution logic
+4. [x] Add embed directives for prompts/base/*.md
+5. [x] Implement fallback to embedded prompts
+6. [x] Load .ralph/*.md override files
+7. [x] Write unit tests with sample templates
 
 ---
 
@@ -196,26 +196,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Initialize a new project with config file. Uses detection from T5.
 
 **Requires:** T5, T6
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph init` creates `.ralph/` directory if not exists
-- [ ] `ralph init` creates `.ralph/config.yaml` with detected settings
-- [ ] `ralph init --detect` runs auto-detection and populates config
-- [ ] Existing config file prompts for confirmation before overwrite
-- [ ] Creates `plans/pending/`, `plans/current/`, `plans/complete/` directories
-- [ ] Creates `specs/` directory with INDEX.md
-- [ ] Prints summary of what was created/detected
-- [ ] Integration test verifies directory and file creation
+- [x] `ralph init` creates `.ralph/` directory if not exists
+- [x] `ralph init` creates `.ralph/config.yaml` with detected settings
+- [x] `ralph init --detect` runs auto-detection and populates config
+- [x] Existing config file prompts for confirmation before overwrite
+- [x] Creates `plans/pending/`, `plans/current/`, `plans/complete/` directories
+- [x] Creates `specs/` directory with INDEX.md
+- [x] Prints summary of what was created/detected
+- [x] Integration test verifies directory and file creation
 
 **Subtasks:**
-1. [ ] Create internal/cli/init.go
-2. [ ] Implement directory creation logic
-3. [ ] Implement config generation from detection
-4. [ ] Add --detect flag
-5. [ ] Add overwrite confirmation prompt
-6. [ ] Create starter INDEX.md for specs
-7. [ ] Write integration test
+1. [x] Create internal/cli/init.go
+2. [x] Implement directory creation logic
+3. [x] Implement config generation from detection
+4. [x] Add --detect flag
+5. [x] Add overwrite confirmation prompt
+6. [x] Create starter INDEX.md for specs
+7. [x] Write integration test
 
 ---
 
@@ -225,25 +225,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Parse markdown plans into structured data. Foundation for queue management.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/plan.go` defines `Plan` struct with Path, Name, Content, Tasks, Status, Branch fields
-- [ ] `Load(path string) (*Plan, error)` reads and parses plan file
-- [ ] Name derived from filename: `go-rewrite.md` → `go-rewrite`
-- [ ] Branch derived from name: `go-rewrite` → `feat/go-rewrite`
-- [ ] Status extracted from `**Status:** value` in content
-- [ ] Handles plans without explicit Status (defaults to "pending")
-- [ ] Plan with special characters in name sanitizes branch: `my plan (v2)` → `feat/my-plan-v2`
-- [ ] Unit tests cover: valid plan, missing status, special characters in name
+- [x] `internal/plan/plan.go` defines `Plan` struct with Path, Name, Content, Tasks, Status, Branch fields
+- [x] `Load(path string) (*Plan, error)` reads and parses plan file
+- [x] Name derived from filename: `go-rewrite.md` → `go-rewrite`
+- [x] Branch derived from name: `go-rewrite` → `feat/go-rewrite`
+- [x] Status extracted from `**Status:** value` in content
+- [x] Handles plans without explicit Status (defaults to "pending")
+- [x] Plan with special characters in name sanitizes branch: `my plan (v2)` → `feat/my-plan-v2`
+- [x] Unit tests cover: valid plan, missing status, special characters in name
 
 **Subtasks:**
-1. [ ] Define Plan struct
-2. [ ] Implement Load() with file reading
-3. [ ] Implement name derivation from path
-4. [ ] Implement branch name sanitization
-5. [ ] Implement status extraction regex
-6. [ ] Write unit tests with fixtures
+1. [x] Define Plan struct
+2. [x] Implement Load() with file reading
+3. [x] Implement name derivation from path
+4. [x] Implement branch name sanitization
+5. [x] Implement status extraction regex
+6. [x] Write unit tests with fixtures
 
 ---
 
@@ -277,23 +277,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Update task completion state without corrupting surrounding markdown.
 
 **Requires:** T9
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `UpdateCheckbox(content string, lineNum int, complete bool) (string, error)` modifies specific checkbox
-- [ ] `- [ ]` ↔ `- [x]` toggle preserves all other content on line
-- [ ] Preserves exact whitespace and formatting around checkbox
-- [ ] Returns error if line doesn't contain checkbox
-- [ ] `Save(plan *Plan) error` writes updated content to file
-- [ ] Atomic write (write to temp, rename) prevents corruption on crash
-- [ ] Unit tests verify preservation of surrounding markdown
+- [x] `UpdateCheckbox(content string, lineNum int, complete bool) (string, error)` modifies specific checkbox
+- [x] `- [ ]` ↔ `- [x]` toggle preserves all other content on line
+- [x] Preserves exact whitespace and formatting around checkbox
+- [x] Returns error if line doesn't contain checkbox
+- [x] `Save(plan *Plan) error` writes updated content to file
+- [x] Atomic write (write to temp, rename) prevents corruption on crash
+- [x] Unit tests verify preservation of surrounding markdown
 
 **Subtasks:**
-1. [ ] Implement UpdateCheckbox function
-2. [ ] Implement line-by-line content modification
-3. [ ] Implement atomic file save
-4. [ ] Test preservation of markdown formatting
-5. [ ] Test error cases (invalid line number, no checkbox)
+1. [x] Implement UpdateCheckbox function
+2. [x] Implement line-by-line content modification
+3. [x] Implement atomic file save
+4. [x] Test preservation of markdown formatting
+5. [x] Test error cases (invalid line number, no checkbox)
 
 ---
 
@@ -301,27 +301,27 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > File-based queue: pending → current → complete lifecycle.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/queue.go` defines `Queue` struct with BaseDir field
-- [ ] `Pending() ([]*Plan, error)` lists plans in pending/ sorted by name
-- [ ] `Current() (*Plan, error)` returns plan in current/ (nil if empty)
-- [ ] `Activate(plan *Plan) error` moves from pending/ to current/
-- [ ] `Complete(plan *Plan) error` moves from current/ to complete/
-- [ ] `Reset(plan *Plan) error` moves from current/ back to pending/
-- [ ] `Status() (*QueueStatus, error)` returns counts for each queue
-- [ ] Activate fails if current/ already has a plan (single active plan)
-- [ ] Unit tests with temp directories verify all operations
+- [x] `internal/plan/queue.go` defines `Queue` struct with BaseDir field
+- [x] `Pending() ([]*Plan, error)` lists plans in pending/ sorted by name
+- [x] `Current() (*Plan, error)` returns plan in current/ (nil if empty)
+- [x] `Activate(plan *Plan) error` moves from pending/ to current/
+- [x] `Complete(plan *Plan) error` moves from current/ to complete/
+- [x] `Reset(plan *Plan) error` moves from current/ back to pending/
+- [x] `Status() (*QueueStatus, error)` returns counts for each queue
+- [x] Activate fails if current/ already has a plan (single active plan)
+- [x] Unit tests with temp directories verify all operations
 
 **Subtasks:**
-1. [ ] Define Queue and QueueStatus structs
-2. [ ] Implement Pending() with directory listing
-3. [ ] Implement Current()
-4. [ ] Implement Activate() with file move
-5. [ ] Implement Complete() and Reset()
-6. [ ] Implement Status()
-7. [ ] Write unit tests with temp directories
+1. [x] Define Queue and QueueStatus structs
+2. [x] Implement Pending() with directory listing
+3. [x] Implement Current()
+4. [x] Implement Activate() with file move
+5. [x] Implement Complete() and Reset()
+6. [x] Implement Status()
+7. [x] Write unit tests with temp directories
 
 ---
 
@@ -329,24 +329,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Read and append to progress files for plan execution history.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/progress.go` defines progress file operations
-- [ ] `ProgressPath(plan *Plan) string` returns `<plan-path-without-ext>.progress.md`
-- [ ] `ReadProgress(plan *Plan) (string, error)` reads existing progress (empty string if not exists)
-- [ ] `AppendProgress(plan *Plan, iteration int, content string) error` adds timestamped entry
-- [ ] Entry format: `## Iteration N (YYYY-MM-DD HH:MM)\n{content}\n`
-- [ ] Creates file if not exists
-- [ ] Appends without overwriting existing content
-- [ ] Unit tests verify format and append behavior
+- [x] `internal/plan/progress.go` defines progress file operations
+- [x] `ProgressPath(plan *Plan) string` returns `<plan-path-without-ext>.progress.md`
+- [x] `ReadProgress(plan *Plan) (string, error)` reads existing progress (empty string if not exists)
+- [x] `AppendProgress(plan *Plan, iteration int, content string) error` adds timestamped entry
+- [x] Entry format: `## Iteration N (YYYY-MM-DD HH:MM)\n{content}\n`
+- [x] Creates file if not exists
+- [x] Appends without overwriting existing content
+- [x] Unit tests verify format and append behavior
 
 **Subtasks:**
-1. [ ] Implement path derivation
-2. [ ] Implement ReadProgress
-3. [ ] Implement AppendProgress with timestamp
-4. [ ] Handle file creation
-5. [ ] Write unit tests
+1. [x] Implement path derivation
+2. [x] Implement ReadProgress
+3. [x] Implement AppendProgress with timestamp
+4. [x] Handle file creation
+5. [x] Write unit tests
 
 ---
 
@@ -354,23 +354,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Handle feedback files for human input during blockers.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/plan/feedback.go` defines feedback file operations
-- [ ] `FeedbackPath(plan *Plan) string` returns `<plan-path-without-ext>.feedback.md`
-- [ ] `ReadFeedback(plan *Plan) (string, error)` reads pending feedback section
-- [ ] `AppendFeedback(plan *Plan, source string, content string) error` adds timestamped entry to Pending section
-- [ ] `MarkProcessed(plan *Plan, entry string) error` moves entry from Pending to Processed
-- [ ] File format matches existing: `# Feedback\n## Pending\n...\n## Processed\n...`
-- [ ] Unit tests verify section parsing and updates
+- [x] `internal/plan/feedback.go` defines feedback file operations
+- [x] `FeedbackPath(plan *Plan) string` returns `<plan-path-without-ext>.feedback.md`
+- [x] `ReadFeedback(plan *Plan) (string, error)` reads pending feedback section
+- [x] `AppendFeedback(plan *Plan, source string, content string) error` adds timestamped entry to Pending section
+- [x] `MarkProcessed(plan *Plan, entry string) error` moves entry from Pending to Processed
+- [x] File format matches existing: `# Feedback\n## Pending\n...\n## Processed\n...`
+- [x] Unit tests verify section parsing and updates
 
 **Subtasks:**
-1. [ ] Implement path derivation
-2. [ ] Implement ReadFeedback (parse Pending section)
-3. [ ] Implement AppendFeedback
-4. [ ] Implement MarkProcessed
-5. [ ] Write unit tests with sample files
+1. [x] Implement path derivation
+2. [x] Implement ReadFeedback (parse Pending section)
+3. [x] Implement AppendFeedback
+4. [x] Implement MarkProcessed
+5. [x] Write unit tests with sample files
 
 ---
 
@@ -378,23 +378,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Display queue status and worktree information.
 
 **Requires:** T11, T3
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph status` displays count of plans in each queue (pending, current, complete)
-- [ ] Shows current plan name and branch if one is active
-- [ ] Shows list of pending plans by name
-- [ ] Shows worktree status (count, paths) - placeholder until worktree implemented
-- [ ] Colored output: current=green, pending=yellow
-- [ ] Returns exit code 0 on success
-- [ ] Integration test verifies output format
+- [x] `ralph status` displays count of plans in each queue (pending, current, complete)
+- [x] Shows current plan name and branch if one is active
+- [x] Shows list of pending plans by name
+- [x] Shows worktree status (count, paths) - placeholder until worktree implemented
+- [x] Colored output: current=green, pending=yellow
+- [x] Returns exit code 0 on success
+- [x] Integration test verifies output format
 
 **Subtasks:**
-1. [ ] Create internal/cli/status.go
-2. [ ] Implement queue status display
-3. [ ] Add worktree status placeholder
-4. [ ] Add colored output
-5. [ ] Write integration test
+1. [x] Create internal/cli/status.go
+2. [x] Implement queue status display
+3. [x] Add worktree status placeholder
+4. [x] Add colored output
+5. [x] Write integration test
 
 ---
 
@@ -404,26 +404,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Wrapper around git CLI for common operations.
 
 **Requires:** T2
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/git/git.go` defines `Git` interface with Status, Commit, Add, Push, Pull, CurrentBranch, CreateBranch, DeleteBranch, BranchExists, RepoRoot, IsClean
-- [ ] `NewGit(workDir string) Git` creates instance for specific directory
-- [ ] `Status() (*Status, error)` returns parsed git status (branch, staged, unstaged, untracked, IsClean)
-- [ ] `Commit(message string, files ...string) error` stages files and commits
-- [ ] `CurrentBranch() (string, error)` returns current branch name
-- [ ] `IsClean() (bool, error)` returns true if no uncommitted changes
-- [ ] All operations shell out to `git` CLI with proper error handling
-- [ ] Integration tests run in temp git repos
+- [x] `internal/git/git.go` defines `Git` interface with Status, Commit, Add, Push, Pull, CurrentBranch, CreateBranch, DeleteBranch, BranchExists, RepoRoot, IsClean
+- [x] `NewGit(workDir string) Git` creates instance for specific directory
+- [x] `Status() (*Status, error)` returns parsed git status (branch, staged, unstaged, untracked, IsClean)
+- [x] `Commit(message string, files ...string) error` stages files and commits
+- [x] `CurrentBranch() (string, error)` returns current branch name
+- [x] `IsClean() (bool, error)` returns true if no uncommitted changes
+- [x] All operations shell out to `git` CLI with proper error handling
+- [x] Integration tests run in temp git repos
 
 **Subtasks:**
-1. [ ] Define Git interface
-2. [ ] Implement command execution helper
-3. [ ] Implement Status() with output parsing
-4. [ ] Implement Commit() and Add()
-5. [ ] Implement branch operations
-6. [ ] Implement RepoRoot() and IsClean()
-7. [ ] Write integration tests with temp repos
+1. [x] Define Git interface
+2. [x] Implement command execution helper
+3. [x] Implement Status() with output parsing
+4. [x] Implement Commit() and Add()
+5. [x] Implement branch operations
+6. [x] Implement RepoRoot() and IsClean()
+7. [x] Write integration tests with temp repos
 
 ---
 
@@ -431,24 +431,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Create, remove, and list git worktrees.
 
 **Requires:** T15
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `CreateWorktree(path, branch string) error` runs `git worktree add`
-- [ ] Creates branch if it doesn't exist (based on current HEAD)
-- [ ] `RemoveWorktree(path string) error` runs `git worktree remove`
-- [ ] `ListWorktrees() ([]WorktreeInfo, error)` parses `git worktree list --porcelain`
-- [ ] `WorktreeInfo` contains Path, Branch, Commit
-- [ ] CreateWorktree returns specific error if branch already checked out (this is the lock!)
-- [ ] Integration tests verify worktree creation and removal
+- [x] `CreateWorktree(path, branch string) error` runs `git worktree add`
+- [x] Creates branch if it doesn't exist (based on current HEAD)
+- [x] `RemoveWorktree(path string) error` runs `git worktree remove`
+- [x] `ListWorktrees() ([]WorktreeInfo, error)` parses `git worktree list --porcelain`
+- [x] `WorktreeInfo` contains Path, Branch, Commit
+- [x] CreateWorktree returns specific error if branch already checked out (this is the lock!)
+- [x] Integration tests verify worktree creation and removal
 
 **Subtasks:**
-1. [ ] Implement CreateWorktree
-2. [ ] Implement branch creation within CreateWorktree
-3. [ ] Implement RemoveWorktree
-4. [ ] Implement ListWorktrees with porcelain parsing
-5. [ ] Define and detect "branch already checked out" error
-6. [ ] Write integration tests
+1. [x] Implement CreateWorktree
+2. [x] Implement branch creation within CreateWorktree
+3. [x] Implement RemoveWorktree
+4. [x] Implement ListWorktrees with porcelain parsing
+5. [x] Define and detect "branch already checked out" error
+6. [x] Write integration tests
 
 ---
 
@@ -456,25 +456,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > High-level worktree management for plans.
 
 **Requires:** T16, T11
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/manager.go` defines `WorktreeManager` struct
-- [ ] `Create(plan *Plan) (*Worktree, error)` creates worktree at `.ralph/worktrees/feat-<plan-name>/`
-- [ ] `Remove(plan *Plan) error` removes plan's worktree and optionally deletes branch
-- [ ] `Get(plan *Plan) (*Worktree, error)` returns existing worktree or nil
-- [ ] `Exists(plan *Plan) bool` checks if worktree exists
-- [ ] `Path(plan *Plan) string` returns worktree path for plan
-- [ ] Worktree path is gitignored (check `.ralph/worktrees/` in .gitignore)
-- [ ] Unit tests with mock Git interface
+- [x] `internal/worktree/manager.go` defines `WorktreeManager` struct
+- [x] `Create(plan *Plan) (*Worktree, error)` creates worktree at `.ralph/worktrees/feat-<plan-name>/`
+- [x] `Remove(plan *Plan) error` removes plan's worktree and optionally deletes branch
+- [x] `Get(plan *Plan) (*Worktree, error)` returns existing worktree or nil
+- [x] `Exists(plan *Plan) bool` checks if worktree exists
+- [x] `Path(plan *Plan) string` returns worktree path for plan
+- [x] Worktree path is gitignored (check `.ralph/worktrees/` in .gitignore)
+- [x] Unit tests with mock Git interface
 
 **Subtasks:**
-1. [ ] Define WorktreeManager struct
-2. [ ] Implement path derivation
-3. [ ] Implement Create with Git.CreateWorktree
-4. [ ] Implement Remove
-5. [ ] Implement Get and Exists
-6. [ ] Write unit tests with mock Git
+1. [x] Define WorktreeManager struct
+2. [x] Implement path derivation
+3. [x] Implement Create with Git.CreateWorktree
+4. [x] Implement Remove
+5. [x] Implement Get and Exists
+6. [x] Write unit tests with mock Git
 
 ---
 
@@ -482,30 +482,30 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Detect and install project dependencies in new worktrees.
 
 **Requires:** T17
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/deps.go` defines `DetectAndInstall(worktreePath string) error`
-- [ ] Detects package-lock.json → runs `npm ci`
-- [ ] Detects yarn.lock → runs `yarn install --frozen-lockfile`
-- [ ] Detects pnpm-lock.yaml → runs `pnpm install --frozen-lockfile`
-- [ ] Detects bun.lockb → runs `bun install --frozen-lockfile`
-- [ ] Detects composer.lock → runs `composer install`
-- [ ] Detects requirements.txt → runs `pip install -r requirements.txt`
-- [ ] Detects poetry.lock → runs `poetry install`
-- [ ] Detects Gemfile.lock → runs `bundle install`
-- [ ] Detects go.sum → runs `go mod download`
-- [ ] Detects Cargo.lock → runs `cargo fetch`
-- [ ] Returns nil if no lockfile found (skip install)
-- [ ] Integration tests with fixture directories
+- [x] `internal/worktree/deps.go` defines `DetectAndInstall(worktreePath string) error`
+- [x] Detects package-lock.json → runs `npm ci`
+- [x] Detects yarn.lock → runs `yarn install --frozen-lockfile`
+- [x] Detects pnpm-lock.yaml → runs `pnpm install --frozen-lockfile`
+- [x] Detects bun.lockb → runs `bun install --frozen-lockfile`
+- [x] Detects composer.lock → runs `composer install`
+- [x] Detects requirements.txt → runs `pip install -r requirements.txt`
+- [x] Detects poetry.lock → runs `poetry install`
+- [x] Detects Gemfile.lock → runs `bundle install`
+- [x] Detects go.sum → runs `go mod download`
+- [x] Detects Cargo.lock → runs `cargo fetch`
+- [x] Returns nil if no lockfile found (skip install)
+- [x] Integration tests with fixture directories
 
 **Subtasks:**
-1. [ ] Define lockfile detection order
-2. [ ] Implement detection logic
-3. [ ] Implement command execution for each package manager
-4. [ ] Handle errors (command not found vs install failure)
-5. [ ] Create test fixtures
-6. [ ] Write integration tests
+1. [x] Define lockfile detection order
+2. [x] Implement detection logic
+3. [x] Implement command execution for each package manager
+4. [x] Handle errors (command not found vs install failure)
+5. [x] Create test fixtures
+6. [x] Write integration tests
 
 ---
 
@@ -513,23 +513,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Sync plan files between main worktree and execution worktree.
 
 **Requires:** T17, T12, T13
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/sync.go` defines sync operations
-- [ ] `SyncToWorktree(plan *Plan, worktreePath string) error` copies plan, progress, feedback files to worktree
-- [ ] `SyncFromWorktree(plan *Plan, worktreePath string) error` copies plan, progress files back to main
-- [ ] Sync preserves file permissions
-- [ ] SyncToWorktree also copies .env files based on config.worktree.copy_env_files
-- [ ] Missing source files are skipped (not error)
-- [ ] Unit tests verify file copying in both directions
+- [x] `internal/worktree/sync.go` defines sync operations
+- [x] `SyncToWorktree(plan *Plan, worktreePath string) error` copies plan, progress, feedback files to worktree
+- [x] `SyncFromWorktree(plan *Plan, worktreePath string) error` copies plan, progress files back to main
+- [x] Sync preserves file permissions
+- [x] SyncToWorktree also copies .env files based on config.worktree.copy_env_files
+- [x] Missing source files are skipped (not error)
+- [x] Unit tests verify file copying in both directions
 
 **Subtasks:**
-1. [ ] Implement SyncToWorktree
-2. [ ] Implement SyncFromWorktree
-3. [ ] Add .env file copying with config parsing
-4. [ ] Handle missing files gracefully
-5. [ ] Write unit tests
+1. [x] Implement SyncToWorktree
+2. [x] Implement SyncFromWorktree
+3. [x] Add .env file copying with config parsing
+4. [x] Handle missing files gracefully
+5. [x] Write unit tests
 
 ---
 
@@ -537,23 +537,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Run custom init commands after worktree creation.
 
 **Requires:** T18, T19
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worktree/hooks.go` defines `RunInitHooks(worktreePath string, config *Config, mainWorktreePath string) error`
-- [ ] Checks for `.ralph/hooks/worktree-init` executable, runs if present
-- [ ] Sets `MAIN_WORKTREE` environment variable when running hook
-- [ ] If config.worktree.init_commands set, runs those (skips auto-detection)
-- [ ] If no hook and no init_commands, falls back to DetectAndInstall
-- [ ] Logs each step for debugging
-- [ ] Integration test with custom hook script
+- [x] `internal/worktree/hooks.go` defines `RunInitHooks(worktreePath string, config *Config, mainWorktreePath string) error`
+- [x] Checks for `.ralph/hooks/worktree-init` executable, runs if present
+- [x] Sets `MAIN_WORKTREE` environment variable when running hook
+- [x] If config.worktree.init_commands set, runs those (skips auto-detection)
+- [x] If no hook and no init_commands, falls back to DetectAndInstall
+- [x] Logs each step for debugging
+- [x] Integration test with custom hook script
 
 **Subtasks:**
-1. [ ] Implement hook file detection
-2. [ ] Implement hook execution with environment
-3. [ ] Implement init_commands execution
-4. [ ] Implement fallback to auto-detection
-5. [ ] Write integration test with hook
+1. [x] Implement hook file detection
+2. [x] Implement hook execution with environment
+3. [x] Implement init_commands execution
+4. [x] Implement fallback to auto-detection
+5. [x] Write integration test with hook
 
 ---
 
@@ -561,23 +561,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Remove worktrees that no longer have associated plans.
 
 **Requires:** T17, T11
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `Cleanup() ([]string, error)` in WorktreeManager removes orphaned worktrees
-- [ ] Worktree is orphaned if: exists in .ralph/worktrees/ but no matching plan in pending/ or current/
-- [ ] Does NOT remove worktrees with uncommitted changes (safety)
-- [ ] Returns list of removed worktree paths
-- [ ] Logs each removal
-- [ ] `ralph cleanup` command calls this function
-- [ ] Integration test creates orphan and verifies cleanup
+- [x] `Cleanup() ([]string, error)` in WorktreeManager removes orphaned worktrees
+- [x] Worktree is orphaned if: exists in .ralph/worktrees/ but no matching plan in pending/ or current/
+- [x] Does NOT remove worktrees with uncommitted changes (safety)
+- [x] Returns list of removed worktree paths
+- [x] Logs each removal
+- [x] `ralph cleanup` command calls this function
+- [x] Integration test creates orphan and verifies cleanup
 
 **Subtasks:**
-1. [ ] Implement orphan detection logic
-2. [ ] Implement uncommitted changes check
-3. [ ] Implement removal with logging
-4. [ ] Create internal/cli/cleanup.go
-5. [ ] Write integration test
+1. [x] Implement orphan detection logic
+2. [x] Implement uncommitted changes check
+3. [x] Implement removal with logging
+4. [x] Create internal/cli/cleanup.go
+5. [x] Write integration test
 
 ---
 
@@ -587,24 +587,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Build claude CLI command with all options.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/command.go` defines `BuildCommand(prompt string, opts Options) *exec.Cmd`
-- [ ] Supports: --print (for prompt output), --output-format stream-json
-- [ ] Supports: --model flag from opts.Model
-- [ ] Supports: --max-tokens from opts.MaxTokens
-- [ ] Supports: --allowedTools from opts.AllowedTools (comma-separated)
-- [ ] Sets working directory from opts.WorkDir
-- [ ] Passes prompt via stdin (not argument, to avoid shell escaping issues)
-- [ ] Unit tests verify command construction
+- [x] `internal/runner/command.go` defines `BuildCommand(prompt string, opts Options) *exec.Cmd`
+- [x] Supports: --print (for prompt output), --output-format stream-json
+- [x] Supports: --model flag from opts.Model
+- [x] Supports: --max-tokens from opts.MaxTokens
+- [x] Supports: --allowedTools from opts.AllowedTools (comma-separated)
+- [x] Sets working directory from opts.WorkDir
+- [x] Passes prompt via stdin (not argument, to avoid shell escaping issues)
+- [x] Unit tests verify command construction
 
 **Subtasks:**
-1. [ ] Define Options struct
-2. [ ] Implement BuildCommand
-3. [ ] Handle stdin prompt passing
-4. [ ] Add all supported flags
-5. [ ] Write unit tests
+1. [x] Define Options struct
+2. [x] Implement BuildCommand
+3. [x] Handle stdin prompt passing
+4. [x] Add all supported flags
+5. [x] Write unit tests
 
 ---
 
@@ -612,24 +612,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Parse Claude CLI streaming JSON output line-by-line.
 
 **Requires:** T22
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/stream.go` defines `StreamParser` for incremental parsing
-- [ ] Parses JSON lines from Claude CLI output
-- [ ] Extracts content text for real-time display
-- [ ] Accumulates full response
-- [ ] Handles partial lines (buffer until newline)
-- [ ] Ignores non-JSON lines gracefully
-- [ ] Unit tests with sample Claude output
+- [x] `internal/runner/stream.go` defines `StreamParser` for incremental parsing
+- [x] Parses JSON lines from Claude CLI output
+- [x] Extracts content text for real-time display
+- [x] Accumulates full response
+- [x] Handles partial lines (buffer until newline)
+- [x] Ignores non-JSON lines gracefully
+- [x] Unit tests with sample Claude output
 
 **Subtasks:**
-1. [ ] Research Claude CLI JSON output format
-2. [ ] Define StreamParser struct
-3. [ ] Implement line-by-line parsing
-4. [ ] Implement content extraction
-5. [ ] Handle edge cases (partial lines, non-JSON)
-6. [ ] Write unit tests with real output samples
+1. [x] Research Claude CLI JSON output format
+2. [x] Define StreamParser struct
+3. [x] Implement line-by-line parsing
+4. [x] Implement content extraction
+5. [x] Handle edge cases (partial lines, non-JSON)
+6. [x] Write unit tests with real output samples
 
 ---
 
@@ -637,26 +637,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Retry transient failures with configurable backoff.
 
 **Requires:** T2
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/retry.go` defines `Retrier` struct
-- [ ] `Do(fn func() error) error` executes function with retry
-- [ ] Configurable: MaxRetries (default 5), InitialDelay (default 5s), MaxDelay (default 60s)
-- [ ] Exponential backoff with jitter (±25%)
-- [ ] `IsRetryable(err error) bool` identifies transient errors
-- [ ] Retryable: context.DeadlineExceeded, rate limit errors, connection errors
-- [ ] Non-retryable: invalid arguments, auth failure
-- [ ] Logs each retry attempt with delay
-- [ ] Unit tests verify backoff timing and retry counts
+- [x] `internal/runner/retry.go` defines `Retrier` struct
+- [x] `Do(fn func() error) error` executes function with retry
+- [x] Configurable: MaxRetries (default 5), InitialDelay (default 5s), MaxDelay (default 60s)
+- [x] Exponential backoff with jitter (±25%)
+- [x] `IsRetryable(err error) bool` identifies transient errors
+- [x] Retryable: context.DeadlineExceeded, rate limit errors, connection errors
+- [x] Non-retryable: invalid arguments, auth failure
+- [x] Logs each retry attempt with delay
+- [x] Unit tests verify backoff timing and retry counts
 
 **Subtasks:**
-1. [ ] Define Retrier struct with config
-2. [ ] Implement Do() with retry loop
-3. [ ] Implement exponential backoff with jitter
-4. [ ] Implement IsRetryable error classification
-5. [ ] Add logging
-6. [ ] Write unit tests
+1. [x] Define Retrier struct with config
+2. [x] Implement Do() with retry loop
+3. [x] Implement exponential backoff with jitter
+4. [x] Implement IsRetryable error classification
+5. [x] Add logging
+6. [x] Write unit tests
 
 ---
 
@@ -737,24 +737,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Verify plan completion using cheaper Haiku model.
 
 **Requires:** T25, T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/verify.go` defines `Verify(plan *Plan, runner Runner) (bool, string, error)`
-- [ ] Builds verification prompt with plan state (tasks, checkboxes)
-- [ ] Runs Haiku model (fast, cheap) via runner with model override
-- [ ] Parses yes/no response
-- [ ] Returns (true, "", nil) if verified complete
-- [ ] Returns (false, reason, nil) if not complete, with extracted reason
-- [ ] Uses shorter timeout (60s default) for verification
-- [ ] Unit tests with mock runner
+- [x] `internal/runner/verify.go` defines `Verify(plan *Plan, runner Runner) (bool, string, error)`
+- [x] Builds verification prompt with plan state (tasks, checkboxes)
+- [x] Runs Haiku model (fast, cheap) via runner with model override
+- [x] Parses yes/no response
+- [x] Returns (true, "", nil) if verified complete
+- [x] Returns (false, reason, nil) if not complete, with extracted reason
+- [x] Uses shorter timeout (60s default) for verification
+- [x] Unit tests with mock runner
 
 **Subtasks:**
-1. [ ] Define verification prompt template
-2. [ ] Implement Verify function
-3. [ ] Implement yes/no parsing
-4. [ ] Implement reason extraction
-5. [ ] Write unit tests with mock
+1. [x] Define verification prompt template
+2. [x] Implement Verify function
+3. [x] Implement yes/no parsing
+4. [x] Implement reason extraction
+5. [x] Write unit tests with mock
 
 ---
 
@@ -764,21 +764,21 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Manage context.json for execution state between iterations.
 
 **Requires:** T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/context.go` defines `Context` struct with PlanFile, FeatureBranch, BaseBranch, Iteration, MaxIterations
-- [ ] `LoadContext(path string) (*Context, error)` reads context.json
-- [ ] `SaveContext(ctx *Context, path string) error` writes context.json
-- [ ] `NewContext(plan *Plan, baseBranch string, maxIterations int) *Context` creates new context
-- [ ] Context path is `.ralph/context.json` in worktree
-- [ ] Unit tests verify JSON serialization
+- [x] `internal/runner/context.go` defines `Context` struct with PlanFile, FeatureBranch, BaseBranch, Iteration, MaxIterations
+- [x] `LoadContext(path string) (*Context, error)` reads context.json
+- [x] `SaveContext(ctx *Context, path string) error` writes context.json
+- [x] `NewContext(plan *Plan, baseBranch string, maxIterations int) *Context` creates new context
+- [x] Context path is `.ralph/context.json` in worktree
+- [x] Unit tests verify JSON serialization
 
 **Subtasks:**
-1. [ ] Define Context struct with JSON tags
-2. [ ] Implement Load/Save
-3. [ ] Implement NewContext
-4. [ ] Write unit tests
+1. [x] Define Context struct with JSON tags
+2. [x] Implement Load/Save
+3. [x] Implement NewContext
+4. [x] Write unit tests
 
 ---
 
@@ -786,29 +786,29 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Core execution loop: prompt → Claude → verify → commit → repeat.
 
 **Requires:** T25, T26, T27, T28, T29, T6, T15, T12
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/loop.go` defines `IterationLoop` struct
-- [ ] `Run(ctx context.Context) error` executes loop until complete or max iterations
-- [ ] Each iteration: build prompt → run Claude → check completion → verify if complete → commit
-- [ ] Appends to progress file after each iteration
-- [ ] Commits all changes (plan, progress) after each iteration
-- [ ] Exits with success when verified complete
-- [ ] Exits with error when max iterations reached
-- [ ] Detects and handles blockers (notifies, continues)
-- [ ] 3-second cooldown between iterations
-- [ ] Integration test with mock Claude (3 iterations to complete)
+- [x] `internal/runner/loop.go` defines `IterationLoop` struct
+- [x] `Run(ctx context.Context) error` executes loop until complete or max iterations
+- [x] Each iteration: build prompt → run Claude → check completion → verify if complete → commit
+- [x] Appends to progress file after each iteration
+- [x] Commits all changes (plan, progress) after each iteration
+- [x] Exits with success when verified complete
+- [x] Exits with error when max iterations reached
+- [x] Detects and handles blockers (notifies, continues)
+- [x] 3-second cooldown between iterations
+- [x] Integration test with mock Claude (3 iterations to complete)
 
 **Subtasks:**
-1. [ ] Define IterationLoop struct
-2. [ ] Implement single iteration logic
-3. [ ] Implement loop with termination conditions
-4. [ ] Integrate prompt building
-5. [ ] Integrate progress file updates
-6. [ ] Integrate git commit
-7. [ ] Add cooldown delay
-8. [ ] Write integration test
+1. [x] Define IterationLoop struct
+2. [x] Implement single iteration logic
+3. [x] Implement loop with termination conditions
+4. [x] Integrate prompt building
+5. [x] Integrate progress file updates
+6. [x] Integrate git commit
+7. [x] Add cooldown delay
+8. [x] Write integration test
 
 ---
 
@@ -816,24 +816,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > CLI command to run iteration loop on a plan.
 
 **Requires:** T30
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph run <plan>` executes iteration loop on specified plan file
-- [ ] `--max` flag overrides max iterations (default 30)
-- [ ] `--review` flag runs plan review before execution (placeholder for now)
-- [ ] Validates plan file exists before starting
-- [ ] Shows iteration progress (current/max)
-- [ ] Exits with code 0 on success, 1 on failure
-- [ ] Integration test runs loop on test plan
+- [x] `ralph run <plan>` executes iteration loop on specified plan file
+- [x] `--max` flag overrides max iterations (default 30)
+- [x] `--review` flag runs plan review before execution (placeholder for now)
+- [x] Validates plan file exists before starting
+- [x] Shows iteration progress (current/max)
+- [x] Exits with code 0 on success, 1 on failure
+- [x] Integration test runs loop on test plan
 
 **Subtasks:**
-1. [ ] Create internal/cli/run.go
-2. [ ] Implement plan loading and validation
-3. [ ] Wire up iteration loop
-4. [ ] Add --max flag
-5. [ ] Add --review flag (placeholder)
-6. [ ] Write integration test
+1. [x] Create internal/cli/run.go
+2. [x] Implement plan loading and validation
+3. [x] Wire up iteration loop
+4. [x] Add --max flag
+5. [x] Add --review flag (placeholder)
+6. [x] Write integration test
 
 ---
 
@@ -843,28 +843,28 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Process queue: pending → current → execute → complete.
 
 **Requires:** T30, T11, T17, T19, T20
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worker/worker.go` defines `Worker` struct
-- [ ] `Run(ctx context.Context) error` processes queue continuously
-- [ ] `RunOnce(ctx context.Context) error` processes one plan and exits
-- [ ] Workflow: take from pending → activate → create worktree → run loop → complete → cleanup worktree
-- [ ] Syncs files to/from worktree at appropriate points
-- [ ] Runs worktree init hooks after creation
-- [ ] Waits and polls when queue is empty (configurable interval)
-- [ ] Handles interrupts gracefully (finish current iteration, then stop)
-- [ ] Integration test with queue of 2 plans
+- [x] `internal/worker/worker.go` defines `Worker` struct
+- [x] `Run(ctx context.Context) error` processes queue continuously
+- [x] `RunOnce(ctx context.Context) error` processes one plan and exits
+- [x] Workflow: take from pending → activate → create worktree → run loop → complete → cleanup worktree
+- [x] Syncs files to/from worktree at appropriate points
+- [x] Runs worktree init hooks after creation
+- [x] Waits and polls when queue is empty (configurable interval)
+- [x] Handles interrupts gracefully (finish current iteration, then stop)
+- [x] Integration test with queue of 2 plans
 
 **Subtasks:**
-1. [ ] Define Worker struct
-2. [ ] Implement single plan processing
-3. [ ] Implement RunOnce
-4. [ ] Implement Run with polling
-5. [ ] Integrate worktree management
-6. [ ] Integrate file sync
-7. [ ] Add interrupt handling
-8. [ ] Write integration test
+1. [x] Define Worker struct
+2. [x] Implement single plan processing
+3. [x] Implement RunOnce
+4. [x] Implement Run with polling
+5. [x] Integrate worktree management
+6. [x] Integrate file sync
+7. [x] Add interrupt handling
+8. [x] Write integration test
 
 ---
 
@@ -872,24 +872,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Create PR on completion using `gh` CLI.
 
 **Requires:** T32, T15
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worker/completion.go` defines `CompletePR(plan *Plan, worktree *Worktree) (string, error)`
-- [ ] Pushes branch to origin
-- [ ] Creates PR using `gh pr create` with title and body
-- [ ] PR title: plan name
-- [ ] PR body: includes "Generated by Ralph" footer
-- [ ] Returns PR URL on success
-- [ ] Falls back gracefully if `gh` not installed (logs manual instructions)
-- [ ] Integration test with mock gh
+- [x] `internal/worker/completion.go` defines `CompletePR(plan *Plan, worktree *Worktree) (string, error)`
+- [x] Pushes branch to origin
+- [x] Creates PR using `gh pr create` with title and body
+- [x] PR title: plan name
+- [x] PR body: includes "Generated by Ralph" footer
+- [x] Returns PR URL on success
+- [x] Falls back gracefully if `gh` not installed (logs manual instructions)
+- [x] Integration test with mock gh
 
 **Subtasks:**
-1. [ ] Implement branch push
-2. [ ] Implement gh pr create execution
-3. [ ] Parse PR URL from gh output
-4. [ ] Implement fallback for missing gh
-5. [ ] Write integration test
+1. [x] Implement branch push
+2. [x] Implement gh pr create execution
+3. [x] Parse PR URL from gh output
+4. [x] Implement fallback for missing gh
+5. [x] Write integration test
 
 ---
 
@@ -921,26 +921,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > CLI command to run worker queue processor.
 
 **Requires:** T32, T33, T34
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph worker` processes queue continuously
-- [ ] `ralph worker --once` processes one plan and exits
-- [ ] `--pr` flag uses PR mode for completion (default)
-- [ ] `--merge` flag uses merge mode for completion
-- [ ] `--interval` flag sets poll interval when queue empty (default 30s)
-- [ ] Shows current plan being processed
-- [ ] Handles Ctrl+C gracefully
-- [ ] Integration test processes queue with --once
+- [x] `ralph worker` processes queue continuously
+- [x] `ralph worker --once` processes one plan and exits
+- [x] `--pr` flag uses PR mode for completion (default)
+- [x] `--merge` flag uses merge mode for completion
+- [x] `--interval` flag sets poll interval when queue empty (default 30s)
+- [x] Shows current plan being processed
+- [x] Handles Ctrl+C gracefully
+- [x] Integration test processes queue with --once
 
 **Subtasks:**
-1. [ ] Create internal/cli/worker.go
-2. [ ] Wire up Worker
-3. [ ] Add --once flag
-4. [ ] Add --pr and --merge flags
-5. [ ] Add --interval flag
-6. [ ] Add signal handling
-7. [ ] Write integration test
+1. [x] Create internal/cli/worker.go
+2. [x] Wire up Worker
+3. [x] Add --once flag
+4. [x] Add --pr and --merge flags
+5. [x] Add --interval flag
+6. [x] Add signal handling
+7. [x] Write integration test
 
 ---
 
@@ -948,22 +948,22 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Move current plan back to pending.
 
 **Requires:** T11
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph reset` moves plan from current/ to pending/
-- [ ] Removes associated worktree if exists
-- [ ] Prompts for confirmation
-- [ ] `--force` skips confirmation
-- [ ] Returns error if no current plan
-- [ ] Integration test verifies reset
+- [x] `ralph reset` moves plan from current/ to pending/
+- [x] Removes associated worktree if exists
+- [x] Prompts for confirmation
+- [x] `--force` skips confirmation
+- [x] Returns error if no current plan
+- [x] Integration test verifies reset
 
 **Subtasks:**
-1. [ ] Create internal/cli/reset.go
-2. [ ] Implement reset logic
-3. [ ] Add confirmation prompt
-4. [ ] Add --force flag
-5. [ ] Write integration test
+1. [x] Create internal/cli/reset.go
+2. [x] Implement reset logic
+3. [x] Add confirmation prompt
+4. [x] Add --force flag
+5. [x] Write integration test
 
 ---
 
@@ -1075,24 +1075,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Wire notifications into worker lifecycle.
 
 **Requires:** T39, T40, T32
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] Worker sends Start notification when plan begins
-- [ ] Worker sends Complete notification with PR URL when done
-- [ ] Worker sends Blocker notification when blocker detected
-- [ ] Worker sends Error notification on failure
-- [ ] Iteration notifications sent if config.slack.notify_iteration is true
-- [ ] Socket Mode bot auto-started if configured
-- [ ] Notifications are no-op if Slack not configured
-- [ ] Integration test verifies notification calls
+- [x] Worker sends Start notification when plan begins
+- [x] Worker sends Complete notification with PR URL when done
+- [x] Worker sends Blocker notification when blocker detected
+- [x] Worker sends Error notification on failure
+- [x] Iteration notifications sent if config.slack.notify_iteration is true
+- [x] Socket Mode bot auto-started if configured
+- [x] Notifications are no-op if Slack not configured
+- [x] Integration test verifies notification calls
 
 **Subtasks:**
-1. [ ] Inject Notifier into Worker
-2. [ ] Add notification calls at lifecycle points
-3. [ ] Auto-start Socket Mode bot
-4. [ ] Handle missing configuration
-5. [ ] Write integration test
+1. [x] Inject Notifier into Worker
+2. [x] Add notification calls at lifecycle points
+3. [x] Auto-start Socket Mode bot
+4. [x] Handle missing configuration
+5. [x] Write integration test
 
 ---
 
@@ -1123,23 +1123,27 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 ---
 
 ### T43: Set up Homebrew tap
-> Install via `brew install arvesolland/tap/ralph`.
+> Install via `brew install arvesolland/ralph/ralph`.
 
 **Requires:** T42
-**Status:** open
+**Status:** complete
 
 **Done when:**
 - [x] homebrew-ralph repository created (or configured in goreleaser)
-- [ ] Formula generated by goreleaser on release
-- [ ] `brew install arvesolland/tap/ralph` installs latest version
-- [ ] Formula includes description and homepage
-- [ ] Test installation in clean environment
+- [x] Cask generated by goreleaser on release
+- [x] `brew install arvesolland/ralph/ralph` installs latest version
+- [x] Cask includes description and homepage
+- [x] Test installation in clean environment
 
 **Subtasks:**
-1. [x] Configure brew section in goreleaser
-2. [ ] Set up homebrew tap repository
-3. [ ] Test formula generation
-4. [ ] Test installation
+1. [x] Configure brew section in goreleaser (migrated to homebrew_casks for v2)
+2. [x] Set up homebrew tap repository (arvesolland/homebrew-ralph)
+3. [x] Test cask generation (Casks/ralph.rb pushed on v1.1.0 release)
+4. [x] Test installation (brew install succeeded, binary at /opt/homebrew/bin/ralph)
+
+**Note:** Distribution also available via:
+- Direct download from GitHub releases
+- `go install github.com/arvesolland/ralph/cmd/ralph@latest`
 
 ---
 
