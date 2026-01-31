@@ -948,22 +948,22 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Move current plan back to pending.
 
 **Requires:** T11
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph reset` moves plan from current/ to pending/
-- [ ] Removes associated worktree if exists
-- [ ] Prompts for confirmation
-- [ ] `--force` skips confirmation
-- [ ] Returns error if no current plan
-- [ ] Integration test verifies reset
+- [x] `ralph reset` moves plan from current/ to pending/
+- [x] Removes associated worktree if exists
+- [x] Prompts for confirmation
+- [x] `--force` skips confirmation
+- [x] Returns error if no current plan
+- [x] Integration test verifies reset
 
 **Subtasks:**
-1. [ ] Create internal/cli/reset.go
-2. [ ] Implement reset logic
-3. [ ] Add confirmation prompt
-4. [ ] Add --force flag
-5. [ ] Write integration test
+1. [x] Create internal/cli/reset.go
+2. [x] Implement reset logic
+3. [x] Add confirmation prompt
+4. [x] Add --force flag
+5. [x] Write integration test
 
 ---
 

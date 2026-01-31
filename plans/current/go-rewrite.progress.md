@@ -954,3 +954,29 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - implementation follows established CLI patterns from run.go. The worker uses same signal handling approach as run command.
 
 **Next:** T36 - Add `ralph reset` command (depends on T11, which is complete)
+
+---
+### Iteration 35: T36 - Add `ralph reset` command
+**Completed:**
+- Created `internal/cli/reset.go` with:
+  - `ralph reset` command with Cobra integration
+  - `--force/-f` flag to skip confirmation prompt
+  - `--keep-worktree` flag to preserve worktree during reset
+  - Confirmation prompt with plan name and branch display
+  - Worktree removal if exists (unless --keep-worktree)
+  - Uses `Queue.Reset()` to move plan from current/ to pending/
+  - Proper error handling for no current plan, git repo, etc.
+- Created `internal/cli/reset_test.go` with 7 test functions:
+  - TestResetCmd_HelpOutput - command registration verification
+  - TestResetCmd_FlagsRegistered - --force and --keep-worktree flags
+  - TestResetCmd_RequiresGitRepo - error handling for non-git directories
+  - TestResetCmd_NoCurrent - error when no current plan exists
+  - TestResetCmd_ResetsPlan - verifies plan moves from current/ to pending/
+  - TestResetCmd_RemovesWorktree - verifies worktree is removed by default
+  - TestResetCmd_KeepWorktree - verifies --keep-worktree preserves worktree
+- All 7 reset tests pass, all project tests pass
+- Build succeeds, `ralph reset --help` shows command and flags
+
+**Gotcha:** None - implementation follows established CLI patterns from cleanup.go. Added `--keep-worktree` flag beyond the spec for flexibility (user might want to keep worktree for debugging).
+
+**Next:** T37 - Implement Slack webhook notifications (depends on T4, which is complete)
