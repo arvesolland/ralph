@@ -369,26 +369,53 @@ This enables:
 - Reply tracking (human replies become feedback)
 - Blocker deduplication
 
-## Migration from Bash Version
+## Development
 
-If you were using the bash scripts (`ralph.sh`, `ralph-worker.sh`):
+### Building from Source
 
-1. **Install the Go binary** (see Installation above)
-2. **Update paths** - Commands are now just `ralph` instead of `./scripts/ralph/ralph.sh`
-3. **Config unchanged** - `.ralph/config.yaml` format is identical
-4. **Plans unchanged** - Plan file format is identical
-5. **Remove old scripts** - Delete `scripts/ralph/` directory
+```bash
+# Clone the repository
+git clone https://github.com/arvesolland/ralph.git
+cd ralph
 
-### Command Mapping
+# Build (development)
+make build-dev
 
-| Bash | Go |
-|------|----|
-| `./scripts/ralph/ralph.sh plan.md` | `ralph run plan.md` |
-| `./scripts/ralph/ralph-worker.sh` | `ralph worker` |
-| `./scripts/ralph/ralph-worker.sh --status` | `ralph status` |
-| `./scripts/ralph/ralph-worker.sh --reset` | `ralph reset` |
-| `./scripts/ralph/ralph-worker.sh --cleanup` | `ralph cleanup` |
-| `./scripts/ralph/ralph-init.sh --detect` | `ralph init --detect` |
+# Build (production with version info)
+make build
+
+# Run tests
+make test
+
+# Run tests with race detector
+make test-race
+```
+
+### Project Structure
+
+```
+cmd/ralph/              # Main entry point
+internal/
+├── cli/                # Cobra commands (init, run, worker, status, etc.)
+├── config/             # Config loading, YAML parsing, project detection
+├── plan/               # Plan parsing, task extraction, queue management
+├── runner/             # Claude execution, streaming, retry, verification
+├── git/                # Git operations (commit, branch, status)
+├── worktree/           # Worktree management, file sync, hooks
+├── notify/             # Slack notifications (webhook, bot, threads)
+├── prompt/             # Prompt template building with embedded defaults
+├── worker/             # Queue processor orchestration
+└── log/                # Structured logging with color support
+```
+
+### Key Packages
+
+- **runner** - Core Claude CLI execution with JSON streaming, retry logic, and Haiku-based verification
+- **worker** - Queue processor that moves plans through pending → current → complete
+- **worktree** - Git worktree lifecycle management with dependency auto-detection
+- **plan** - Markdown plan parsing with task extraction and checkbox tracking
+
+See [CLAUDE.md](CLAUDE.md) for detailed development guidance.
 
 ## Troubleshooting
 

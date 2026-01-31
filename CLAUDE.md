@@ -6,15 +6,9 @@ This file provides guidance to Claude Code when working on the Ralph repository.
 
 Ralph is an autonomous AI development loop orchestration system implementing the "Ralph Wiggum technique" - fresh context per iteration with progress persisted in files and git.
 
-## Versions
+Ralph is written in Go. The codebase lives in `cmd/` and `internal/` directories following standard Go project layout.
 
-Ralph has two implementations:
-- **Go version** (recommended) - Single binary at `cmd/ralph/`
-- **Bash version** (legacy) - Shell scripts in `scripts/ralph/`
-
-Both use the same config format (`.ralph/config.yaml`) and plan format.
-
-## Commands (Go Version)
+## Commands
 
 ```bash
 # Build the Go binary
@@ -42,28 +36,9 @@ make release-snapshot   # Test release build
 make release-dry-run    # Dry run release
 ```
 
-## Commands (Bash Version - Legacy)
-
-```bash
-# Run integration tests (real Claude execution, no mocking)
-./test/run-tests.sh
-
-# Run specific test
-./test/run-tests.sh --test single-task
-
-# Available tests: single-task, dependencies, progress, loose-format, worker-queue, dirty-state, worktree-cleanup, core-principles
-
-# Check script versions
-./ralph.sh --version
-./ralph-worker.sh --version
-
-# Test install in a temp directory
-cd $(mktemp -d) && git init && /path/to/ralph/install.sh --local
-```
-
 ## Architecture
 
-### Go Version Structure
+### Project Structure
 
 ```
 cmd/ralph/              # Main entry point
@@ -84,16 +59,6 @@ Key packages:
 - `internal/worker/worker.go` - Queue processor (pending → current → execute → complete)
 - `internal/worktree/manager.go` - Worktree creation, cleanup, file sync
 - `internal/notify/slack.go` - Slack Bot API with thread tracking
-
-### Bash Version Components (Legacy)
-
-```
-ralph.sh            # Main implementation loop - iterates until plan complete
-ralph-worker.sh     # Queue management - pending → current → complete
-ralph-init.sh       # Project initialization with --detect or --ai modes
-lib/config.sh       # Shared functions: config loading, prompt building, logging
-lib/worktree.sh     # Worktree isolation for plan execution
-```
 
 ### Worktree-Based Isolation
 
@@ -122,9 +87,9 @@ repo/                          # Main worktree (always on base branch)
 
 **Commands:**
 ```bash
-ralph-worker.sh --cleanup     # Remove orphaned worktrees
-ralph-worker.sh --status      # Show queue and worktree status
-ralph-worker.sh --reset       # Reset current plan to pending (start over)
+ralph cleanup     # Remove orphaned worktrees
+ralph status      # Show queue and worktree status
+ralph reset       # Reset current plan to pending (start over)
 ```
 
 **Worktree Initialization:**
@@ -164,17 +129,22 @@ php artisan key:generate
 
 ### Prompt System
 
+Default prompts are embedded in the binary via `//go:embed` in `internal/prompt/templates.go`:
+
 ```
-prompts/base/
+internal/prompt/prompts/
 ├── prompt.md                  # Worker agent instructions (main implementation)
+├── worker_prompt.md           # Alternative worker prompt
 ├── plan_reviewer_prompt.md    # Plan optimization before execution
 └── plan-spec.md               # Plan format specification
 ```
 
-Prompts use `{{PLACEHOLDER}}` syntax replaced by `build_prompt()` in lib/config.sh:
+Prompts use `{{PLACEHOLDER}}` syntax replaced by `prompt.Builder`:
 - `{{PROJECT_NAME}}`, `{{PROJECT_DESCRIPTION}}` - from config.yaml
 - `{{PRINCIPLES}}`, `{{PATTERNS}}`, `{{BOUNDARIES}}`, `{{TECH_STACK}}` - from .ralph/*.md files
 - `{{TEST_COMMAND}}`, `{{LINT_COMMAND}}` - from config.yaml commands
+
+Custom prompts can be placed in `.ralph/prompts/` to override embedded defaults.
 
 ### State Management
 
@@ -253,40 +223,26 @@ Resume: What happens once resolved.
 
 Both feedback and blocker files are synced between queue directory and worktree.
 
-### Slack Bot (Reply Tracking)
+### Slack Notifications
 
-The Slack bot handles thread replies and writes them to feedback files. It auto-starts when `ralph-worker.sh` runs if configured.
+Ralph supports Slack notifications via webhook or Bot API. Configuration in `.ralph/config.yaml`:
 
-**Setup:**
-1. Install: `pip install -r slack-bot/requirements.txt`
-2. Create `~/.ralph/slack.env` with your tokens (for global bot):
-   ```
-   SLACK_BOT_TOKEN=xoxb-...
-   SLACK_APP_TOKEN=xapp-...
-   ```
-3. Or export them as environment variables
-
-**Configuration in `.ralph/config.yaml`:**
 ```yaml
 slack:
-  webhook_url: "https://hooks.slack.com/services/..."  # Fallback
-  channel: "C0123456789"    # Channel ID (required for reply tracking)
-  global_bot: true          # Use single bot for all repos (recommended)
+  webhook_url: "https://hooks.slack.com/services/..."  # Simple notifications
+  bot_token: "xoxb-..."    # For thread-based notifications
+  app_token: "xapp-..."    # For Socket Mode (reply tracking)
+  channel: "C0123456789"   # Channel ID (required for bot features)
+  notify_start: true
+  notify_complete: true
+  notify_error: true
   notify_blocker: true
 ```
 
-**Modes:**
-- `global_bot: true` - One bot per machine at `~/.ralph/`, handles multiple repos
-- `global_bot: false` - One bot per repo at `.ralph/` (default)
-
-**Auto-start:** When `ralph-worker.sh` runs, it automatically starts the bot if:
-- `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are set
-- `slack.channel` is configured
-- Bot isn't already running
-
-**Manual start:** `python slack-bot/ralph_slack_bot.py --global`
-
-See `slack-bot/README.md` for full setup instructions.
+The Go implementation in `internal/notify/` supports:
+- Webhook notifications (simple, no dependencies)
+- Bot API with thread tracking per plan
+- Socket Mode for bidirectional communication
 
 ### Skills (.claude/skills/)
 
@@ -298,8 +254,6 @@ ralph-spec-to-plan/  # Generate plans from specs
 
 ## Key Files
 
-### Go Version
-
 | File | Purpose |
 |------|---------|
 | `cmd/ralph/main.go` | Entry point |
@@ -307,31 +261,24 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/cli/run.go` | `ralph run` command |
 | `internal/cli/worker.go` | `ralph worker` command |
 | `internal/runner/loop.go` | Main iteration loop |
+| `internal/runner/runner.go` | Claude CLI execution with streaming |
+| `internal/runner/verify.go` | Plan completion verification via Haiku |
 | `internal/worker/worker.go` | Queue processor |
 | `internal/config/config.go` | Config struct and YAML loading |
+| `internal/config/detect.go` | Project type auto-detection |
 | `internal/plan/plan.go` | Plan parsing and task extraction |
+| `internal/plan/queue.go` | Plan queue management (pending/current/complete) |
 | `internal/git/git.go` | Git CLI wrapper |
 | `internal/worktree/manager.go` | Worktree lifecycle management |
+| `internal/worktree/sync.go` | File sync between worktrees |
 | `internal/prompt/templates.go` | Embedded prompt templates |
+| `internal/notify/slack.go` | Slack Bot API notifications |
+| `internal/notify/webhook.go` | Slack webhook notifications |
+| `internal/log/log.go` | Structured logging with color |
 | `.goreleaser.yaml` | Release configuration |
 | `Makefile` | Build targets |
 
-### Bash Version (Legacy)
-
-| File | Purpose |
-|------|---------|
-| `ralph.sh` | Main entry point - runs implementation loop |
-| `ralph-worker.sh` | Queue management and plan lifecycle |
-| `lib/config.sh` | All shared functions (`build_prompt`, `config_get`, logging) |
-| `lib/worktree.sh` | Worktree creation, cleanup, and locking helpers |
-| `prompts/base/prompt.md` | Agent instructions for implementation |
-| `test/run-tests.sh` | Integration test suite |
-| `test/lib/helpers.sh` | Test utilities and assertions |
-| `install.sh` | Installer script |
-
 ## Testing
-
-### Go Version
 
 ```bash
 # Run all unit tests
@@ -351,37 +298,36 @@ make test-short
 
 # Test coverage
 make test-coverage
+
+# Run integration tests (requires claude CLI)
+make test-integration
 ```
 
-Test fixtures are in `internal/*/testdata/` directories.
-
-### Bash Version (Legacy)
-
-Tests run real Claude against test plans in isolated git workspaces:
-
-```bash
-# Full suite
-./test/run-tests.sh
-
-# Keep workspace for debugging
-./test/run-tests.sh --test single-task --keep
-
-# Workspace at /var/folders/.../test-workspace
-```
-
-Test plans in `test/plans/`:
-- `01-single-task.md` - Basic task completion
-- `02-dependencies.md` - Task dependency ordering
-- `03-progress-tracking.md` - Progress file creation
-- `04-loose-format.md` - Non-strict plan format support
+Test fixtures are in `internal/*/testdata/` directories. Integration test plans are in `internal/integration/testdata/plans/`.
 
 ## Development Patterns
 
+### Adding New Commands
+
+1. Create a new file in `internal/cli/` (e.g., `mycommand.go`)
+2. Define a cobra command with `&cobra.Command{}`
+3. Register it in `init()` with `rootCmd.AddCommand(myCmd)`
+4. Add tests in `mycommand_test.go`
+
 ### Adding New Prompts
 
-1. Create prompt in `prompts/base/`
-2. Use `{{PLACEHOLDER}}` for config injection
-3. Call `build_prompt "path/to/prompt.md" "$CONFIG_DIR"` in scripts
+1. Add the prompt file to `internal/prompt/prompts/`
+2. Update `internal/prompt/templates.go` to embed it with `//go:embed`
+3. Add a method to `Builder` to build the new prompt type
+
+### Modifying Claude Execution
+
+The runner package (`internal/runner/`) handles Claude CLI execution:
+- `command.go` - Builds CLI arguments
+- `runner.go` - Executes Claude with streaming output
+- `stream.go` - Parses JSON stream from Claude
+- `retry.go` - Retry logic for transient failures
+- `verify.go` - Plan completion verification via Haiku
 
 ### Branch Management
 
@@ -400,11 +346,12 @@ Plans automatically get feature branches via worktree isolation:
 
 ## Releasing
 
-### Go Version
-
 ```bash
 # Test release build locally
 make release-snapshot
+
+# Dry run (build but don't publish)
+make release-dry-run
 
 # Create a release (requires git tag)
 git tag -a v1.0.0 -m "Release v1.0.0"
@@ -416,65 +363,17 @@ git push origin v1.0.0
 # - Update Homebrew formula (if configured)
 ```
 
-Release configuration is in `.goreleaser.yaml`.
-
-### Bash Version (Legacy)
-
-```bash
-# Install hooks (one time)
-./hooks/install-hooks.sh
-
-# Commits auto-update CHANGELOG.md based on conventional commit prefix:
-# feat: → Added, fix: → Fixed, refactor: → Changed, chore: → skipped
-
-# Create release (moves [Unreleased] to version, bumps VERSION, tags)
-./ralph-release.sh          # Auto-detect: Breaking→major, Added→minor, else→patch
-./ralph-release.sh minor    # Force minor bump
-
-# Push release
-git push && git push --tags
-```
+Release configuration is in `.goreleaser.yaml`. CI/CD workflows are in `.github/workflows/`.
 
 ## Gotchas
-
-### Both Versions
 
 - **Plan validation removed**: Plans can be any markdown format; Claude handles parsing
 - **Feature branches**: Created via worktree by Ralph, not Claude - prompt just tells agent the branch name
 - **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion - Haiku verification catches this
 - **Verification failures**: When Haiku says plan is incomplete, detailed explanation is written to feedback file for agent to address
-- **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph cleanup` (Go) or `ralph-worker.sh --cleanup` (bash)
+- **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph cleanup`
 - **Plan file sync**: Plan file is copied into worktree; changes are synced back to `current/` after each iteration
-
-### Go Version Specific
-
 - **Build artifacts**: Binary is named `ralph` (no extension on Unix, `.exe` on Windows). Add `ralph` to `.gitignore`
 - **Test fixtures**: Located in `internal/*/testdata/` - some tests create temp directories that may need cleanup on failure
-- **Mock scripts**: Integration tests use mock scripts in `internal/runner/testdata/mock-*.sh` - must be executable
 - **Embedded prompts**: Default prompts are embedded via `//go:embed` in `internal/prompt/templates.go`
-
-### Bash Version Specific (Legacy)
-
-- **stdout pollution**: Worker functions that return values must redirect output to stderr (`>&2`)
-- **Test workspace**: Must use `git init -b main` since config expects "main" branch
-
-## Migration from Bash to Go
-
-The Go version is a drop-in replacement for the bash scripts. Both share:
-- Same config format (`.ralph/config.yaml`)
-- Same plan format (markdown with checkboxes)
-- Same directory structure (`plans/pending|current|complete/`)
-- Same completion modes (`--pr`, `--merge`)
-
-Command mapping:
-
-| Bash | Go |
-|------|----|
-| `./ralph.sh plan.md` | `ralph run plan.md` |
-| `./ralph-worker.sh` | `ralph worker` |
-| `./ralph-worker.sh --status` | `ralph status` |
-| `./ralph-worker.sh --reset` | `ralph reset` |
-| `./ralph-worker.sh --cleanup` | `ralph cleanup` |
-| `./ralph-init.sh --detect` | `ralph init --detect` |
-
-**Note:** The bash scripts will be deprecated in a future release. New development should use the Go version.
+- **Claude CLI flags**: When using `--output-format=stream-json`, the `--print` and `--verbose` flags are required
