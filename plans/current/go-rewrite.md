@@ -1024,24 +1024,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Notifications via Bot API with thread tracking.
 
 **Requires:** T38
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/slack.go` defines `SlackNotifier` implementing `Notifier` interface
-- [ ] Uses Bot API (requires bot_token in config)
-- [ ] First message to channel creates thread, saves ThreadTS
-- [ ] Subsequent messages reply to thread
-- [ ] Blocker notifications deduplicated via hash in ThreadInfo.NotifiedBlockers
-- [ ] Falls back to webhook if bot_token not configured
-- [ ] Unit tests with mock Slack API
+- [x] `internal/notify/slack.go` defines `SlackNotifier` implementing `Notifier` interface
+- [x] Uses Bot API (requires bot_token in config)
+- [x] First message to channel creates thread, saves ThreadTS
+- [x] Subsequent messages reply to thread
+- [x] Blocker notifications deduplicated via hash in ThreadInfo.NotifiedBlockers
+- [x] Falls back to webhook if bot_token not configured
+- [x] Unit tests with mock Slack API
 
 **Subtasks:**
-1. [ ] Add slack-go dependency
-2. [ ] Define SlackNotifier struct
-3. [ ] Implement message posting with thread
-4. [ ] Implement blocker deduplication
-5. [ ] Implement fallback to webhook
-6. [ ] Write unit tests with mock
+1. [x] Add slack-go dependency
+2. [x] Define SlackNotifier struct
+3. [x] Implement message posting with thread
+4. [x] Implement blocker deduplication
+5. [x] Implement fallback to webhook
+6. [x] Write unit tests with mock
 
 ---
 

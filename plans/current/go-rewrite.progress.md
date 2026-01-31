@@ -1043,3 +1043,35 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward implementation following the same patterns as other persistent stores in the codebase. Added extra methods (Delete, List, Reload, HasNotifiedBlocker, AddNotifiedBlocker) beyond the spec for utility.
 
 **Next:** T39 - Implement Slack Bot API notifications (depends on T38, now complete)
+
+---
+### Iteration 38: T39 - Implement Slack Bot API notifications
+**Completed:**
+- Added `github.com/slack-go/slack` v0.17.3 dependency (brings gorilla/websocket for Socket Mode)
+- Created `internal/notify/slack.go` with:
+  - `SlackNotifier` struct implementing `Notifier` interface
+  - `SlackNotifierConfig` struct for configuration
+  - `NewSlackNotifier(cfg SlackNotifierConfig) Notifier` smart constructor
+  - Uses Slack Bot API via `slack.New(botToken)`
+  - First message (Start) creates thread and saves ThreadTS via ThreadTracker
+  - Subsequent messages (Complete, Blocker, Error, Iteration) reply to thread using `slack.MsgOptionTS`
+  - Blocker deduplication via `threadTracker.HasNotifiedBlocker()` before sending
+  - Falls back to WebhookNotifier if bot_token not configured (or channel missing)
+  - Falls back to NoopNotifier if neither bot_token nor webhook configured
+  - Async message sending via goroutine to not block execution
+- Created `internal/notify/slack_test.go` with 19 test functions:
+  - TestNewSlackNotifier_WithBotToken, TestNewSlackNotifier_FallbackToWebhook
+  - TestNewSlackNotifier_NoConfig, TestNewSlackNotifier_BotTokenWithoutChannel
+  - TestSlackNotifier_Start, TestSlackNotifier_Complete, TestSlackNotifier_Blocker
+  - TestSlackNotifier_Blocker_Deduplication - verifies same blocker hash doesn't send twice
+  - TestSlackNotifier_Blocker_Nil, TestSlackNotifier_Error, TestSlackNotifier_Error_TruncatesLongMessage
+  - TestSlackNotifier_Iteration, TestSlackNotifier_PostMessageInThread_NoThread
+  - TestSlackNotifierConfig (4 subtests), TestSlackNotifier_WithThreadTracker
+  - TestSlackNotifierInterface, TestSlackNotifier_CompleteWithoutPR
+  - TestSlackNotifier_Error_Nil, TestSlackNotifier_ThreadTrackerPersistence
+- All 46 notify tests pass (19 slack + 12 threads + 15 webhook)
+- Build succeeds
+
+**Gotcha:** None - the slack-go library provides a clean API. Used `slack.OptionAPIURL(server.URL+"/")` for tests to point at mock server.
+
+**Next:** T40 - Implement Socket Mode bot for replies (depends on T39 and T13, both complete)
