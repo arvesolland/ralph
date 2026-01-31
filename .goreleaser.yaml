@@ -82,7 +82,7 @@ brews:
       owner: arvesolland
       name: homebrew-ralph
       branch: main
-    folder: Formula
+      directory: Formula
     homepage: "https://github.com/arvesolland/ralph"
     description: "Autonomous AI development loop orchestration system"
     license: "MIT"
