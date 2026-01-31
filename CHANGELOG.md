@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- complete T43 - Homebrew tap setup verified
 - update goreleaser homebrew_casks config with binaries field
 - sync plan checkboxes with actual state (T44-T46 complete)
 - update progress log for T43 blocker status
