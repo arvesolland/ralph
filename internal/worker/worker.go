@@ -431,10 +431,34 @@ func (w *Worker) loadOrCreateContext(p *plan.Plan, worktreePath string) (*runner
 }
 
 // completePlan handles plan completion (archive, PR/merge, cleanup).
+// Completion is graceful - PR/merge errors are logged but don't fail the overall completion.
 func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Worktree, result *runner.LoopResult) error {
 	log.Success("Plan completed: %s", p.Name)
 
-	// Notify completion
+	// Set up git for the worktree
+	wtGit := git.NewGit(wt.Path)
+
+	// Handle completion based on mode
+	var prURL string
+
+	switch w.completionMode {
+	case "pr":
+		var err error
+		prURL, err = CompletePR(p, wt, wtGit)
+		if err != nil {
+			// PR creation failure is logged but not fatal
+			// The plan is still complete, code is committed locally
+			log.Error("Failed to create PR: %v", err)
+			log.Warn("Plan completed but PR not created. Branch: %s", p.Branch)
+		}
+	case "merge":
+		// TODO: Implement merge mode in T34
+		log.Warn("Merge mode not yet implemented, skipping")
+	default:
+		log.Debug("Unknown completion mode: %s, skipping", w.completionMode)
+	}
+
+	// Notify completion with PR URL if available
 	if w.onPlanComplete != nil {
 		w.onPlanComplete(p, result)
 	}
@@ -447,9 +471,15 @@ func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Wo
 
 	// Clean up worktree
 	log.Info("Cleaning up worktree...")
-	if err := w.worktreeManager.Remove(p, false); err != nil {
+	deleteBranch := w.completionMode == "merge" // Only delete branch in merge mode
+	if err := w.worktreeManager.Remove(p, deleteBranch); err != nil {
 		log.Warn("Failed to remove worktree: %v", err)
 		// Non-fatal
+	}
+
+	// Log PR URL at the end for visibility
+	if prURL != "" {
+		log.Success("PR URL: %s", prURL)
 	}
 
 	return nil

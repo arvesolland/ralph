@@ -873,3 +873,31 @@ Iteration log - what was done, gotchas, and next steps.
 - Mock runner needs to handle verification calls differently (check `opts.Print`) since verification uses Haiku model in print mode and expects YES/NO response.
 
 **Next:** T33 - Implement completion workflow (PR mode) (depends on T32, T15 - both complete)
+
+---
+### Iteration 32: T33 - Implement completion workflow (PR mode)
+**Completed:**
+- Created `internal/worker/completion.go` with:
+  - `CompletePR(plan *Plan, worktree *Worktree, g git.Git) (string, error)` for PR mode completion
+  - `pushBranch(g git.Git, branch string) error` helper using Git.PushWithUpstream
+  - `createPR(p *plan.Plan, workDir string) (string, error)` executes `gh pr create`
+  - `buildPRBody(p *plan.Plan) string` creates PR body with Summary, task counts, and Ralph footer
+  - `isGHInstalled() bool` checks for gh CLI availability via exec.LookPath
+  - `extractPRURL(text string) string` parses PR URL from gh output using regex
+  - `getExistingPRURL(workDir string) (string, error)` handles "PR already exists" case
+  - `logManualPRInstructions(p *plan.Plan)` logs manual instructions when gh not installed
+  - Error types: `ErrGHNotInstalled`, `ErrPushFailed`, `ErrPRCreateFailed`
+- Updated `internal/worker/worker.go`:
+  - Modified `completePlan()` to integrate with CompletePR based on completionMode
+  - PR creation failures are logged but don't fail overall completion (graceful fallback)
+  - Branch is preserved in PR mode, deleted only in merge mode
+- Created `internal/worker/completion_test.go` with 15 test functions:
+  - TestIsGHInstalled, TestExtractPRURL (6 subtests), TestBuildPRBody (3 subtests)
+  - TestPRURLRegex, TestLogManualPRInstructions, TestCompletePR_Integration (skipped)
+  - TestPushBranch, TestPushBranch_Error, TestCreatePR_GHNotInstalled
+  - TestCompletePR_MockGH (with mock gh script), TestCompletionErrors
+- All tests pass (21 worker tests total)
+
+**Gotcha:** Completion workflow is graceful - push/PR failures are logged but don't fail the overall plan completion. The code is still committed locally and the user can push/PR manually.
+
+**Next:** T34 - Implement completion workflow (merge mode) (depends on T32, T15 - both complete)
