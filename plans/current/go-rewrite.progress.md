@@ -1075,3 +1075,40 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - the slack-go library provides a clean API. Used `slack.OptionAPIURL(server.URL+"/")` for tests to point at mock server.
 
 **Next:** T40 - Implement Socket Mode bot for replies (depends on T39 and T13, both complete)
+
+---
+### Iteration 39: T40 - Implement Socket Mode bot for replies
+**Completed:**
+- Created `internal/notify/bot.go` with:
+  - `SocketModeBot` struct with client, api, threadTracker, planBasePath, channelID fields
+  - `BotConfig` struct for configuration
+  - `NewSocketModeBot(cfg BotConfig) *SocketModeBot` constructor (returns nil if missing required config)
+  - `Start(ctx context.Context) error` connects to Slack Socket Mode via goroutine
+  - `Stop()` for graceful shutdown with stopCh channel
+  - `IsRunning()` for status check
+  - `handleEvents()` processes Socket Mode events (connect, disconnect, errors, events API)
+  - `handleEventsAPIEvent()` and `handleCallbackEvent()` for Events API parsing
+  - `handleMessageEvent()` filters for thread replies in tracked threads, ignores bots
+  - `findPlanByThread()` looks up plan name from ThreadTracker
+  - `writeFeedback()` writes thread replies to feedback file with user name lookup
+  - `LoadGlobalBotConfig()` loads from `~/.ralph/slack.env` or environment variables
+  - `loadEnvFile()`, `parseEnvLine()`, `splitLines()`, `trimSpace()` helpers
+  - `StartBotIfConfigured()` convenience function for auto-starting from worker
+  - `WaitForConnection()` for connection timeout handling
+- Created `internal/notify/bot_test.go` with 28 test functions:
+  - TestNewSocketModeBot_* (4 tests for missing config scenarios)
+  - TestSocketModeBot_IsRunning, TestSocketModeBot_Stop_NotRunning
+  - TestBotConfig_Fields, TestSocketModeBot_FindPlanByThread (2 tests)
+  - TestSocketModeBot_WriteFeedback, TestLoadGlobalBotConfig_FromEnv
+  - TestLoadEnvFile (3 tests), TestParseEnvLine (7 subtests)
+  - TestSplitLines (5 subtests), TestTrimSpace (8 subtests)
+  - TestStartBotIfConfigured_NoConfig, TestSocketModeBot_WithThreadTracker
+  - TestSocketModeBot_WaitForConnection_NotRunning, TestSocketModeBot_Start_AlreadyRunning
+  - TestGlobalBotPath, TestBotConfigFilename, TestWriteFeedback_Integration
+- All 73 notify tests pass (28 bot + 19 slack + 12 threads + 15 webhook)
+- All project tests pass
+- Build succeeds
+
+**Gotcha:** The `slackevents` package is separate from `slack` for Events API types. MessageEvent has `ThreadTimestamp` and `TimeStamp` (not `ThreadTimeStamp`/`TimeStamp`) - followed the Msg struct field names.
+
+**Next:** T41 - Integrate notifications into worker (depends on T39, T40, T32 - all complete)

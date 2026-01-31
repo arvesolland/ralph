@@ -973,25 +973,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Simple fire-and-forget webhook notifications.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/webhook.go` defines `WebhookNotifier` implementing `Notifier` interface
-- [ ] `Start(plan *Plan) error` sends start message
-- [ ] `Complete(plan *Plan, prURL string) error` sends completion message
-- [ ] `Blocker(plan *Plan, blocker *Blocker) error` sends blocker notification
-- [ ] `Error(plan *Plan, err error) error` sends error notification
-- [ ] Messages formatted with Slack mrkdwn
-- [ ] Notifications are async (don't block execution)
-- [ ] Errors logged but not propagated
-- [ ] Unit tests with mock HTTP server
+- [x] `internal/notify/webhook.go` defines `WebhookNotifier` implementing `Notifier` interface
+- [x] `Start(plan *Plan) error` sends start message
+- [x] `Complete(plan *Plan, prURL string) error` sends completion message
+- [x] `Blocker(plan *Plan, blocker *Blocker) error` sends blocker notification
+- [x] `Error(plan *Plan, err error) error` sends error notification
+- [x] Messages formatted with Slack mrkdwn
+- [x] Notifications are async (don't block execution)
+- [x] Errors logged but not propagated
+- [x] Unit tests with mock HTTP server
 
 **Subtasks:**
-1. [ ] Define WebhookNotifier struct
-2. [ ] Implement HTTP POST to webhook
-3. [ ] Implement message formatting
-4. [ ] Make notifications async
-5. [ ] Write unit tests with httptest
+1. [x] Define WebhookNotifier struct
+2. [x] Implement HTTP POST to webhook
+3. [x] Implement message formatting
+4. [x] Make notifications async
+5. [x] Write unit tests with httptest
 
 ---
 
@@ -999,24 +999,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Track Slack threads per plan for reply threading.
 
 **Requires:** T37
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/threads.go` defines `ThreadTracker` struct
-- [ ] `Get(planName string) *ThreadInfo` returns thread info for plan
-- [ ] `Set(planName string, info *ThreadInfo) error` saves thread info
-- [ ] `ThreadInfo` contains PlanName, ThreadTS, ChannelID, NotifiedBlockers
-- [ ] Persists to `.ralph/slack_threads.json`
-- [ ] Loads from file on initialization
-- [ ] Handles concurrent access with file locking
-- [ ] Unit tests verify persistence
+- [x] `internal/notify/threads.go` defines `ThreadTracker` struct
+- [x] `Get(planName string) *ThreadInfo` returns thread info for plan
+- [x] `Set(planName string, info *ThreadInfo) error` saves thread info
+- [x] `ThreadInfo` contains PlanName, ThreadTS, ChannelID, NotifiedBlockers
+- [x] Persists to `.ralph/slack_threads.json`
+- [x] Loads from file on initialization
+- [x] Handles concurrent access with file locking
+- [x] Unit tests verify persistence
 
 **Subtasks:**
-1. [ ] Define ThreadTracker and ThreadInfo structs
-2. [ ] Implement JSON file persistence
-3. [ ] Implement Get/Set
-4. [ ] Add file locking for concurrency
-5. [ ] Write unit tests
+1. [x] Define ThreadTracker and ThreadInfo structs
+2. [x] Implement JSON file persistence
+3. [x] Implement Get/Set
+4. [x] Add file locking for concurrency
+5. [x] Write unit tests
 
 ---
 
@@ -1024,24 +1024,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Notifications via Bot API with thread tracking.
 
 **Requires:** T38
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/slack.go` defines `SlackNotifier` implementing `Notifier` interface
-- [ ] Uses Bot API (requires bot_token in config)
-- [ ] First message to channel creates thread, saves ThreadTS
-- [ ] Subsequent messages reply to thread
-- [ ] Blocker notifications deduplicated via hash in ThreadInfo.NotifiedBlockers
-- [ ] Falls back to webhook if bot_token not configured
-- [ ] Unit tests with mock Slack API
+- [x] `internal/notify/slack.go` defines `SlackNotifier` implementing `Notifier` interface
+- [x] Uses Bot API (requires bot_token in config)
+- [x] First message to channel creates thread, saves ThreadTS
+- [x] Subsequent messages reply to thread
+- [x] Blocker notifications deduplicated via hash in ThreadInfo.NotifiedBlockers
+- [x] Falls back to webhook if bot_token not configured
+- [x] Unit tests with mock Slack API
 
 **Subtasks:**
-1. [ ] Add slack-go dependency
-2. [ ] Define SlackNotifier struct
-3. [ ] Implement message posting with thread
-4. [ ] Implement blocker deduplication
-5. [ ] Implement fallback to webhook
-6. [ ] Write unit tests with mock
+1. [x] Add slack-go dependency
+2. [x] Define SlackNotifier struct
+3. [x] Implement message posting with thread
+4. [x] Implement blocker deduplication
+5. [x] Implement fallback to webhook
+6. [x] Write unit tests with mock
 
 ---
 
@@ -1049,25 +1049,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Handle Slack thread replies and write to feedback files.
 
 **Requires:** T39, T13
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/bot.go` defines `SocketModeBot` struct
-- [ ] `Start(ctx context.Context) error` connects to Slack Socket Mode
-- [ ] Listens for message events in tracked threads
-- [ ] Converts thread replies to feedback file entries
-- [ ] Handles reconnection on disconnect
-- [ ] Runs as goroutine (doesn't block main execution)
-- [ ] Supports global bot mode (config at ~/.ralph/)
-- [ ] Integration test with mock Socket Mode
+- [x] `internal/notify/bot.go` defines `SocketModeBot` struct
+- [x] `Start(ctx context.Context) error` connects to Slack Socket Mode
+- [x] Listens for message events in tracked threads
+- [x] Converts thread replies to feedback file entries
+- [x] Handles reconnection on disconnect
+- [x] Runs as goroutine (doesn't block main execution)
+- [x] Supports global bot mode (config at ~/.ralph/)
+- [x] Integration test with mock Socket Mode
 
 **Subtasks:**
-1. [ ] Implement Socket Mode connection
-2. [ ] Implement message event handling
-3. [ ] Implement feedback file writing
-4. [ ] Implement reconnection logic
-5. [ ] Implement global bot mode
-6. [ ] Write integration test
+1. [x] Implement Socket Mode connection
+2. [x] Implement message event handling
+3. [x] Implement feedback file writing
+4. [x] Implement reconnection logic
+5. [x] Implement global bot mode
+6. [x] Write integration test
 
 ---
 
