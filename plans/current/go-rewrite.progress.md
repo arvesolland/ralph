@@ -779,3 +779,38 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward implementation. Added helper methods Increment() and IsMaxReached() not in the spec but useful for the iteration loop.
 
 **Next:** T30 - Implement main iteration loop (depends on T25, T26, T27, T28, T29, T6, T15, T12 - all complete)
+
+---
+### Iteration 29: T30 - Implement main iteration loop
+**Completed:**
+- Created `internal/runner/loop.go` with:
+  - `IterationLoop` struct with plan, context, config, runner, git, promptBuilder, worktreePath fields
+  - `LoopConfig` struct for configuration injection
+  - `LoopResult` struct with Completed, Iterations, FinalBlocker, Error fields
+  - `NewIterationLoop(cfg LoopConfig) *IterationLoop` constructor
+  - `Run(ctx context.Context) *LoopResult` executes loop until complete or max iterations
+  - `runIteration()` executes single iteration: build prompt → run Claude → reload plan → append progress → commit
+  - `buildPrompt()` integrates with prompt.Builder for template substitution
+  - `appendProgress()` writes iteration results to progress file
+  - `commitChanges()` stages and commits all changes after each iteration
+  - `writeFeedback()` writes verification failure reason to feedback file
+  - Completion verification via `Verify()` using Haiku model
+  - Blocker detection with callback support (`onBlocker`)
+  - Iteration callback support (`onIteration`) for hooks/testing
+  - 3-second cooldown (`IterationCooldown`) between iterations
+  - Context cancellation support for graceful shutdown
+- Created `internal/runner/loop_test.go` with 8 test functions:
+  - TestIterationLoop_Run_MaxIterations - verifies max iteration termination
+  - TestIterationLoop_Run_CompletesSuccessfully - verifies successful completion flow with verification
+  - TestIterationLoop_Run_HandlesBlocker - verifies blocker detection and callback
+  - TestIterationLoop_Run_ContextCancellation - verifies graceful shutdown
+  - TestIterationLoop_Run_OnIterationCallback - verifies iteration hooks
+  - TestIterationLoop_Run_VerificationFails - verifies verification failure handling and feedback writing
+  - TestNewIterationLoop_DefaultTimeout, TestNewIterationLoop_CustomTimeout
+- Created MockRunner for testing
+- All 129 runner tests pass (121 existing + 8 new)
+- Build succeeds
+
+**Gotcha:** The `Run()` method returns `*LoopResult` instead of just `error` as in the spec - this provides more information about the loop outcome (completed, iterations, blocker). Also, the tests take ~37s due to the 3-second cooldowns between iterations.
+
+**Next:** T31 - Add `ralph run` command (depends on T30, now complete)

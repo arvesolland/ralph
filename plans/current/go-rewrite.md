@@ -786,29 +786,29 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Core execution loop: prompt → Claude → verify → commit → repeat.
 
 **Requires:** T25, T26, T27, T28, T29, T6, T15, T12
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/loop.go` defines `IterationLoop` struct
-- [ ] `Run(ctx context.Context) error` executes loop until complete or max iterations
-- [ ] Each iteration: build prompt → run Claude → check completion → verify if complete → commit
-- [ ] Appends to progress file after each iteration
-- [ ] Commits all changes (plan, progress) after each iteration
-- [ ] Exits with success when verified complete
-- [ ] Exits with error when max iterations reached
-- [ ] Detects and handles blockers (notifies, continues)
-- [ ] 3-second cooldown between iterations
-- [ ] Integration test with mock Claude (3 iterations to complete)
+- [x] `internal/runner/loop.go` defines `IterationLoop` struct
+- [x] `Run(ctx context.Context) error` executes loop until complete or max iterations
+- [x] Each iteration: build prompt → run Claude → check completion → verify if complete → commit
+- [x] Appends to progress file after each iteration
+- [x] Commits all changes (plan, progress) after each iteration
+- [x] Exits with success when verified complete
+- [x] Exits with error when max iterations reached
+- [x] Detects and handles blockers (notifies, continues)
+- [x] 3-second cooldown between iterations
+- [x] Integration test with mock Claude (3 iterations to complete)
 
 **Subtasks:**
-1. [ ] Define IterationLoop struct
-2. [ ] Implement single iteration logic
-3. [ ] Implement loop with termination conditions
-4. [ ] Integrate prompt building
-5. [ ] Integrate progress file updates
-6. [ ] Integrate git commit
-7. [ ] Add cooldown delay
-8. [ ] Write integration test
+1. [x] Define IterationLoop struct
+2. [x] Implement single iteration logic
+3. [x] Implement loop with termination conditions
+4. [x] Integrate prompt building
+5. [x] Integrate progress file updates
+6. [x] Integrate git commit
+7. [x] Add cooldown delay
+8. [x] Write integration test
 
 ---
 
