@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ralph-worker.sh --reset` to move current plan back to pending and start fresh
 
 ### Fixed
+- correct gitignore to not exclude cmd/ralph directory
 - migrate from deprecated brews to homebrew_casks in goreleaser
 - use directory instead of deprecated folder in goreleaser config
 - use goreleaser v2 and enable homebrew tap token

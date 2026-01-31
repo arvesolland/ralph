@@ -43,7 +43,7 @@ Fresh context window (clean slate)
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install arvesolland/tap/ralph
+brew install --cask arvesolland/tap/ralph
 ```
 
 ### Binary Download

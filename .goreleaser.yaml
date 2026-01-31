@@ -78,14 +78,16 @@ release:
 # Homebrew cask configuration
 homebrew_casks:
   - name: ralph
+    binaries:
+      - ralph
     repository:
       owner: arvesolland
       name: homebrew-ralph
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Casks
     homepage: "https://github.com/arvesolland/ralph"
     description: "Autonomous AI development loop orchestration system"
+    license: MIT
 
 # Announce configuration (optional - disabled by default)
 # announce:

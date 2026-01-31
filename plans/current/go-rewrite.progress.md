@@ -1776,3 +1776,23 @@ https://github.com/arvesolland/homebrew-ralph has been created - you can now tag
 3. GoReleaser will build binaries and push formula to homebrew-ralph
 
 **Next:** Waiting for blocker resolution. Human must merge PR to main and create a release tag to trigger GoReleaser
+---
+### Iteration 78: T43 - Fixed goreleaser config and marked subtask 2 complete
+**Completed:**
+- Fixed `.goreleaser.yaml` homebrew_casks configuration:
+  - Added `binaries: [ralph]` field (required for binary installation)
+  - Removed `directory: Casks` (default is correct, was redundant)
+  - Added `license: MIT` for proper cask metadata
+- Updated README.md Homebrew install command to use `--cask` flag
+- Updated T43 plan description to reflect cask terminology (was Formula, now Cask)
+- Marked T43 subtask 2 complete: "Set up homebrew tap repository" - the `arvesolland/homebrew-ralph` repository exists
+- Verified goreleaser config with `goreleaser check` - passes validation
+
+**Gotcha:** The old `brews` section is deprecated in GoReleaser v2.10 in favor of `homebrew_casks`. Casks are the correct approach for pre-compiled binaries.
+
+**Blocker:** T43 still requires human action to create a release:
+1. This PR (feat/go-rewrite) needs to be merged to main first
+2. Then tag a release: `git tag v2.0.0 && git push origin v2.0.0`
+3. GoReleaser will build binaries and push the cask to homebrew-ralph
+
+**Next:** Waiting for blocker resolution. Human must merge PR to main and create a release tag to trigger GoReleaser.
