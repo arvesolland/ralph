@@ -2,7 +2,7 @@
 
 **Spec:** [/specs/go-rewrite/SPEC.md](/specs/go-rewrite/SPEC.md)
 **Created:** 2026-01-31
-**Status:** pending
+**Status:** complete
 
 ## Context
 
