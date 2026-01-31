@@ -1258,3 +1258,14 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Integration tests require real Claude CLI or mock script. The CI job is disabled (`if: false`) until mock claude is implemented. Tests support `RALPH_MOCK_CLAUDE=1` env var for future mock implementation.
 
 **Next:** T43 is blocked on human creating homebrew-ralph repo. All other tasks complete.
+
+---
+### Iteration 45: T43 status check
+**Completed:** Reviewed plan and progress state. All tasks T1-T42, T44-T46 are complete. Only T43 remains, blocked on human action.
+
+**Status:** T43 (Set up Homebrew tap) requires:
+1. Human to create GitHub repository `arvesolland/homebrew-ralph`
+2. Once repo exists, goreleaser will auto-push formula on next release
+3. Then remaining T43 criteria can be verified (brew install, test installation)
+
+**Next:** Waiting for blocker resolution. Once `arvesolland/homebrew-ralph` repo is created, run a release (or `make release-snapshot`) to verify formula generation.
