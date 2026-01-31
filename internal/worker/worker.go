@@ -16,6 +16,7 @@ import (
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
+	"github.com/arvesolland/ralph/internal/notify"
 	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
@@ -62,6 +63,15 @@ type Worker struct {
 
 	// promptBuilder builds prompts from templates
 	promptBuilder *prompt.Builder
+
+	// notifier sends Slack notifications
+	notifier notify.Notifier
+
+	// threadTracker tracks Slack threads for reply handling
+	threadTracker *notify.ThreadTracker
+
+	// bot is the Socket Mode bot for handling Slack replies
+	bot *notify.SocketModeBot
 
 	// pollInterval is the time to wait between queue checks when empty
 	pollInterval time.Duration
@@ -111,6 +121,9 @@ type WorkerConfig struct {
 	// PromptBuilder builds prompts from templates
 	PromptBuilder *prompt.Builder
 
+	// Notifier sends Slack notifications (optional, use NewNotifier to create)
+	Notifier notify.Notifier
+
 	// PollInterval is the time to wait between queue checks when empty
 	PollInterval time.Duration
 
@@ -144,6 +157,12 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		completionMode = "pr"
 	}
 
+	// Use provided notifier or create noop
+	notifier := cfg.Notifier
+	if notifier == nil {
+		notifier = &notify.NoopNotifier{}
+	}
+
 	return &Worker{
 		queue:            cfg.Queue,
 		config:           cfg.Config,
@@ -153,6 +172,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		mainWorktreePath: cfg.MainWorktreePath,
 		runner:           cfg.Runner,
 		promptBuilder:    cfg.PromptBuilder,
+		notifier:         notifier,
 		pollInterval:     pollInterval,
 		maxIterations:    maxIterations,
 		completionMode:   completionMode,
@@ -268,7 +288,10 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 // processPlan handles the full lifecycle of a single plan:
 // create worktree → sync files → run hooks → run loop → sync back → complete
 func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
-	// Notify start
+	// Send start notification via Slack
+	w.sendStartNotification(p)
+
+	// Notify callback
 	if w.onPlanStart != nil {
 		w.onPlanStart(p)
 	}
@@ -310,7 +333,7 @@ func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
 		return fmt.Errorf("loading context: %w", err)
 	}
 
-	// Create the iteration loop
+	// Create the iteration loop with notification callbacks
 	loop := runner.NewIterationLoop(runner.LoopConfig{
 		Plan:          p,
 		Context:       execCtx,
@@ -319,7 +342,15 @@ func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
 		Git:           wtGit,
 		PromptBuilder: w.promptBuilder,
 		WorktreePath:  wt.Path,
+		OnIteration: func(iteration int, result *runner.Result) {
+			// Send iteration notification if configured
+			w.sendIterationNotification(p, iteration, w.maxIterations)
+		},
 		OnBlocker: func(blocker *runner.Blocker) {
+			// Send blocker notification via Slack
+			w.sendBlockerNotification(p, blocker)
+
+			// Call user callback
 			if w.onBlocker != nil {
 				w.onBlocker(p, blocker)
 			}
@@ -452,13 +483,24 @@ func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Wo
 			log.Warn("Plan completed but PR not created. Branch: %s", p.Branch)
 		}
 	case "merge":
-		// TODO: Implement merge mode in T34
-		log.Warn("Merge mode not yet implemented, skipping")
+		// Use CompleteMerge for merge mode
+		mainGit := git.NewGit(w.mainWorktreePath)
+		baseBranch := w.config.Git.BaseBranch
+		if baseBranch == "" {
+			baseBranch = "main"
+		}
+		if err := CompleteMerge(p, baseBranch, mainGit); err != nil {
+			log.Error("Failed to merge: %v", err)
+			log.Warn("Plan completed but merge failed. Branch: %s", p.Branch)
+		}
 	default:
 		log.Debug("Unknown completion mode: %s, skipping", w.completionMode)
 	}
 
-	// Notify completion with PR URL if available
+	// Send completion notification via Slack
+	w.sendCompleteNotification(p, prURL)
+
+	// Notify callback with PR URL if available
 	if w.onPlanComplete != nil {
 		w.onPlanComplete(p, result)
 	}
@@ -485,9 +527,121 @@ func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Wo
 	return nil
 }
 
-// notifyError calls the error callback if set.
+// notifyError sends error notification and calls the error callback if set.
 func (w *Worker) notifyError(p *plan.Plan, err error) {
+	// Send error notification via Slack
+	if w.config != nil && w.config.Slack.NotifyError {
+		if notifyErr := w.notifier.Error(p, err); notifyErr != nil {
+			log.Debug("Failed to send error notification: %v", notifyErr)
+		}
+	}
+
+	// Call user callback
 	if w.onPlanError != nil {
 		w.onPlanError(p, err)
 	}
+}
+
+// sendStartNotification sends a start notification if configured.
+func (w *Worker) sendStartNotification(p *plan.Plan) {
+	if w.config != nil && w.config.Slack.NotifyStart {
+		if err := w.notifier.Start(p); err != nil {
+			log.Debug("Failed to send start notification: %v", err)
+		}
+	}
+}
+
+// sendCompleteNotification sends a completion notification if configured.
+func (w *Worker) sendCompleteNotification(p *plan.Plan, prURL string) {
+	if w.config != nil && w.config.Slack.NotifyComplete {
+		if err := w.notifier.Complete(p, prURL); err != nil {
+			log.Debug("Failed to send complete notification: %v", err)
+		}
+	}
+}
+
+// sendBlockerNotification sends a blocker notification if configured.
+func (w *Worker) sendBlockerNotification(p *plan.Plan, blocker *runner.Blocker) {
+	if w.config != nil && w.config.Slack.NotifyBlocker {
+		if err := w.notifier.Blocker(p, blocker); err != nil {
+			log.Debug("Failed to send blocker notification: %v", err)
+		}
+	}
+}
+
+// sendIterationNotification sends an iteration notification if configured.
+func (w *Worker) sendIterationNotification(p *plan.Plan, iteration, maxIterations int) {
+	if w.config != nil && w.config.Slack.NotifyIteration {
+		if err := w.notifier.Iteration(p, iteration, maxIterations); err != nil {
+			log.Debug("Failed to send iteration notification: %v", err)
+		}
+	}
+}
+
+// SetupNotifications configures the notifier and optionally starts the Socket Mode bot.
+// This should be called before starting the worker.
+// Returns a cleanup function that should be called when the worker stops.
+func (w *Worker) SetupNotifications(ctx context.Context) func() {
+	if w.config == nil {
+		return func() {}
+	}
+
+	// Create thread tracker for thread-based replies
+	trackerPath := notify.ThreadTrackerPath(w.configDir)
+	tracker, err := notify.NewThreadTracker(trackerPath)
+	if err != nil {
+		log.Warn("Failed to create thread tracker: %v", err)
+		// Continue without thread tracking
+	}
+	w.threadTracker = tracker
+
+	// Create notifier based on configuration
+	w.notifier = NewNotifier(w.config, tracker)
+
+	// Auto-start Socket Mode bot if configured
+	if w.config.Slack.Channel != "" {
+		planBasePath := filepath.Join(w.mainWorktreePath, "plans", "current")
+		w.bot = notify.StartBotIfConfigured(ctx, tracker, planBasePath, w.config.Slack.Channel)
+		if w.bot != nil {
+			log.Info("Socket Mode bot started for Slack replies")
+		}
+	}
+
+	// Return cleanup function
+	return func() {
+		if w.bot != nil {
+			w.bot.Stop()
+			log.Debug("Socket Mode bot stopped")
+		}
+	}
+}
+
+// NewNotifier creates a Notifier based on the configuration.
+// Returns a SlackNotifier if bot_token is configured, falls back to WebhookNotifier,
+// and returns NoopNotifier if neither is configured.
+func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notifier {
+	if cfg == nil {
+		return &notify.NoopNotifier{}
+	}
+
+	// Try Slack Bot API first
+	if cfg.Slack.BotToken != "" && cfg.Slack.Channel != "" {
+		return notify.NewSlackNotifier(notify.SlackNotifierConfig{
+			BotToken:      cfg.Slack.BotToken,
+			Channel:       cfg.Slack.Channel,
+			ThreadTracker: tracker,
+			WebhookURL:    cfg.Slack.WebhookURL, // Fallback
+		})
+	}
+
+	// Fall back to webhook
+	if cfg.Slack.WebhookURL != "" {
+		notifier := notify.NewWebhookNotifier(cfg.Slack.WebhookURL)
+		if notifier != nil {
+			return notifier
+		}
+	}
+
+	// No Slack configured
+	return &notify.NoopNotifier{}
 }

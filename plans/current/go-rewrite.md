@@ -1049,25 +1049,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Handle Slack thread replies and write to feedback files.
 
 **Requires:** T39, T13
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/bot.go` defines `SocketModeBot` struct
-- [ ] `Start(ctx context.Context) error` connects to Slack Socket Mode
-- [ ] Listens for message events in tracked threads
-- [ ] Converts thread replies to feedback file entries
-- [ ] Handles reconnection on disconnect
-- [ ] Runs as goroutine (doesn't block main execution)
-- [ ] Supports global bot mode (config at ~/.ralph/)
-- [ ] Integration test with mock Socket Mode
+- [x] `internal/notify/bot.go` defines `SocketModeBot` struct
+- [x] `Start(ctx context.Context) error` connects to Slack Socket Mode
+- [x] Listens for message events in tracked threads
+- [x] Converts thread replies to feedback file entries
+- [x] Handles reconnection on disconnect
+- [x] Runs as goroutine (doesn't block main execution)
+- [x] Supports global bot mode (config at ~/.ralph/)
+- [x] Integration test with mock Socket Mode
 
 **Subtasks:**
-1. [ ] Implement Socket Mode connection
-2. [ ] Implement message event handling
-3. [ ] Implement feedback file writing
-4. [ ] Implement reconnection logic
-5. [ ] Implement global bot mode
-6. [ ] Write integration test
+1. [x] Implement Socket Mode connection
+2. [x] Implement message event handling
+3. [x] Implement feedback file writing
+4. [x] Implement reconnection logic
+5. [x] Implement global bot mode
+6. [x] Write integration test
 
 ---
 
@@ -1075,24 +1075,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Wire notifications into worker lifecycle.
 
 **Requires:** T39, T40, T32
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] Worker sends Start notification when plan begins
-- [ ] Worker sends Complete notification with PR URL when done
-- [ ] Worker sends Blocker notification when blocker detected
-- [ ] Worker sends Error notification on failure
-- [ ] Iteration notifications sent if config.slack.notify_iteration is true
-- [ ] Socket Mode bot auto-started if configured
-- [ ] Notifications are no-op if Slack not configured
-- [ ] Integration test verifies notification calls
+- [x] Worker sends Start notification when plan begins
+- [x] Worker sends Complete notification with PR URL when done
+- [x] Worker sends Blocker notification when blocker detected
+- [x] Worker sends Error notification on failure
+- [x] Iteration notifications sent if config.slack.notify_iteration is true
+- [x] Socket Mode bot auto-started if configured
+- [x] Notifications are no-op if Slack not configured
+- [x] Integration test verifies notification calls
 
 **Subtasks:**
-1. [ ] Inject Notifier into Worker
-2. [ ] Add notification calls at lifecycle points
-3. [ ] Auto-start Socket Mode bot
-4. [ ] Handle missing configuration
-5. [ ] Write integration test
+1. [x] Inject Notifier into Worker
+2. [x] Add notification calls at lifecycle points
+3. [x] Auto-start Socket Mode bot
+4. [x] Handle missing configuration
+5. [x] Write integration test
 
 ---
 

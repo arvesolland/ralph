@@ -1112,3 +1112,32 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The `slackevents` package is separate from `slack` for Events API types. MessageEvent has `ThreadTimestamp` and `TimeStamp` (not `ThreadTimeStamp`/`TimeStamp`) - followed the Msg struct field names.
 
 **Next:** T41 - Integrate notifications into worker (depends on T39, T40, T32 - all complete)
+
+---
+### Iteration 40: T41 - Integrate notifications into worker
+**Completed:**
+- Added `Notifier` field to Worker struct and WorkerConfig
+- Added `threadTracker` and `bot` fields to Worker for Socket Mode integration
+- Updated `NewWorker()` to accept and use provided Notifier (defaults to NoopNotifier)
+- Added notification calls in `processPlan()`:
+  - `sendStartNotification()` called at plan start
+  - `sendIterationNotification()` wired into OnIteration callback
+  - `sendBlockerNotification()` wired into OnBlocker callback
+- Updated `completePlan()`:
+  - Added `sendCompleteNotification()` with PR URL
+  - Fixed merge mode to actually call `CompleteMerge()` (was TODO placeholder)
+- Updated `notifyError()` to send Slack error notification when configured
+- Added helper functions: `sendStartNotification()`, `sendCompleteNotification()`, `sendBlockerNotification()`, `sendIterationNotification()`
+- Added `SetupNotifications(ctx)` method for initializing notifier and auto-starting Socket Mode bot
+- Added `NewNotifier(cfg, tracker)` helper that creates appropriate notifier based on config (SlackNotifier > WebhookNotifier > NoopNotifier)
+- All notification methods check config flags before sending (NotifyStart, NotifyComplete, NotifyError, NotifyBlocker, NotifyIteration)
+- Added 12 new tests for notification integration:
+  - TestNewWorker_WithNotifier, TestNewWorker_DefaultNotifier
+  - TestNewNotifier_WithBotToken, TestNewNotifier_WithWebhook, TestNewNotifier_NoConfig, TestNewNotifier_NoSlackConfig
+  - TestWorker_SendNotifications, TestWorker_SendNotifications_Disabled, TestWorker_SendNotifications_NilConfig
+  - TestWorker_SetupNotifications
+- All 44 worker tests pass, all 333 project tests pass
+
+**Gotcha:** Fixed a leftover "TODO: Implement merge mode in T34" comment - CompleteMerge was already implemented in T34, just wasn't wired up.
+
+**Next:** T42 - Set up GoReleaser (depends on T3, which is complete)

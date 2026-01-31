@@ -5,11 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
+	"github.com/arvesolland/ralph/internal/notify"
 	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
@@ -457,4 +459,286 @@ func (c *execCommand) Run() error {
 	cmd := exec.Command("git", c.args...)
 	cmd.Dir = c.dir
 	return cmd.Run()
+}
+
+// MockNotifier implements notify.Notifier for testing.
+type MockNotifier struct {
+	mu           sync.Mutex
+	StartCalls   int
+	CompleteCalls int
+	BlockerCalls int
+	ErrorCalls   int
+	IterationCalls int
+	LastPRURL    string
+	LastBlocker  *runner.Blocker
+	LastError    error
+}
+
+func (m *MockNotifier) Start(p *plan.Plan) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.StartCalls++
+	return nil
+}
+
+func (m *MockNotifier) Complete(p *plan.Plan, prURL string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.CompleteCalls++
+	m.LastPRURL = prURL
+	return nil
+}
+
+func (m *MockNotifier) Blocker(p *plan.Plan, blocker *runner.Blocker) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.BlockerCalls++
+	m.LastBlocker = blocker
+	return nil
+}
+
+func (m *MockNotifier) Error(p *plan.Plan, err error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ErrorCalls++
+	m.LastError = err
+	return nil
+}
+
+func (m *MockNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.IterationCalls++
+	return nil
+}
+
+func TestNewWorker_WithNotifier(t *testing.T) {
+	mockNotifier := &MockNotifier{}
+
+	cfg := WorkerConfig{
+		Queue:            plan.NewQueue("/tmp"),
+		Config:           config.Defaults(),
+		MainWorktreePath: "/tmp",
+		Notifier:         mockNotifier,
+	}
+
+	w := NewWorker(cfg)
+
+	// Verify notifier is set
+	if w.notifier != mockNotifier {
+		t.Error("Expected notifier to be set")
+	}
+}
+
+func TestNewWorker_DefaultNotifier(t *testing.T) {
+	cfg := WorkerConfig{
+		Queue:            plan.NewQueue("/tmp"),
+		Config:           config.Defaults(),
+		MainWorktreePath: "/tmp",
+	}
+
+	w := NewWorker(cfg)
+
+	// Verify notifier is NoopNotifier when not provided
+	if _, ok := w.notifier.(*notify.NoopNotifier); !ok {
+		t.Error("Expected notifier to be NoopNotifier when not provided")
+	}
+}
+
+func TestNewNotifier_WithBotToken(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Slack.BotToken = "xoxb-test-token"
+	cfg.Slack.Channel = "C12345"
+
+	notifier := NewNotifier(cfg, nil)
+
+	// Should return SlackNotifier
+	if _, ok := notifier.(*notify.SlackNotifier); !ok {
+		t.Error("Expected SlackNotifier when bot token is configured")
+	}
+}
+
+func TestNewNotifier_WithWebhook(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Slack.WebhookURL = "https://hooks.slack.com/services/test"
+
+	notifier := NewNotifier(cfg, nil)
+
+	// Should return WebhookNotifier
+	if _, ok := notifier.(*notify.WebhookNotifier); !ok {
+		t.Error("Expected WebhookNotifier when webhook is configured")
+	}
+}
+
+func TestNewNotifier_NoConfig(t *testing.T) {
+	notifier := NewNotifier(nil, nil)
+
+	// Should return NoopNotifier
+	if _, ok := notifier.(*notify.NoopNotifier); !ok {
+		t.Error("Expected NoopNotifier when config is nil")
+	}
+}
+
+func TestNewNotifier_NoSlackConfig(t *testing.T) {
+	cfg := config.Defaults()
+	// No Slack config set
+
+	notifier := NewNotifier(cfg, nil)
+
+	// Should return NoopNotifier
+	if _, ok := notifier.(*notify.NoopNotifier); !ok {
+		t.Error("Expected NoopNotifier when no Slack is configured")
+	}
+}
+
+func TestWorker_SendNotifications(t *testing.T) {
+	mockNotifier := &MockNotifier{}
+
+	cfg := config.Defaults()
+	cfg.Slack.NotifyStart = true
+	cfg.Slack.NotifyComplete = true
+	cfg.Slack.NotifyError = true
+	cfg.Slack.NotifyBlocker = true
+	cfg.Slack.NotifyIteration = true
+
+	w := &Worker{
+		config:   cfg,
+		notifier: mockNotifier,
+	}
+
+	testPlan := &plan.Plan{Name: "test", Branch: "feat/test"}
+
+	// Test sendStartNotification
+	w.sendStartNotification(testPlan)
+	if mockNotifier.StartCalls != 1 {
+		t.Errorf("StartCalls = %d, want 1", mockNotifier.StartCalls)
+	}
+
+	// Test sendCompleteNotification
+	w.sendCompleteNotification(testPlan, "https://github.com/test/pr/1")
+	if mockNotifier.CompleteCalls != 1 {
+		t.Errorf("CompleteCalls = %d, want 1", mockNotifier.CompleteCalls)
+	}
+	if mockNotifier.LastPRURL != "https://github.com/test/pr/1" {
+		t.Errorf("LastPRURL = %q, want %q", mockNotifier.LastPRURL, "https://github.com/test/pr/1")
+	}
+
+	// Test sendBlockerNotification
+	blocker := &runner.Blocker{Description: "Test blocker"}
+	w.sendBlockerNotification(testPlan, blocker)
+	if mockNotifier.BlockerCalls != 1 {
+		t.Errorf("BlockerCalls = %d, want 1", mockNotifier.BlockerCalls)
+	}
+	if mockNotifier.LastBlocker != blocker {
+		t.Error("LastBlocker not set correctly")
+	}
+
+	// Test notifyError
+	testErr := ErrGHNotInstalled
+	w.notifyError(testPlan, testErr)
+	if mockNotifier.ErrorCalls != 1 {
+		t.Errorf("ErrorCalls = %d, want 1", mockNotifier.ErrorCalls)
+	}
+
+	// Test sendIterationNotification
+	w.sendIterationNotification(testPlan, 5, 10)
+	if mockNotifier.IterationCalls != 1 {
+		t.Errorf("IterationCalls = %d, want 1", mockNotifier.IterationCalls)
+	}
+}
+
+func TestWorker_SendNotifications_Disabled(t *testing.T) {
+	mockNotifier := &MockNotifier{}
+
+	cfg := config.Defaults()
+	cfg.Slack.NotifyStart = false
+	cfg.Slack.NotifyComplete = false
+	cfg.Slack.NotifyError = false
+	cfg.Slack.NotifyBlocker = false
+	cfg.Slack.NotifyIteration = false
+
+	w := &Worker{
+		config:   cfg,
+		notifier: mockNotifier,
+	}
+
+	testPlan := &plan.Plan{Name: "test", Branch: "feat/test"}
+
+	// All notifications should be skipped when disabled
+	w.sendStartNotification(testPlan)
+	w.sendCompleteNotification(testPlan, "")
+	w.sendBlockerNotification(testPlan, &runner.Blocker{})
+	w.notifyError(testPlan, ErrGHNotInstalled)
+	w.sendIterationNotification(testPlan, 1, 10)
+
+	if mockNotifier.StartCalls != 0 {
+		t.Errorf("StartCalls = %d, want 0", mockNotifier.StartCalls)
+	}
+	if mockNotifier.CompleteCalls != 0 {
+		t.Errorf("CompleteCalls = %d, want 0", mockNotifier.CompleteCalls)
+	}
+	if mockNotifier.BlockerCalls != 0 {
+		t.Errorf("BlockerCalls = %d, want 0", mockNotifier.BlockerCalls)
+	}
+	if mockNotifier.ErrorCalls != 0 {
+		t.Errorf("ErrorCalls = %d, want 0", mockNotifier.ErrorCalls)
+	}
+	if mockNotifier.IterationCalls != 0 {
+		t.Errorf("IterationCalls = %d, want 0", mockNotifier.IterationCalls)
+	}
+}
+
+func TestWorker_SendNotifications_NilConfig(t *testing.T) {
+	mockNotifier := &MockNotifier{}
+
+	w := &Worker{
+		config:   nil, // nil config
+		notifier: mockNotifier,
+	}
+
+	testPlan := &plan.Plan{Name: "test", Branch: "feat/test"}
+
+	// Should not panic with nil config
+	w.sendStartNotification(testPlan)
+	w.sendCompleteNotification(testPlan, "")
+	w.sendBlockerNotification(testPlan, &runner.Blocker{})
+	w.notifyError(testPlan, ErrGHNotInstalled)
+	w.sendIterationNotification(testPlan, 1, 10)
+
+	// No calls should be made
+	if mockNotifier.StartCalls != 0 || mockNotifier.CompleteCalls != 0 ||
+		mockNotifier.BlockerCalls != 0 || mockNotifier.ErrorCalls != 0 ||
+		mockNotifier.IterationCalls != 0 {
+		t.Error("Expected no notification calls with nil config")
+	}
+}
+
+func TestWorker_SetupNotifications(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".ralph")
+	os.MkdirAll(configDir, 0755)
+
+	cfg := config.Defaults()
+	cfg.Slack.WebhookURL = "https://hooks.slack.com/services/test"
+	cfg.Slack.NotifyStart = true
+
+	w := &Worker{
+		config:           cfg,
+		configDir:        configDir,
+		mainWorktreePath: tmpDir,
+	}
+
+	ctx := context.Background()
+	cleanup := w.SetupNotifications(ctx)
+	defer cleanup()
+
+	// Verify notifier was created
+	if w.notifier == nil {
+		t.Error("Expected notifier to be created")
+	}
+
+	// Should be WebhookNotifier since we configured webhook
+	if _, ok := w.notifier.(*notify.WebhookNotifier); !ok {
+		t.Error("Expected WebhookNotifier")
+	}
 }
