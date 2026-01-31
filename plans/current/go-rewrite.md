@@ -973,25 +973,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Simple fire-and-forget webhook notifications.
 
 **Requires:** T4
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/notify/webhook.go` defines `WebhookNotifier` implementing `Notifier` interface
-- [ ] `Start(plan *Plan) error` sends start message
-- [ ] `Complete(plan *Plan, prURL string) error` sends completion message
-- [ ] `Blocker(plan *Plan, blocker *Blocker) error` sends blocker notification
-- [ ] `Error(plan *Plan, err error) error` sends error notification
-- [ ] Messages formatted with Slack mrkdwn
-- [ ] Notifications are async (don't block execution)
-- [ ] Errors logged but not propagated
-- [ ] Unit tests with mock HTTP server
+- [x] `internal/notify/webhook.go` defines `WebhookNotifier` implementing `Notifier` interface
+- [x] `Start(plan *Plan) error` sends start message
+- [x] `Complete(plan *Plan, prURL string) error` sends completion message
+- [x] `Blocker(plan *Plan, blocker *Blocker) error` sends blocker notification
+- [x] `Error(plan *Plan, err error) error` sends error notification
+- [x] Messages formatted with Slack mrkdwn
+- [x] Notifications are async (don't block execution)
+- [x] Errors logged but not propagated
+- [x] Unit tests with mock HTTP server
 
 **Subtasks:**
-1. [ ] Define WebhookNotifier struct
-2. [ ] Implement HTTP POST to webhook
-3. [ ] Implement message formatting
-4. [ ] Make notifications async
-5. [ ] Write unit tests with httptest
+1. [x] Define WebhookNotifier struct
+2. [x] Implement HTTP POST to webhook
+3. [x] Implement message formatting
+4. [x] Make notifications async
+5. [x] Write unit tests with httptest
 
 ---
 

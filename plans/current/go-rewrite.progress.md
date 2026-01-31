@@ -980,3 +980,31 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - implementation follows established CLI patterns from cleanup.go. Added `--keep-worktree` flag beyond the spec for flexibility (user might want to keep worktree for debugging).
 
 **Next:** T37 - Implement Slack webhook notifications (depends on T4, which is complete)
+
+---
+### Iteration 36: T37 - Implement Slack webhook notifications
+**Completed:**
+- Created `internal/notify/webhook.go` with:
+  - `Notifier` interface defining Start, Complete, Blocker, Error, Iteration methods
+  - `WebhookNotifier` struct implementing Notifier via Slack incoming webhooks
+  - `NewWebhookNotifier(webhookURL string)` constructor (returns nil if URL empty)
+  - HTTP POST to webhook with JSON payload and 10s timeout
+  - Slack Block Kit formatting with mrkdwn text type
+  - Emoji icons: :rocket: (start), :white_check_mark: (complete), :warning: (blocker), :x: (error), :hourglass_flowing_sand: (iteration)
+  - `sendAsync()` for non-blocking notification delivery
+  - Error truncation for long messages (>500 chars)
+  - `NoopNotifier` for when notifications are disabled
+- Removed placeholder `internal/notify/notify.go` file
+- Created `internal/notify/webhook_test.go` with 15 test functions:
+  - TestNewWebhookNotifier_EmptyURL, TestNewWebhookNotifier_ValidURL
+  - TestWebhookNotifier_Start, TestWebhookNotifier_Complete_WithPR, TestWebhookNotifier_Complete_NoPR
+  - TestWebhookNotifier_Blocker, TestWebhookNotifier_Blocker_Nil
+  - TestWebhookNotifier_Error, TestWebhookNotifier_Error_Nil, TestWebhookNotifier_Error_TruncatesLongMessage
+  - TestWebhookNotifier_Iteration, TestWebhookNotifier_ServerError
+  - TestWebhookNotifier_Send_ContentType, TestNoopNotifier, TestNotifierInterface
+- All 15 notify tests pass
+- Build succeeds
+
+**Gotcha:** None - straightforward implementation using standard library net/http and httptest for testing.
+
+**Next:** T38 - Implement thread tracking (depends on T37, now complete)
