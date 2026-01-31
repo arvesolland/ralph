@@ -75,21 +75,17 @@ release:
   prerelease: auto
   name_template: "v{{.Version}}"
 
-# Homebrew tap configuration
-brews:
+# Homebrew cask configuration
+homebrew_casks:
   - name: ralph
     repository:
       owner: arvesolland
       name: homebrew-ralph
       branch: main
-      directory: Formula
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
     homepage: "https://github.com/arvesolland/ralph"
     description: "Autonomous AI development loop orchestration system"
-    license: "MIT"
-    install: |
-      bin.install "ralph"
-    test: |
-      system "#{bin}/ralph", "version"
 
 # Announce configuration (optional - disabled by default)
 # announce:
