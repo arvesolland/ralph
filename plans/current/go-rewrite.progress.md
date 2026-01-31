@@ -1706,3 +1706,21 @@ https://github.com/arvesolland/homebrew-ralph has been created - you can now tag
 - Installation succeeds in clean environment
 
 **Next:** Waiting for human to tag release (e.g., `git tag v1.0.0 && git push origin v1.0.0`)
+
+---
+### Iteration 74: T43 blocker status check
+**Completed:**
+- Verified `arvesolland/homebrew-ralph` repository exists (via `gh repo view`)
+- Confirmed repository is still empty (no Formula folder - requires a release)
+- Confirmed v1.1.0 tag exists locally but no GitHub release exists yet
+- The Go rewrite is on `feat/go-rewrite` branch, not merged to main
+- Goreleaser configuration verified correct in .goreleaser.yaml
+
+**Blocker:** T43 requires a GitHub release to be created. The proper workflow is:
+1. This PR (feat/go-rewrite) needs to be merged to main first
+2. Then tag a release on main: `git tag v2.0.0 && git push origin v2.0.0`
+3. GoReleaser will build binaries and push formula to homebrew-ralph
+
+**Alternative:** If testing locally is acceptable, run `goreleaser release --snapshot --clean` to test formula generation without pushing to GitHub.
+
+**Next:** Waiting for blocker resolution - either merge PR and release, or provide alternative instructions
