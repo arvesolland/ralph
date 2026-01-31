@@ -1202,20 +1202,20 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Document Go architecture alongside bash (during transition).
 
 **Requires:** T44
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] CLAUDE.md updated with Go binary usage
-- [ ] Go architecture section added
-- [ ] Build commands updated
-- [ ] Test commands updated
-- [ ] Notes about bash deprecation timeline (if applicable)
+- [x] CLAUDE.md updated with Go binary usage
+- [x] Go architecture section added
+- [x] Build commands updated
+- [x] Test commands updated
+- [x] Notes about bash deprecation timeline (if applicable)
 
 **Subtasks:**
-1. [ ] Add Go section to CLAUDE.md
-2. [ ] Update command examples
-3. [ ] Document new build process
-4. [ ] Add deprecation notes if needed
+1. [x] Add Go section to CLAUDE.md
+2. [x] Update command examples
+3. [x] Document new build process
+4. [x] Add deprecation notes if needed
 
 ---
 

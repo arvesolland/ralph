@@ -1213,3 +1213,21 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward documentation task.
 
 **Next:** T45 - Add integration test suite, or T46 - Update CLAUDE.md (T46 requires T44, which is now complete)
+
+---
+### Iteration 43: T46 - Update CLAUDE.md for Go version
+**Completed:**
+- Updated CLAUDE.md to document Go version alongside bash version:
+  - Added "Versions" section explaining the two implementations
+  - Added "Commands (Go Version)" section with all build and run commands
+  - Added "Go Version Structure" section with package layout and key packages
+  - Updated "Key Files" to include both Go and Bash versions
+  - Updated "Testing" section with Go test commands (make test, go test ./...)
+  - Updated "Releasing" section with GoReleaser workflow
+  - Updated "Gotchas" section with version-specific notes
+  - Added "Migration from Bash to Go" section with command mapping table
+  - Added deprecation note for bash version
+
+**Gotcha:** None - followed the pattern established by README.md, keeping both versions documented during transition period.
+
+**Next:** T45 - Add integration test suite (T43 blocked waiting for human to create homebrew-ralph repo)
