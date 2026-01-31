@@ -897,23 +897,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Merge directly to base branch on completion.
 
 **Requires:** T32, T15
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worker/completion.go` defines `CompleteMerge(plan *Plan, worktree *Worktree, baseBranch string) error`
-- [ ] Checks out base branch in main worktree
-- [ ] Merges feature branch with `git merge --no-ff`
-- [ ] Pushes base branch to origin
-- [ ] Deletes feature branch (local and remote)
-- [ ] Returns error if merge conflicts
-- [ ] Integration test verifies merge commit
+- [x] `internal/worker/completion.go` defines `CompleteMerge(plan *Plan, worktree *Worktree, baseBranch string) error`
+- [x] Checks out base branch in main worktree
+- [x] Merges feature branch with `git merge --no-ff`
+- [x] Pushes base branch to origin
+- [x] Deletes feature branch (local and remote)
+- [x] Returns error if merge conflicts
+- [x] Integration test verifies merge commit
 
 **Subtasks:**
-1. [ ] Implement checkout of base branch
-2. [ ] Implement merge with conflict detection
-3. [ ] Implement push
-4. [ ] Implement branch deletion
-5. [ ] Write integration test
+1. [x] Implement checkout of base branch
+2. [x] Implement merge with conflict detection
+3. [x] Implement push
+4. [x] Implement branch deletion
+5. [x] Write integration test
 
 ---
 
@@ -921,26 +921,26 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > CLI command to run worker queue processor.
 
 **Requires:** T32, T33, T34
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph worker` processes queue continuously
-- [ ] `ralph worker --once` processes one plan and exits
-- [ ] `--pr` flag uses PR mode for completion (default)
-- [ ] `--merge` flag uses merge mode for completion
-- [ ] `--interval` flag sets poll interval when queue empty (default 30s)
-- [ ] Shows current plan being processed
-- [ ] Handles Ctrl+C gracefully
-- [ ] Integration test processes queue with --once
+- [x] `ralph worker` processes queue continuously
+- [x] `ralph worker --once` processes one plan and exits
+- [x] `--pr` flag uses PR mode for completion (default)
+- [x] `--merge` flag uses merge mode for completion
+- [x] `--interval` flag sets poll interval when queue empty (default 30s)
+- [x] Shows current plan being processed
+- [x] Handles Ctrl+C gracefully
+- [x] Integration test processes queue with --once
 
 **Subtasks:**
-1. [ ] Create internal/cli/worker.go
-2. [ ] Wire up Worker
-3. [ ] Add --once flag
-4. [ ] Add --pr and --merge flags
-5. [ ] Add --interval flag
-6. [ ] Add signal handling
-7. [ ] Write integration test
+1. [x] Create internal/cli/worker.go
+2. [x] Wire up Worker
+3. [x] Add --once flag
+4. [x] Add --pr and --merge flags
+5. [x] Add --interval flag
+6. [x] Add signal handling
+7. [x] Write integration test
 
 ---
 

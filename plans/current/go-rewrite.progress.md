@@ -926,3 +926,31 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The function signature is `CompleteMerge(p *plan.Plan, baseBranch string, mainGit git.Git)` - it takes a Git instance for the main worktree (not the feature worktree) since the merge happens in the main worktree. Branch deletion failures don't fail the merge - the important part (merge + push) succeeded.
 
 **Next:** T35 - Add `ralph worker` command (depends on T32, T33, T34 - all now complete)
+
+---
+### Iteration 34: T35 - Add `ralph worker` command
+**Completed:**
+- Created `internal/cli/worker.go` with:
+  - `ralph worker` command with Cobra integration
+  - `--once` flag for single plan mode (exits after processing one plan)
+  - `--pr` flag for PR mode completion (default)
+  - `--merge` flag for merge mode completion
+  - `--interval` flag for poll interval when queue empty (default 30s)
+  - `--max` flag for max iterations per plan (default 30)
+  - Full worker lifecycle: create worker → setup signal handling → run
+  - Graceful shutdown on SIGINT/SIGTERM
+  - Callbacks for plan start, complete, error, and blocker events
+  - Proper exit codes: 0 for success/interrupt/empty queue, 1 for errors
+- Created `internal/cli/worker_test.go` with 6 test functions:
+  - TestWorkerCmd_HelpOutput - command registration verification
+  - TestWorkerCmd_FlagsRegistered - all 5 flags present with correct defaults
+  - TestWorkerCmd_RequiresGitRepo - error handling for non-git directories
+  - TestWorkerCmd_OnceMode_EmptyQueue - graceful handling of empty queue
+  - TestWorkerCmd_CompletionModeFlags - flag precedence logic
+  - TestWorkerCmd_IntervalParsing - duration validation
+- All 6 worker CLI tests pass, all project tests pass
+- Updated T34 status to complete (was already implemented in iteration 33)
+
+**Gotcha:** None - implementation follows established CLI patterns from run.go. The worker uses same signal handling approach as run command.
+
+**Next:** T36 - Add `ralph reset` command (depends on T11, which is complete)
