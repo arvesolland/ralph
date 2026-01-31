@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- update progress log for T43 blocker status
 - add integration test suite (T45)
 - update CLAUDE.md for Go version (T46)
 - comprehensive README for Go version (T44)
