@@ -36,7 +36,7 @@ func TestVerify_Complete(t *testing.T) {
 		Content: "# Plan\n\n**Status:** complete\n\n- [x] Task 1\n- [x] Task 2",
 	}
 
-	result, err := Verify(context.Background(), p, mock)
+	result, err := Verify(context.Background(), p, mock, "")
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -59,7 +59,7 @@ func TestVerify_Incomplete(t *testing.T) {
 		Content: "# Plan\n\n- [x] Task 1\n- [ ] Task 2",
 	}
 
-	result, err := Verify(context.Background(), p, mock)
+	result, err := Verify(context.Background(), p, mock, "")
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -72,17 +72,31 @@ func TestVerify_Incomplete(t *testing.T) {
 	}
 }
 
-func TestVerify_UsesHaikuModel(t *testing.T) {
+func TestVerify_UsesDefaultModel(t *testing.T) {
 	mock := &mockRunner{response: "YES"}
 	p := &plan.Plan{Name: "test", Content: "content"}
 
-	_, err := Verify(context.Background(), p, mock)
+	_, err := Verify(context.Background(), p, mock, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if mock.lastOpts.Model != VerificationModel {
-		t.Errorf("expected model=%s, got %s", VerificationModel, mock.lastOpts.Model)
+	if mock.lastOpts.Model != DefaultVerificationModel {
+		t.Errorf("expected model=%s, got %s", DefaultVerificationModel, mock.lastOpts.Model)
+	}
+}
+
+func TestVerify_UsesCustomModel(t *testing.T) {
+	mock := &mockRunner{response: "YES"}
+	p := &plan.Plan{Name: "test", Content: "content"}
+
+	_, err := Verify(context.Background(), p, mock, "custom-model")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.lastOpts.Model != "custom-model" {
+		t.Errorf("expected model=custom-model, got %s", mock.lastOpts.Model)
 	}
 }
 
@@ -90,7 +104,7 @@ func TestVerify_UsesPrintMode(t *testing.T) {
 	mock := &mockRunner{response: "YES"}
 	p := &plan.Plan{Name: "test", Content: "content"}
 
-	_, err := Verify(context.Background(), p, mock)
+	_, err := Verify(context.Background(), p, mock, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -107,7 +121,7 @@ func TestVerify_RunnerError(t *testing.T) {
 	mock := &mockRunner{err: errors.New("connection failed")}
 	p := &plan.Plan{Name: "test", Content: "content"}
 
-	_, err := Verify(context.Background(), p, mock)
+	_, err := Verify(context.Background(), p, mock, "")
 
 	if err == nil {
 		t.Fatalf("expected error, got nil")
@@ -309,8 +323,8 @@ func TestVerificationConstants(t *testing.T) {
 		t.Errorf("expected 60s timeout, got %v", VerificationTimeout)
 	}
 
-	if !strings.Contains(VerificationModel, "haiku") {
-		t.Errorf("expected haiku model, got %s", VerificationModel)
+	if !strings.Contains(DefaultVerificationModel, "haiku") {
+		t.Errorf("expected haiku model, got %s", DefaultVerificationModel)
 	}
 }
 

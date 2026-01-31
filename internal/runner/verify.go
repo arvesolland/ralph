@@ -15,8 +15,8 @@ import (
 // Verification uses a shorter timeout since Haiku is fast.
 const VerificationTimeout = 60 * time.Second
 
-// VerificationModel is the model used for verification (fast, cheap).
-const VerificationModel = "claude-3-5-haiku-latest"
+// DefaultVerificationModel is the default model used for verification (fast, cheap).
+const DefaultVerificationModel = "claude-3-5-haiku-latest"
 
 // VerificationResult holds the result of plan completion verification.
 type VerificationResult struct {
@@ -52,19 +52,25 @@ Your response must start with either "YES" or "NO:". Be specific about what is i
 // yesNoRegex matches YES or NO: patterns at the start of the response.
 var yesNoRegex = regexp.MustCompile(`(?im)^(YES|NO)\s*:?\s*(.*)`)
 
-// Verify checks if a plan is complete using the Haiku model for fast verification.
+// Verify checks if a plan is complete using a fast model for verification.
 // It builds a prompt with the plan state and asks the model to verify completion.
+// The model parameter specifies which model to use; if empty, uses DefaultVerificationModel.
 // Returns (true, "", nil) if verified complete.
 // Returns (false, reason, nil) if not complete, with an explanation.
 // Returns (false, "", err) on execution errors.
-func Verify(ctx context.Context, p *plan.Plan, runner Runner) (*VerificationResult, error) {
+func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*VerificationResult, error) {
 	// Build the verification prompt with plan content
 	prompt := buildVerificationPrompt(p)
 
-	// Set up options for Haiku model
+	// Use default model if not specified
+	if model == "" {
+		model = DefaultVerificationModel
+	}
+
+	// Set up options for verification model
 	opts := DefaultOptions()
-	opts.Model = VerificationModel
-	opts.Print = true        // Use --print mode for simple prompt/response
+	opts.Model = model
+	opts.Print = true          // Use --print mode for simple prompt/response
 	opts.OutputFormat = "text" // Use text format for verification (stream-json requires --verbose with --print)
 
 	// Use shorter timeout for verification if not already set

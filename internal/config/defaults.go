@@ -33,7 +33,8 @@ func Defaults() *Config {
 			InitCommands: "",
 		},
 		Completion: CompletionConfig{
-			Mode: "pr",
+			Mode:              "pr",
+			VerificationModel: "claude-3-5-haiku-latest",
 		},
 	}
 }

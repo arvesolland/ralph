@@ -32,15 +32,6 @@ func TestRunCmd_FlagsRegistered(t *testing.T) {
 	if maxFlag.DefValue != "30" {
 		t.Errorf("--max default should be 30, got %s", maxFlag.DefValue)
 	}
-
-	// Verify --review flag exists
-	reviewFlag := runCmd.Flags().Lookup("review")
-	if reviewFlag == nil {
-		t.Fatal("--review flag not registered")
-	}
-	if reviewFlag.DefValue != "false" {
-		t.Errorf("--review default should be false, got %s", reviewFlag.DefValue)
-	}
 }
 
 func TestRunCmd_RequiresPlanFile(t *testing.T) {

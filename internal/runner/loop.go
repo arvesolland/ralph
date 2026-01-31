@@ -148,9 +148,9 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 		if iterResult.IsComplete {
 			log.Info("Completion marker detected, verifying...")
 
-			// Verify completion with Haiku
+			// Verify completion with configured model
 			verifyCtx, cancel := context.WithTimeout(ctx, VerificationTimeout)
-			verifyResult, verifyErr := Verify(verifyCtx, l.plan, l.runner)
+			verifyResult, verifyErr := Verify(verifyCtx, l.plan, l.runner, l.config.Completion.VerificationModel)
 			cancel()
 
 			if verifyErr != nil {

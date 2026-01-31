@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -18,10 +19,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	maxIterations int
-	reviewPlan    bool
-)
+var maxIterations int
 
 var runCmd = &cobra.Command{
 	Use:   "run <plan-file>",
@@ -46,7 +44,6 @@ Example:
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.Flags().IntVar(&maxIterations, "max", runner.DefaultMaxIterations, "maximum iterations before stopping")
-	runCmd.Flags().BoolVar(&reviewPlan, "review", false, "run plan review before execution (not yet implemented)")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -99,11 +96,6 @@ func runRun(cmd *cobra.Command, args []string) error {
 	currentBranch, err := g.CurrentBranch()
 	if err != nil {
 		return fmt.Errorf("getting current branch: %w", err)
-	}
-
-	// Handle --review flag (placeholder)
-	if reviewPlan {
-		log.Warn("Plan review not yet implemented - skipping")
 	}
 
 	// Create execution context
@@ -168,7 +160,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Error != nil {
-		if result.Error == context.Canceled {
+		if errors.Is(result.Error, context.Canceled) {
 			log.Warn("Execution interrupted by user")
 			return nil // Exit 0 on user interruption
 		}

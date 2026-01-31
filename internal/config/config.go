@@ -2,7 +2,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -58,7 +60,8 @@ type WorktreeConfig struct {
 
 // CompletionConfig contains plan completion settings.
 type CompletionConfig struct {
-	Mode string `yaml:"mode"` // "pr" or "merge"
+	Mode              string `yaml:"mode"`               // "pr" or "merge"
+	VerificationModel string `yaml:"verification_model"` // model for plan verification (default: claude-3-5-haiku-latest)
 }
 
 // Load reads and parses a YAML config file.
@@ -107,7 +110,44 @@ func LoadWithDefaults(path string) (*Config, error) {
 	// Merge file config into defaults
 	mergeConfig(cfg, &fileCfg)
 
+	// Validate the final config
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
 	return cfg, nil
+}
+
+// Validate checks that config values are valid.
+// Returns an error describing the first validation failure found.
+func (c *Config) Validate() error {
+	// Validate completion mode
+	if c.Completion.Mode != "" && c.Completion.Mode != "pr" && c.Completion.Mode != "merge" {
+		return fmt.Errorf("completion.mode must be 'pr' or 'merge', got '%s'", c.Completion.Mode)
+	}
+
+	// Validate Slack webhook URL format
+	if c.Slack.WebhookURL != "" {
+		if !strings.HasPrefix(c.Slack.WebhookURL, "https://") {
+			return fmt.Errorf("slack.webhook_url must start with 'https://'")
+		}
+	}
+
+	// Validate Slack bot token format (should start with xoxb-)
+	if c.Slack.BotToken != "" {
+		if !strings.HasPrefix(c.Slack.BotToken, "xoxb-") {
+			return fmt.Errorf("slack.bot_token must start with 'xoxb-'")
+		}
+	}
+
+	// Validate Slack app token format (should start with xapp-)
+	if c.Slack.AppToken != "" {
+		if !strings.HasPrefix(c.Slack.AppToken, "xapp-") {
+			return fmt.Errorf("slack.app_token must start with 'xapp-'")
+		}
+	}
+
+	return nil
 }
 
 // mergeConfig merges values from src into dst.
@@ -179,5 +219,8 @@ func mergeConfig(dst, src *Config) {
 	// Completion
 	if src.Completion.Mode != "" {
 		dst.Completion.Mode = src.Completion.Mode
+	}
+	if src.Completion.VerificationModel != "" {
+		dst.Completion.VerificationModel = src.Completion.VerificationModel
 	}
 }

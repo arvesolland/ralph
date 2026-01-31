@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // Queue manages the plan queue lifecycle: pending → current → complete.
@@ -68,6 +69,21 @@ func (q *Queue) completeDir() string {
 	return filepath.Join(q.BaseDir, "complete")
 }
 
+// resolvePath resolves a path to its absolute form with symlinks evaluated.
+// Returns the original path on error for graceful degradation.
+func resolvePath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		// Path may not exist yet, return absolute path
+		return abs
+	}
+	return resolved
+}
+
 // Pending returns all plans in the pending/ directory, sorted by name.
 func (q *Queue) Pending() ([]*Plan, error) {
 	return q.listPlans(q.pendingDir())
@@ -106,12 +122,10 @@ func (q *Queue) Activate(plan *Plan) error {
 	}
 
 	// Verify plan is in pending/
-	if filepath.Dir(plan.Path) != q.pendingDir() {
-		absDir, _ := filepath.Abs(filepath.Dir(plan.Path))
-		absPending, _ := filepath.Abs(q.pendingDir())
-		if absDir != absPending {
-			return ErrPlanNotInPending
-		}
+	planDir := resolvePath(filepath.Dir(plan.Path))
+	pendingDir := resolvePath(q.pendingDir())
+	if planDir != pendingDir {
+		return ErrPlanNotInPending
 	}
 
 	// Move to current/
@@ -130,12 +144,10 @@ func (q *Queue) Activate(plan *Plan) error {
 // Returns ErrPlanNotInCurrent if the plan is not in current/.
 func (q *Queue) Complete(plan *Plan) error {
 	// Verify plan is in current/
-	if filepath.Dir(plan.Path) != q.currentDir() {
-		absDir, _ := filepath.Abs(filepath.Dir(plan.Path))
-		absCurrent, _ := filepath.Abs(q.currentDir())
-		if absDir != absCurrent {
-			return ErrPlanNotInCurrent
-		}
+	planDir := resolvePath(filepath.Dir(plan.Path))
+	currentDir := resolvePath(q.currentDir())
+	if planDir != currentDir {
+		return ErrPlanNotInCurrent
 	}
 
 	// Move to complete/
@@ -154,12 +166,10 @@ func (q *Queue) Complete(plan *Plan) error {
 // Returns ErrPlanNotInCurrent if the plan is not in current/.
 func (q *Queue) Reset(plan *Plan) error {
 	// Verify plan is in current/
-	if filepath.Dir(plan.Path) != q.currentDir() {
-		absDir, _ := filepath.Abs(filepath.Dir(plan.Path))
-		absCurrent, _ := filepath.Abs(q.currentDir())
-		if absDir != absCurrent {
-			return ErrPlanNotInCurrent
-		}
+	planDir := resolvePath(filepath.Dir(plan.Path))
+	currentDir := resolvePath(q.currentDir())
+	if planDir != currentDir {
+		return ErrPlanNotInCurrent
 	}
 
 	// Move to pending/
@@ -234,10 +244,10 @@ func (q *Queue) listPlans(dir string) ([]*Plan, error) {
 
 		// Skip progress and feedback files
 		name := entry.Name()
-		if len(name) > 12 && name[len(name)-12:] == ".progress.md" {
+		if strings.HasSuffix(name, ".progress.md") {
 			continue
 		}
-		if len(name) > 12 && name[len(name)-12:] == ".feedback.md" {
+		if strings.HasSuffix(name, ".feedback.md") {
 			continue
 		}
 

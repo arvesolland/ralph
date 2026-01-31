@@ -184,7 +184,22 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 		}
 		// Wait for the process to actually exit
 		waitErr = <-waitDone
-		if ctx.Err() == context.DeadlineExceeded {
+		log.Debug("Process exited after termination with: %v", waitErr)
+
+		// Wait for stream goroutines with timeout to prevent leaks
+		streamCleanupTimeout := 5 * time.Second
+		select {
+		case <-streamDone:
+		case <-time.After(streamCleanupTimeout):
+			log.Debug("Timeout waiting for stdout stream to close")
+		}
+		select {
+		case <-stderrDone:
+		case <-time.After(streamCleanupTimeout):
+			log.Debug("Timeout waiting for stderr stream to close")
+		}
+
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, context.DeadlineExceeded
 		}
 		return nil, ctx.Err()
