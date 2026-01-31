@@ -711,25 +711,25 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Extract `<blocker>...</blocker>` content from Claude output.
 
 **Requires:** T25
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/blocker.go` defines `Blocker` struct with Description, Action, Resume, Hash
-- [ ] `ExtractBlocker(output string) *Blocker` parses blocker marker
-- [ ] Extracts content between `<blocker>` and `</blocker>` tags
-- [ ] Parses `Description:`, `Action:`, `Resume:` fields if present
-- [ ] Computes Hash as first 8 chars of MD5 of full blocker content
-- [ ] Returns nil if no blocker found
-- [ ] `Result.Blocker` populated when blocker detected
-- [ ] Unit tests with sample blocker content
+- [x] `internal/runner/blocker.go` defines `Blocker` struct with Description, Action, Resume, Hash
+- [x] `ExtractBlocker(output string) *Blocker` parses blocker marker
+- [x] Extracts content between `<blocker>` and `</blocker>` tags
+- [x] Parses `Description:`, `Action:`, `Resume:` fields if present
+- [x] Computes Hash as first 8 chars of MD5 of full blocker content
+- [x] Returns nil if no blocker found
+- [x] `Result.Blocker` populated when blocker detected
+- [x] Unit tests with sample blocker content
 
 **Subtasks:**
-1. [ ] Define Blocker struct
-2. [ ] Implement tag extraction regex
-3. [ ] Implement field parsing
-4. [ ] Implement hash computation
-5. [ ] Integrate into Result
-6. [ ] Write unit tests
+1. [x] Define Blocker struct
+2. [x] Implement tag extraction regex
+3. [x] Implement field parsing
+4. [x] Implement hash computation
+5. [x] Integrate into Result
+6. [x] Write unit tests
 
 ---
 
@@ -737,24 +737,24 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Verify plan completion using cheaper Haiku model.
 
 **Requires:** T25, T8
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/runner/verify.go` defines `Verify(plan *Plan, runner Runner) (bool, string, error)`
-- [ ] Builds verification prompt with plan state (tasks, checkboxes)
-- [ ] Runs Haiku model (fast, cheap) via runner with model override
-- [ ] Parses yes/no response
-- [ ] Returns (true, "", nil) if verified complete
-- [ ] Returns (false, reason, nil) if not complete, with extracted reason
-- [ ] Uses shorter timeout (60s default) for verification
-- [ ] Unit tests with mock runner
+- [x] `internal/runner/verify.go` defines `Verify(plan *Plan, runner Runner) (bool, string, error)`
+- [x] Builds verification prompt with plan state (tasks, checkboxes)
+- [x] Runs Haiku model (fast, cheap) via runner with model override
+- [x] Parses yes/no response
+- [x] Returns (true, "", nil) if verified complete
+- [x] Returns (false, reason, nil) if not complete, with extracted reason
+- [x] Uses shorter timeout (60s default) for verification
+- [x] Unit tests with mock runner
 
 **Subtasks:**
-1. [ ] Define verification prompt template
-2. [ ] Implement Verify function
-3. [ ] Implement yes/no parsing
-4. [ ] Implement reason extraction
-5. [ ] Write unit tests with mock
+1. [x] Define verification prompt template
+2. [x] Implement Verify function
+3. [x] Implement yes/no parsing
+4. [x] Implement reason extraction
+5. [x] Write unit tests with mock
 
 ---
 
