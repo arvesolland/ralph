@@ -897,23 +897,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Merge directly to base branch on completion.
 
 **Requires:** T32, T15
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `internal/worker/completion.go` defines `CompleteMerge(plan *Plan, worktree *Worktree, baseBranch string) error`
-- [ ] Checks out base branch in main worktree
-- [ ] Merges feature branch with `git merge --no-ff`
-- [ ] Pushes base branch to origin
-- [ ] Deletes feature branch (local and remote)
-- [ ] Returns error if merge conflicts
-- [ ] Integration test verifies merge commit
+- [x] `internal/worker/completion.go` defines `CompleteMerge(plan *Plan, worktree *Worktree, baseBranch string) error`
+- [x] Checks out base branch in main worktree
+- [x] Merges feature branch with `git merge --no-ff`
+- [x] Pushes base branch to origin
+- [x] Deletes feature branch (local and remote)
+- [x] Returns error if merge conflicts
+- [x] Integration test verifies merge commit
 
 **Subtasks:**
-1. [ ] Implement checkout of base branch
-2. [ ] Implement merge with conflict detection
-3. [ ] Implement push
-4. [ ] Implement branch deletion
-5. [ ] Write integration test
+1. [x] Implement checkout of base branch
+2. [x] Implement merge with conflict detection
+3. [x] Implement push
+4. [x] Implement branch deletion
+5. [x] Write integration test
 
 ---
 

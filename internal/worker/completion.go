@@ -25,6 +25,15 @@ var (
 
 	// ErrPRCreateFailed is returned when creating the PR fails.
 	ErrPRCreateFailed = errors.New("failed to create PR")
+
+	// ErrMergeConflict is returned when merge has conflicts.
+	ErrMergeConflict = errors.New("merge conflict")
+
+	// ErrCheckoutFailed is returned when checkout fails.
+	ErrCheckoutFailed = errors.New("failed to checkout branch")
+
+	// ErrMergeFailed is returned when merge fails (non-conflict).
+	ErrMergeFailed = errors.New("failed to merge branch")
 )
 
 // prURLRegex matches the PR URL from gh pr create output.
@@ -168,4 +177,60 @@ func logManualPRInstructions(p *plan.Plan) {
 	log.Info("  1. Go to your repository on GitHub")
 	log.Info("  2. Create a new pull request for branch: %s", p.Branch)
 	log.Info("  3. Or install gh: https://cli.github.com/")
+}
+
+// CompleteMerge handles merge mode completion:
+// 1. Check out base branch in main worktree
+// 2. Merge feature branch with --no-ff
+// 3. Push base branch to origin
+// 4. Delete feature branch (local and remote)
+// The mainGit should be a Git instance for the main worktree (not the feature worktree).
+func CompleteMerge(p *plan.Plan, baseBranch string, mainGit git.Git) error {
+	featureBranch := p.Branch
+
+	// Step 1: Checkout base branch in main worktree
+	log.Info("Checking out base branch %s...", baseBranch)
+	if err := mainGit.Checkout(baseBranch); err != nil {
+		return fmt.Errorf("%w: %v", ErrCheckoutFailed, err)
+	}
+	log.Debug("Checked out %s", baseBranch)
+
+	// Step 2: Merge feature branch with --no-ff
+	log.Info("Merging %s into %s...", featureBranch, baseBranch)
+	if err := mainGit.Merge(featureBranch, true); err != nil {
+		if errors.Is(err, git.ErrMergeConflict) {
+			return fmt.Errorf("%w: resolve conflicts in %s and try again", ErrMergeConflict, baseBranch)
+		}
+		return fmt.Errorf("%w: %v", ErrMergeFailed, err)
+	}
+	log.Success("Merged %s into %s", featureBranch, baseBranch)
+
+	// Step 3: Push base branch to origin
+	log.Info("Pushing %s to origin...", baseBranch)
+	if err := mainGit.Push(); err != nil {
+		return fmt.Errorf("%w: %v", ErrPushFailed, err)
+	}
+	log.Success("Pushed %s to origin", baseBranch)
+
+	// Step 4: Delete feature branch (local)
+	log.Info("Deleting local branch %s...", featureBranch)
+	if err := mainGit.DeleteBranch(featureBranch, true); err != nil {
+		// Log warning but don't fail - the merge was successful
+		log.Warn("Failed to delete local branch %s: %v", featureBranch, err)
+	} else {
+		log.Debug("Deleted local branch %s", featureBranch)
+	}
+
+	// Step 5: Delete feature branch (remote)
+	log.Info("Deleting remote branch %s...", featureBranch)
+	if err := mainGit.DeleteRemoteBranch("origin", featureBranch); err != nil {
+		// Log warning but don't fail - the merge was successful
+		// Remote branch might not exist if we never pushed it
+		log.Warn("Failed to delete remote branch %s: %v", featureBranch, err)
+	} else {
+		log.Debug("Deleted remote branch %s", featureBranch)
+	}
+
+	log.Success("Merge complete: %s merged into %s", featureBranch, baseBranch)
+	return nil
 }

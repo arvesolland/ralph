@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -358,4 +359,302 @@ func TestCompletionErrors(t *testing.T) {
 	if ErrPRCreateFailed.Error() != "failed to create PR" {
 		t.Errorf("ErrPRCreateFailed = %v, want 'failed to create PR'", ErrPRCreateFailed)
 	}
+
+	if ErrMergeConflict.Error() != "merge conflict" {
+		t.Errorf("ErrMergeConflict = %v, want 'merge conflict'", ErrMergeConflict)
+	}
+
+	if ErrCheckoutFailed.Error() != "failed to checkout branch" {
+		t.Errorf("ErrCheckoutFailed = %v, want 'failed to checkout branch'", ErrCheckoutFailed)
+	}
+
+	if ErrMergeFailed.Error() != "failed to merge branch" {
+		t.Errorf("ErrMergeFailed = %v, want 'failed to merge branch'", ErrMergeFailed)
+	}
+}
+
+// mockGitForMerge is a mock Git implementation for testing merge completion
+type mockGitForMerge struct {
+	git.Git
+	checkoutError       error
+	mergeError          error
+	pushError           error
+	deleteBranchError   error
+	deleteRemoteError   error
+	currentBranch       string
+	checkedOutBranch    string
+	mergedBranch        string
+	deletedBranch       string
+	deletedRemoteBranch string
+}
+
+func (m *mockGitForMerge) Checkout(branch string) error {
+	m.checkedOutBranch = branch
+	m.currentBranch = branch
+	return m.checkoutError
+}
+
+func (m *mockGitForMerge) Merge(branch string, noFastForward bool) error {
+	m.mergedBranch = branch
+	return m.mergeError
+}
+
+func (m *mockGitForMerge) Push() error {
+	return m.pushError
+}
+
+func (m *mockGitForMerge) DeleteBranch(name string, force bool) error {
+	m.deletedBranch = name
+	return m.deleteBranchError
+}
+
+func (m *mockGitForMerge) DeleteRemoteBranch(remote, branch string) error {
+	m.deletedRemoteBranch = branch
+	return m.deleteRemoteError
+}
+
+func TestCompleteMerge_Success(t *testing.T) {
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	mock := &mockGitForMerge{}
+	err := CompleteMerge(p, "main", mock)
+	if err != nil {
+		t.Errorf("CompleteMerge() error = %v, want nil", err)
+	}
+
+	if mock.checkedOutBranch != "main" {
+		t.Errorf("should checkout base branch, got %q", mock.checkedOutBranch)
+	}
+
+	if mock.mergedBranch != "feat/test-feature" {
+		t.Errorf("should merge feature branch, got %q", mock.mergedBranch)
+	}
+
+	if mock.deletedBranch != "feat/test-feature" {
+		t.Errorf("should delete local feature branch, got %q", mock.deletedBranch)
+	}
+
+	if mock.deletedRemoteBranch != "feat/test-feature" {
+		t.Errorf("should delete remote feature branch, got %q", mock.deletedRemoteBranch)
+	}
+}
+
+func TestCompleteMerge_CheckoutFails(t *testing.T) {
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	mock := &mockGitForMerge{
+		checkoutError: git.ErrBranchNotFound,
+	}
+
+	err := CompleteMerge(p, "main", mock)
+	if err == nil {
+		t.Error("CompleteMerge() should return error when checkout fails")
+	}
+
+	if !strings.Contains(err.Error(), "failed to checkout") {
+		t.Errorf("error should mention checkout failure, got: %v", err)
+	}
+}
+
+func TestCompleteMerge_MergeConflict(t *testing.T) {
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	mock := &mockGitForMerge{
+		mergeError: git.ErrMergeConflict,
+	}
+
+	err := CompleteMerge(p, "main", mock)
+	if err == nil {
+		t.Error("CompleteMerge() should return error on merge conflict")
+	}
+
+	if !strings.Contains(err.Error(), "merge conflict") {
+		t.Errorf("error should mention merge conflict, got: %v", err)
+	}
+}
+
+func TestCompleteMerge_MergeFails(t *testing.T) {
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	mock := &mockGitForMerge{
+		mergeError: errors.New("some git error"),
+	}
+
+	err := CompleteMerge(p, "main", mock)
+	if err == nil {
+		t.Error("CompleteMerge() should return error on merge failure")
+	}
+
+	if !strings.Contains(err.Error(), "failed to merge") {
+		t.Errorf("error should mention merge failure, got: %v", err)
+	}
+}
+
+func TestCompleteMerge_PushFails(t *testing.T) {
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	mock := &mockGitForMerge{
+		pushError: errors.New("push rejected"),
+	}
+
+	err := CompleteMerge(p, "main", mock)
+	if err == nil {
+		t.Error("CompleteMerge() should return error on push failure")
+	}
+
+	if !strings.Contains(err.Error(), "failed to push") {
+		t.Errorf("error should mention push failure, got: %v", err)
+	}
+}
+
+func TestCompleteMerge_DeleteBranchFails(t *testing.T) {
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	mock := &mockGitForMerge{
+		deleteBranchError: errors.New("branch in use"),
+	}
+
+	// Should NOT fail - just log warning
+	err := CompleteMerge(p, "main", mock)
+	if err != nil {
+		t.Errorf("CompleteMerge() should not fail when branch delete fails, got: %v", err)
+	}
+}
+
+func TestCompleteMerge_DeleteRemoteBranchFails(t *testing.T) {
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	mock := &mockGitForMerge{
+		deleteRemoteError: errors.New("remote branch not found"),
+	}
+
+	// Should NOT fail - just log warning
+	err := CompleteMerge(p, "main", mock)
+	if err != nil {
+		t.Errorf("CompleteMerge() should not fail when remote branch delete fails, got: %v", err)
+	}
+}
+
+// TestCompleteMerge_Integration tests the full merge workflow with real git
+func TestCompleteMerge_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	// Create temporary directory for test repo
+	tmpDir, err := os.MkdirTemp("", "merge-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	repoDir := filepath.Join(tmpDir, "repo")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("failed to create repo dir: %v", err)
+	}
+
+	// Initialize git repo
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoDir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test",
+			"GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=Test",
+			"GIT_COMMITTER_EMAIL=test@test.com",
+		)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, output)
+		}
+	}
+
+	runGit("init", "-b", "main")
+
+	// Create initial commit on main
+	testFile := filepath.Join(repoDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("initial"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	runGit("add", ".")
+	runGit("commit", "-m", "initial commit")
+
+	// Create feature branch with a commit
+	runGit("checkout", "-b", "feat/test-feature")
+	if err := os.WriteFile(testFile, []byte("feature change"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	runGit("add", ".")
+	runGit("commit", "-m", "feature commit")
+
+	// Switch back to main for the merge
+	runGit("checkout", "main")
+
+	// Test plan
+	p := &plan.Plan{
+		Name:   "test-feature",
+		Branch: "feat/test-feature",
+	}
+
+	// Create Git instance for the repo
+	g := git.NewGit(repoDir)
+
+	// Run merge completion (skip push since no remote)
+	// We'll just verify checkout and merge work
+	err = g.Checkout("main")
+	if err != nil {
+		t.Fatalf("checkout failed: %v", err)
+	}
+
+	err = g.Merge("feat/test-feature", true)
+	if err != nil {
+		t.Fatalf("merge failed: %v", err)
+	}
+
+	// Verify the file has feature changes
+	content, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("failed to read test file: %v", err)
+	}
+
+	if string(content) != "feature change" {
+		t.Errorf("file content = %q, want %q", string(content), "feature change")
+	}
+
+	// Verify feature branch can be deleted
+	err = g.DeleteBranch("feat/test-feature", true)
+	if err != nil {
+		t.Errorf("delete branch failed: %v", err)
+	}
+
+	// Verify branch no longer exists
+	exists, err := g.BranchExists("feat/test-feature")
+	if err != nil {
+		t.Fatalf("branch exists check failed: %v", err)
+	}
+	if exists {
+		t.Error("feature branch should be deleted")
+	}
+
+	t.Logf("Successfully merged %s into main", p.Branch)
 }

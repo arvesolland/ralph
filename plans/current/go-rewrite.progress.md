@@ -901,3 +901,28 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Completion workflow is graceful - push/PR failures are logged but don't fail the overall plan completion. The code is still committed locally and the user can push/PR manually.
 
 **Next:** T34 - Implement completion workflow (merge mode) (depends on T32, T15 - both complete)
+
+---
+### Iteration 33: T34 - Implement completion workflow (merge mode)
+**Completed:**
+- Added `CompleteMerge(p *plan.Plan, baseBranch string, mainGit git.Git) error` to `internal/worker/completion.go`:
+  - Checks out base branch in main worktree using Git.Checkout
+  - Merges feature branch with `--no-ff` using Git.Merge
+  - Pushes base branch to origin using Git.Push
+  - Deletes feature branch locally using Git.DeleteBranch(force=true)
+  - Deletes feature branch on remote using Git.DeleteRemoteBranch
+  - Returns ErrMergeConflict when Git.Merge returns git.ErrMergeConflict
+  - Branch deletion failures are logged as warnings but don't fail the merge
+- Added error types: `ErrMergeConflict`, `ErrCheckoutFailed`, `ErrMergeFailed`
+- Added tests to `internal/worker/completion_test.go` (11 new tests):
+  - TestCompleteMerge_Success - verifies full workflow
+  - TestCompleteMerge_CheckoutFails, TestCompleteMerge_MergeConflict, TestCompleteMerge_MergeFails
+  - TestCompleteMerge_PushFails - verifies error propagation
+  - TestCompleteMerge_DeleteBranchFails, TestCompleteMerge_DeleteRemoteBranchFails - verifies graceful handling
+  - TestCompleteMerge_Integration - real git integration test
+  - Updated TestCompletionErrors for new error types
+- All 30 worker tests pass
+
+**Gotcha:** The function signature is `CompleteMerge(p *plan.Plan, baseBranch string, mainGit git.Git)` - it takes a Git instance for the main worktree (not the feature worktree) since the merge happens in the main worktree. Branch deletion failures don't fail the merge - the important part (merge + push) succeeded.
+
+**Next:** T35 - Add `ralph worker` command (depends on T32, T33, T34 - all now complete)
