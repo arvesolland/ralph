@@ -1174,3 +1174,20 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** GoReleaser v2 uses `formats` (plural) instead of `format` (singular) for archive configuration. Also uses `format_overrides` with nested `formats` array for platform-specific formats.
 
 **Next:** T43 - Set up Homebrew tap (depends on T42, now complete)
+
+---
+### Iteration 42: T43 - Set up Homebrew tap (partial) + T42 plan sync
+**Completed:**
+- Fixed T42 plan checkboxes (were not synced from previous iteration)
+- Verified T42 acceptance criteria are all met (checked .goreleaser.yaml, Makefile, dist/ artifacts, checksums.txt, ralph version output)
+- Added `brews:` configuration section to `.goreleaser.yaml`:
+  - Repository: arvesolland/homebrew-ralph (branch: main)
+  - Folder: Formula
+  - Includes homepage, description, license (MIT)
+  - Install block: `bin.install "ralph"`
+  - Test block: `system "#{bin}/ralph", "version"`
+- Checked off first subtask and first "Done when" criterion for T43
+
+**Blocker:** T43 requires human action to create the GitHub repository `arvesolland/homebrew-ralph` before formula generation can be tested. Goreleaser will automatically push the formula to this repo on release, but the repo must exist first.
+
+**Next:** T44 - Create comprehensive README (not blocked, can proceed in parallel)
