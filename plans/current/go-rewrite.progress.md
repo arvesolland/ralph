@@ -1308,3 +1308,18 @@ Iteration log - what was done, gotchas, and next steps.
 - Installation can be tested in clean environment
 
 **Next:** Waiting for human to create `arvesolland/homebrew-ralph` repository. Once created, will run release to test formula generation and complete T43.
+
+---
+### Iteration 49: T43 blocker re-confirmation
+**Completed:**
+- Reviewed plan and progress files
+- Confirmed T43 is the only incomplete task (45 of 46 complete)
+- The goreleaser brew configuration is in place (subtask 1 done)
+- Remaining T43 work requires the homebrew-ralph repository to exist on GitHub
+
+**Blocker:** T43 requires human action:
+1. Create GitHub repository `arvesolland/homebrew-ralph` (public)
+2. Ensure GoReleaser has write access to push formulas on release
+3. Create a git tag to trigger GoReleaser release which will push the formula
+
+**Next:** Waiting for blocker resolution. Once repo is created and a release is triggered, remaining T43 criteria can be verified.
