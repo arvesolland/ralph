@@ -1141,3 +1141,36 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** Fixed a leftover "TODO: Implement merge mode in T34" comment - CompleteMerge was already implemented in T34, just wasn't wired up.
 
 **Next:** T42 - Set up GoReleaser (depends on T3, which is complete)
+
+---
+### Iteration 41: T42 - Set up GoReleaser
+**Completed:**
+- Created `.goreleaser.yaml` with:
+  - Version 2 configuration format
+  - linux, darwin, windows builds (amd64, arm64)
+  - Skip arm64 windows (not commonly needed)
+  - ldflags injection for Version, Commit, BuildDate
+  - tar.gz archives by default, zip for windows via format_overrides
+  - Checksums via SHA256
+  - Files: LICENSE*, README.md, CHANGELOG.md
+  - GitHub release configuration
+- Created `Makefile` with:
+  - `build` - production build with version info
+  - `build-dev` - fast development build
+  - `test`, `test-short`, `test-race`, `test-coverage` targets
+  - `release-snapshot` and `release-dry-run` targets
+  - `install`, `clean`, `deps`, `lint` targets
+  - Help target with descriptions
+- Verified `make build` produces working binary with version info
+- Verified `make release-snapshot` creates all platform archives:
+  - ralph_1.1.1-next_darwin_amd64.tar.gz
+  - ralph_1.1.1-next_darwin_arm64.tar.gz
+  - ralph_1.1.1-next_linux_amd64.tar.gz
+  - ralph_1.1.1-next_linux_arm64.tar.gz
+  - ralph_1.1.1-next_windows_amd64.zip
+- Verified checksums.txt generated with SHA256 hashes
+- Verified `ralph version` shows correct values from goreleaser build
+
+**Gotcha:** GoReleaser v2 uses `formats` (plural) instead of `format` (singular) for archive configuration. Also uses `format_overrides` with nested `formats` array for platform-specific formats.
+
+**Next:** T43 - Set up Homebrew tap (depends on T42, now complete)

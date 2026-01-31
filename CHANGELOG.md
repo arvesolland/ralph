@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- integrate notifications into worker (T41)
 - implement Slack Socket Mode bot for replies (T40)
 - implement Slack Bot API notifications (T39)
 - implement Slack thread tracking (T38)

@@ -1102,23 +1102,23 @@ The Go version will be a single, cross-platform binary with comprehensive test c
 > Cross-platform binary builds and releases.
 
 **Requires:** T3
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `.goreleaser.yaml` configured for linux, darwin, windows (amd64, arm64)
-- [ ] Version, Commit, BuildDate injected via ldflags
-- [ ] `ralph version` shows correct values from goreleaser build
-- [ ] `make build` runs local build
-- [ ] `make release-snapshot` creates test release
-- [ ] Archives include LICENSE, README.md
-- [ ] Checksums generated
+- [x] `.goreleaser.yaml` configured for linux, darwin, windows (amd64, arm64)
+- [x] Version, Commit, BuildDate injected via ldflags
+- [x] `ralph version` shows correct values from goreleaser build
+- [x] `make build` runs local build
+- [x] `make release-snapshot` creates test release
+- [x] Archives include LICENSE, README.md
+- [x] Checksums generated
 
 **Subtasks:**
-1. [ ] Create .goreleaser.yaml
-2. [ ] Configure ldflags for version injection
-3. [ ] Update main.go with version vars
-4. [ ] Create Makefile with build targets
-5. [ ] Test snapshot release
+1. [x] Create .goreleaser.yaml
+2. [x] Configure ldflags for version injection
+3. [x] Update main.go with version vars
+4. [x] Create Makefile with build targets
+5. [x] Test snapshot release
 
 ---
 
