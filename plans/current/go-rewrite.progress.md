@@ -1724,3 +1724,21 @@ https://github.com/arvesolland/homebrew-ralph has been created - you can now tag
 **Alternative:** If testing locally is acceptable, run `goreleaser release --snapshot --clean` to test formula generation without pushing to GitHub.
 
 **Next:** Waiting for blocker resolution - either merge PR and release, or provide alternative instructions
+
+---
+### Iteration 75: T43 blocker status check
+**Completed:**
+- Reviewed plan file and progress log
+- Verified `arvesolland/homebrew-ralph` repository exists but is empty (no Formula)
+- Confirmed current branch is `feat/go-rewrite` (not merged to main)
+- Confirmed v1.1.0 tag exists locally but no GitHub release created
+- Re-signaling blocker for human action
+
+**Blocker:** T43 requires human action to complete the release workflow:
+1. Merge `feat/go-rewrite` branch to main (create PR if needed)
+2. Tag a new release on main: `git tag v2.0.0 && git push origin v2.0.0`
+3. GoReleaser will build binaries and push formula to homebrew-ralph
+
+**Alternative for testing:** Run `goreleaser release --snapshot --clean` to test formula generation locally without pushing to GitHub.
+
+**Next:** Waiting for blocker resolution. Human must merge PR to main and create a release tag to trigger GoReleaser
