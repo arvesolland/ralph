@@ -109,3 +109,18 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The "remove old path computation logic" subtask (T7.3) means removing it FOR BUNDLES. Flat files still need filepath.Rel() for backwards compat during migration period.
 
 **Next:** T10 - Enhance status command with progress (T8/T9 are blocked on other tasks)
+
+---
+### Iteration 9: T10 - Enhance status command with progress
+**Completed:**
+- Updated `internal/cli/status.go:37-103` to show progress for current and pending plans
+- Current plan now shows:
+  - Progress bar using `Progress.Bar(20)`: `[█████████████░░░░░░░] 68%`
+  - Task count: `Tasks: 26/38 completed`
+  - Uses the plan's actual Branch field instead of hardcoding "feat/" prefix
+- Pending plans now show task counts with `progress.String()` format: `name X/Y (Z%)`
+- Replaced `queue.Status()` usage for current/pending with direct `queue.Current()` and `queue.Pending()` to access `*Plan` objects with their Tasks
+- All 6 status tests pass, full test suite passes
+- Verified output with live `ralph status` command
+
+**Next:** T8 - Add migration function (but currently blocked), or plan complete for unblocked tasks

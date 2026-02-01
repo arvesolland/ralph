@@ -225,18 +225,18 @@ Key design decisions:
 > Show progress bars and task counts in ralph status
 
 **Requires:** T2
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] Current plan shows progress bar: `[████████░░░░░░░░░░░░] 40%`
-- [ ] Current plan shows task count: `Tasks: 4/10 completed`
-- [ ] Pending plans show task counts: `add-auth 0/5 (0%)`
+- [x] Current plan shows progress bar: `[████████░░░░░░░░░░░░] 40%`
+- [x] Current plan shows task count: `Tasks: 4/10 completed`
+- [x] Pending plans show task counts: `add-auth 0/5 (0%)`
 
 **Subtasks:**
-1. [ ] Update `internal/cli/status.go` to calculate progress for current plan
-2. [ ] Add progress bar display using `Progress.Bar()`
-3. [ ] Add task counts for pending plans
-4. [ ] Test output formatting
+1. [x] Update `internal/cli/status.go` to calculate progress for current plan
+2. [x] Add progress bar display using `Progress.Bar()`
+3. [x] Add task counts for pending plans
+4. [x] Test output formatting
 
 ---
 
