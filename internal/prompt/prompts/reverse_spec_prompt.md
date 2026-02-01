@@ -22,7 +22,7 @@ Analyze the code for a single feature and create a comprehensive SPEC.md file.
 
 ## FIRST: Read Your Context
 
-Read `scripts/ralph/context.json` to get:
+Read `.ralph/context.json` to get:
 - `mode` - Should be "single-feature"
 - `featureName` - Name of the feature to document
 - `featurePath` - Optional path hint (may be empty)

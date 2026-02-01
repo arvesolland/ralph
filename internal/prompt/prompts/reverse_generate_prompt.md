@@ -12,7 +12,7 @@ Read the discovery document and generate a Ralph-format plan with one task per f
 
 ## FIRST: Read Your Context
 
-Read `scripts/ralph/context.json` to get:
+Read `.ralph/context.json` to get:
 - `mode` - Should be "generate-plan"
 - `discoveryFile` - Path to the completed discovery document
 - `planFile` - Path where you should create the plan

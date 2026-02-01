@@ -18,7 +18,7 @@ Your job is to analyze the codebase and create actionable improvement tasks in B
 
 ## FIRST: Read Your Context
 
-Read `scripts/ralph/context.json` to get:
+Read `.ralph/context.json` to get:
 - `mode` - Should be "discover"
 - `dryRun` - If true, only report findings, don't create Beads tasks
 - `category` - If set, only analyze that category (tests, refactor, security, performance, docs)

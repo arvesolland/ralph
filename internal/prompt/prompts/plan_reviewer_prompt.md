@@ -34,7 +34,7 @@ Review and improve the plan through the lens of a craftsman who values:
 
 ## FIRST: Read Your Context
 
-Read `scripts/ralph/context.json` to get:
+Read `.ralph/context.json` to get:
 - `planFile` — The plan file you're reviewing
 - `planPath` — Full path to the file
 

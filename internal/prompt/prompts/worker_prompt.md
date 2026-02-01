@@ -39,7 +39,7 @@ Plan (= 1 PR)
 
 ## FIRST: Read Your Context
 
-Read `scripts/ralph/context.json` to get:
+Read `.ralph/context.json` to get:
 - `planFile` - Path to the plan file
 - `planPath` - Full path to the plan file
 - `iteration` - Current iteration number
@@ -56,7 +56,7 @@ Then read the plan file for:
 
 1. Read the plan file - understand context and current task
 2. Check what's already been done: `git log --oneline -10`
-3. Study `scripts/ralph/progress.txt` for codebase patterns
+3. Study the progress file (in same directory as plan) for codebase patterns
 
 ### Step 2: Select Your Subtask
 
@@ -116,7 +116,7 @@ Check that your subtask is complete:
 
 ## Progress Logging
 
-After completing your subtask, append to `scripts/ralph/progress.txt`:
+After completing your subtask, append to the progress file (in same directory as plan):
 
 ```markdown
 ---

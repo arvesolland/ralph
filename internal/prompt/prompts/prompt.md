@@ -57,8 +57,8 @@ Read `specs/INDEX.md` (if it exists). This shows:
 **Do NOT read individual specs unless the plan references them.** The index gives you the map.
 
 ### 3. Runtime Context
-Read `scripts/ralph/context.json` to get:
-- `planFile` - The plan file you're working from
+Read `.ralph/context.json` to get:
+- `planFile` - The plan file you're working from (e.g., `plans/current/my-plan/plan.md`)
 - `featureBranch` - The branch you're on (e.g., `feat/auth`)
 - `baseBranch` - The base branch (e.g., `main`)
 - `iteration` - Current iteration number
@@ -74,7 +74,9 @@ Read the plan file specified in `context.json`. This contains:
 - Current status of each task
 
 ### 5. Progress File (CRITICAL)
-The progress file is your **primary input** for understanding what previous iterations accomplished: `<plan-name>.progress.md` in the same folder as the plan.
+The progress file is your **primary input** for understanding what previous iterations accomplished. It's located in the same directory as the plan file:
+- For bundles: `progress.md` (same directory as `plan.md`)
+- For legacy flat files: `<plan-name>.progress.md` (same directory)
 
 **If the file doesn't exist, create it now** with this header:
 ```markdown
@@ -92,7 +94,11 @@ Iteration log - what was done, gotchas, and next steps.
 This is faster and more reliable than searching the codebase to understand current state.
 
 ### 6. Feedback File (Human Input)
-Check for `<plan-name>.feedback.md` in the same folder as the plan. This file contains human responses to blockers.
+Check for the feedback file in the same directory as the plan file:
+- For bundles: `feedback.md` (same directory as `plan.md`)
+- For legacy flat files: `<plan-name>.feedback.md` (same directory)
+
+This file contains human responses to blockers.
 
 **If it exists, read it.** Look for the `## Pending` section:
 ```markdown

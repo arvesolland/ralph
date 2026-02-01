@@ -22,7 +22,7 @@ Iteratively discover all features in this codebase. Each iteration should refine
 
 ## FIRST: Read Your Context
 
-Read `scripts/ralph/context.json` to get:
+Read `.ralph/context.json` to get:
 - `mode` - Should be "discover"
 - `discoveryFile` - Path to the discovery document (create or update)
 - `progressFile` - Path to progress/learnings file
