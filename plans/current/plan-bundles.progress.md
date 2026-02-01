@@ -61,3 +61,15 @@ Iteration log - what was done, gotchas, and next steps.
 - All tests pass (backwards compatible for flat files)
 
 **Next:** T5 - Update feedback.go for bundle-aware paths
+
+---
+### Iteration 6: T5 - Update feedback.go for bundle-aware paths
+**Completed:**
+- Updated `FeedbackPath()` at `internal/plan/feedback.go:13-23` to check `p.IsBundle()` first and return `{bundleDir}/feedback.md` for bundles
+- Added `TestFeedbackPath_Bundle` test with cases for bundles in current directory and with absolute paths
+- Added `TestReadFeedback_Bundle` test to verify reading feedback from bundle directory
+- Added `TestAppendFeedback_Bundle` test to verify feedback is created in bundle directory (and NOT at flat file location)
+- All existing tests still pass (backwards compatible for flat files)
+- All acceptance criteria verified
+
+**Next:** T6 - Update queue.go to move directories (or T10 - Enhance status command with progress)

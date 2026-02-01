@@ -123,15 +123,15 @@ Key design decisions:
 > FeedbackPath must work with both bundles and flat files
 
 **Requires:** T1
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `FeedbackPath()` returns `{bundleDir}/feedback.md` for bundles
-- [ ] `FeedbackPath()` returns legacy path for flat files (backwards compat)
+- [x] `FeedbackPath()` returns `{bundleDir}/feedback.md` for bundles
+- [x] `FeedbackPath()` returns legacy path for flat files (backwards compat)
 
 **Subtasks:**
-1. [ ] Update `FeedbackPath()` to check `p.BundleDir` first
-2. [ ] Update tests in `internal/plan/feedback_test.go`
+1. [x] Update `FeedbackPath()` to check `p.BundleDir` first
+2. [x] Update tests in `internal/plan/feedback_test.go`
 
 ---
 
