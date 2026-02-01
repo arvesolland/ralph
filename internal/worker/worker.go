@@ -474,8 +474,20 @@ func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Wo
 
 	switch w.completionMode {
 	case "pr":
+		baseBranch := w.config.Git.BaseBranch
+		if baseBranch == "" {
+			baseBranch = "main"
+		}
+		prCfg := PRCreationConfig{
+			Plan:          p,
+			Worktree:      wt,
+			Git:           wtGit,
+			Runner:        w.runner,
+			PromptBuilder: w.promptBuilder,
+			BaseBranch:    baseBranch,
+		}
 		var err error
-		prURL, err = CompletePR(p, wt, wtGit)
+		prURL, err = CompletePR(prCfg)
 		if err != nil {
 			// PR creation failure is logged but not fatal
 			// The plan is still complete, code is committed locally
