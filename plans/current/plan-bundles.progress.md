@@ -49,3 +49,15 @@ Iteration log - what was done, gotchas, and next steps.
 
 **Commit:** (previous iteration - `dee638f feat(plan): add bundle scaffolding functions`)
 **Next:** T4 - Update progress.go for bundle-aware paths (or T5, T10 - all are unblocked)
+
+---
+### Iteration 5: T4 - Update progress.go for bundle-aware paths
+**Completed:**
+- Updated `ProgressPath()` at `internal/plan/progress.go:17-24` to return `{bundleDir}/progress.md` for bundles
+- Updated `AppendProgress()` and `AppendProgressWithTime()` to include progress in header: `## Iteration N (YYYY-MM-DD HH:MM) - X/Y (Z%)`
+- Added `stripTemplateComments()` helper at `internal/plan/progress.go:43-56` to strip scaffolded template comments on first real entry (iteration 1)
+- Added comprehensive tests: TestProgressPath_Bundle, TestReadProgress_Bundle, TestAppendProgress_Bundle, TestStripTemplateComments, TestAppendProgress_StripsTemplateOnFirstIteration
+- Updated existing tests to expect new progress format in iteration header
+- All tests pass (backwards compatible for flat files)
+
+**Next:** T5 - Update feedback.go for bundle-aware paths

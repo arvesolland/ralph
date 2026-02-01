@@ -104,18 +104,18 @@ Key design decisions:
 > ProgressPath must work with both bundles and flat files
 
 **Requires:** T1
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `ProgressPath()` returns `{bundleDir}/progress.md` for bundles
-- [ ] `ProgressPath()` returns legacy path for flat files (backwards compat)
-- [ ] `AppendProgress()` includes progress percentage in iteration header
+- [x] `ProgressPath()` returns `{bundleDir}/progress.md` for bundles
+- [x] `ProgressPath()` returns legacy path for flat files (backwards compat)
+- [x] `AppendProgress()` includes progress percentage in iteration header
 
 **Subtasks:**
-1. [ ] Update `ProgressPath()` to check `p.BundleDir` first
-2. [ ] Update `AppendProgress()` to calculate and include progress in header format: `## Iteration N (YYYY-MM-DD HH:MM) - X/Y (Z%)`
-3. [ ] Add helper to strip template comments on first real entry
-4. [ ] Update tests in `internal/plan/progress_test.go`
+1. [x] Update `ProgressPath()` to check `p.BundleDir` first
+2. [x] Update `AppendProgress()` to calculate and include progress in header format: `## Iteration N (YYYY-MM-DD HH:MM) - X/Y (Z%)`
+3. [x] Add helper to strip template comments on first real entry
+4. [x] Update tests in `internal/plan/progress_test.go`
 
 ---
 
