@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- add progress bar and task counts to status command
 - make sync bundle-aware using p.Name for paths
 - mark T6 complete, update task status
 - make queue.go bundle-aware for directory operations

@@ -124,3 +124,23 @@ Iteration log - what was done, gotchas, and next steps.
 - Verified output with live `ralph status` command
 
 **Next:** T8 - Add migration function (but currently blocked), or plan complete for unblocked tasks
+
+---
+### Iteration 10: T8 - Add migration function
+**Completed:**
+- Added `MigrateToBundles(plansDir string) error` function in `internal/plan/bundle.go:173-218`
+- Added `migratePlanFile(planPath string) error` helper function in `internal/plan/bundle.go:221-268`
+- Migration iterates pending/, current/, complete/ directories and converts flat .md files to bundles
+- Moves plan file into bundle as plan.md, renames .progress.md to progress.md, .feedback.md to feedback.md
+- Skips existing bundles (directories) and non-plan .md files (.progress.md, .feedback.md)
+- Creates scaffolded progress.md and feedback.md if associated files are missing
+- Added comprehensive tests in `internal/plan/bundle_test.go`: TestMigrateToBundles with 6 sub-tests
+  - migrates_flat_files_to_bundles - verifies full migration with all associated files
+  - creates_scaffolded_files_when_missing - verifies scaffolding when no progress/feedback exist
+  - skips_existing_bundles - verifies directories are not re-migrated
+  - migrates_across_all_subdirectories - verifies pending/current/complete all processed
+  - handles_missing_subdirectories_gracefully - no error if subdirs don't exist
+  - skips_non-md_files - only .md files are processed
+- All tests pass
+
+**Next:** T9 - Add CLI plan commands (now unblocked)

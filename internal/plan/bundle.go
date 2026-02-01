@@ -170,6 +170,108 @@ func scaffoldFeedback(bundleDir, name string) error {
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
+// MigrateToBundles converts all flat plan files to bundle directories.
+// It iterates through pending/, current/, and complete/ directories,
+// converting each .md file (that isn't .progress.md or .feedback.md) into a bundle.
+// Existing bundles (directories) are skipped.
+// Associated .progress.md and .feedback.md files are moved into the bundle.
+// If associated files are missing, scaffolded versions are created.
+func MigrateToBundles(plansDir string) error {
+	subdirs := []string{"pending", "current", "complete"}
+
+	for _, subdir := range subdirs {
+		dirPath := filepath.Join(plansDir, subdir)
+		if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+			// Directory doesn't exist, skip
+			continue
+		}
+
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return fmt.Errorf("failed to read %s directory: %w", subdir, err)
+		}
+
+		for _, entry := range entries {
+			// Skip directories (already bundles or not plan files)
+			if entry.IsDir() {
+				continue
+			}
+
+			// Skip non-.md files
+			if !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+
+			// Skip .progress.md and .feedback.md files (associated files)
+			if strings.HasSuffix(entry.Name(), ".progress.md") ||
+				strings.HasSuffix(entry.Name(), ".feedback.md") {
+				continue
+			}
+
+			// This is a flat plan file - migrate it
+			planPath := filepath.Join(dirPath, entry.Name())
+			if err := migratePlanFile(planPath); err != nil {
+				return fmt.Errorf("failed to migrate %s: %w", planPath, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// migratePlanFile converts a single flat plan file to a bundle directory.
+func migratePlanFile(planPath string) error {
+	dir := filepath.Dir(planPath)
+	filename := filepath.Base(planPath)
+
+	// Derive bundle name from filename (remove .md extension)
+	bundleName := strings.TrimSuffix(filename, ".md")
+
+	// Create bundle directory
+	bundleDir := filepath.Join(dir, bundleName)
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		return fmt.Errorf("failed to create bundle directory: %w", err)
+	}
+
+	// Move plan file into bundle as plan.md
+	destPlanPath := filepath.Join(bundleDir, "plan.md")
+	if err := os.Rename(planPath, destPlanPath); err != nil {
+		return fmt.Errorf("failed to move plan file: %w", err)
+	}
+
+	// Look for associated progress file and move/create it
+	progressSrc := filepath.Join(dir, bundleName+".progress.md")
+	progressDest := filepath.Join(bundleDir, "progress.md")
+	if _, err := os.Stat(progressSrc); err == nil {
+		// Progress file exists - move it
+		if err := os.Rename(progressSrc, progressDest); err != nil {
+			return fmt.Errorf("failed to move progress file: %w", err)
+		}
+	} else {
+		// No progress file - create scaffolded version
+		if err := scaffoldProgress(bundleDir, bundleName); err != nil {
+			return fmt.Errorf("failed to scaffold progress file: %w", err)
+		}
+	}
+
+	// Look for associated feedback file and move/create it
+	feedbackSrc := filepath.Join(dir, bundleName+".feedback.md")
+	feedbackDest := filepath.Join(bundleDir, "feedback.md")
+	if _, err := os.Stat(feedbackSrc); err == nil {
+		// Feedback file exists - move it
+		if err := os.Rename(feedbackSrc, feedbackDest); err != nil {
+			return fmt.Errorf("failed to move feedback file: %w", err)
+		}
+	} else {
+		// No feedback file - create scaffolded version
+		if err := scaffoldFeedback(bundleDir, bundleName); err != nil {
+			return fmt.Errorf("failed to scaffold feedback file: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // sanitizeBundleName converts a plan name to a valid directory name.
 // Similar to sanitizeBranchName but preserves case.
 func sanitizeBundleName(name string) string {

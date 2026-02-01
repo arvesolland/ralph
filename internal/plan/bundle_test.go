@@ -212,3 +212,200 @@ func TestSanitizeBundleName(t *testing.T) {
 		})
 	}
 }
+
+func TestMigrateToBundles(t *testing.T) {
+	t.Run("migrates flat files to bundles", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pendingDir := filepath.Join(tmpDir, "pending")
+		os.MkdirAll(pendingDir, 0755)
+
+		// Create a flat plan file
+		planContent := "# Plan: test-plan\n\n**Status:** pending\n"
+		os.WriteFile(filepath.Join(pendingDir, "test-plan.md"), []byte(planContent), 0644)
+
+		// Create associated progress file
+		progressContent := "# Progress\n\nSome progress\n"
+		os.WriteFile(filepath.Join(pendingDir, "test-plan.progress.md"), []byte(progressContent), 0644)
+
+		// Create associated feedback file
+		feedbackContent := "# Feedback\n\n## Pending\n\n## Processed\n"
+		os.WriteFile(filepath.Join(pendingDir, "test-plan.feedback.md"), []byte(feedbackContent), 0644)
+
+		// Migrate
+		err := MigrateToBundles(tmpDir)
+		if err != nil {
+			t.Fatalf("MigrateToBundles failed: %v", err)
+		}
+
+		// Verify bundle directory was created
+		bundleDir := filepath.Join(pendingDir, "test-plan")
+		if _, err := os.Stat(bundleDir); os.IsNotExist(err) {
+			t.Error("bundle directory was not created")
+		}
+
+		// Verify files are in bundle
+		if _, err := os.Stat(filepath.Join(bundleDir, "plan.md")); os.IsNotExist(err) {
+			t.Error("plan.md not found in bundle")
+		}
+		if _, err := os.Stat(filepath.Join(bundleDir, "progress.md")); os.IsNotExist(err) {
+			t.Error("progress.md not found in bundle")
+		}
+		if _, err := os.Stat(filepath.Join(bundleDir, "feedback.md")); os.IsNotExist(err) {
+			t.Error("feedback.md not found in bundle")
+		}
+
+		// Verify original files are gone
+		if _, err := os.Stat(filepath.Join(pendingDir, "test-plan.md")); !os.IsNotExist(err) {
+			t.Error("original plan file still exists")
+		}
+		if _, err := os.Stat(filepath.Join(pendingDir, "test-plan.progress.md")); !os.IsNotExist(err) {
+			t.Error("original progress file still exists")
+		}
+		if _, err := os.Stat(filepath.Join(pendingDir, "test-plan.feedback.md")); !os.IsNotExist(err) {
+			t.Error("original feedback file still exists")
+		}
+
+		// Verify contents were preserved
+		content, _ := os.ReadFile(filepath.Join(bundleDir, "plan.md"))
+		if string(content) != planContent {
+			t.Errorf("plan.md content was modified: got %q, want %q", string(content), planContent)
+		}
+		content, _ = os.ReadFile(filepath.Join(bundleDir, "progress.md"))
+		if string(content) != progressContent {
+			t.Errorf("progress.md content was modified: got %q, want %q", string(content), progressContent)
+		}
+		content, _ = os.ReadFile(filepath.Join(bundleDir, "feedback.md"))
+		if string(content) != feedbackContent {
+			t.Errorf("feedback.md content was modified: got %q, want %q", string(content), feedbackContent)
+		}
+	})
+
+	t.Run("creates scaffolded files when missing", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pendingDir := filepath.Join(tmpDir, "pending")
+		os.MkdirAll(pendingDir, 0755)
+
+		// Create only a flat plan file (no progress or feedback)
+		planContent := "# Plan: lonely-plan\n\n**Status:** pending\n"
+		os.WriteFile(filepath.Join(pendingDir, "lonely-plan.md"), []byte(planContent), 0644)
+
+		// Migrate
+		err := MigrateToBundles(tmpDir)
+		if err != nil {
+			t.Fatalf("MigrateToBundles failed: %v", err)
+		}
+
+		bundleDir := filepath.Join(pendingDir, "lonely-plan")
+
+		// Verify scaffolded progress file was created
+		progressContent, err := os.ReadFile(filepath.Join(bundleDir, "progress.md"))
+		if err != nil {
+			t.Fatal("progress.md was not created")
+		}
+		if !strings.Contains(string(progressContent), "# Progress: lonely-plan") {
+			t.Error("scaffolded progress.md missing expected header")
+		}
+
+		// Verify scaffolded feedback file was created
+		feedbackContent, err := os.ReadFile(filepath.Join(bundleDir, "feedback.md"))
+		if err != nil {
+			t.Fatal("feedback.md was not created")
+		}
+		if !strings.Contains(string(feedbackContent), "# Feedback: lonely-plan") {
+			t.Error("scaffolded feedback.md missing expected header")
+		}
+	})
+
+	t.Run("skips existing bundles", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pendingDir := filepath.Join(tmpDir, "pending")
+		os.MkdirAll(pendingDir, 0755)
+
+		// Create an existing bundle (directory with plan.md)
+		bundleDir := filepath.Join(pendingDir, "existing-bundle")
+		os.MkdirAll(bundleDir, 0755)
+		originalContent := "# Plan: existing-bundle\n\nOriginal content\n"
+		os.WriteFile(filepath.Join(bundleDir, "plan.md"), []byte(originalContent), 0644)
+
+		// Migrate
+		err := MigrateToBundles(tmpDir)
+		if err != nil {
+			t.Fatalf("MigrateToBundles failed: %v", err)
+		}
+
+		// Verify bundle was not modified
+		content, _ := os.ReadFile(filepath.Join(bundleDir, "plan.md"))
+		if string(content) != originalContent {
+			t.Errorf("existing bundle was modified: got %q, want %q", string(content), originalContent)
+		}
+	})
+
+	t.Run("migrates across all subdirectories", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create subdirectories
+		for _, subdir := range []string{"pending", "current", "complete"} {
+			dir := filepath.Join(tmpDir, subdir)
+			os.MkdirAll(dir, 0755)
+
+			// Add a flat plan file in each
+			planContent := "# Plan: " + subdir + "-plan\n\n**Status:** " + subdir + "\n"
+			os.WriteFile(filepath.Join(dir, subdir+"-plan.md"), []byte(planContent), 0644)
+		}
+
+		// Migrate
+		err := MigrateToBundles(tmpDir)
+		if err != nil {
+			t.Fatalf("MigrateToBundles failed: %v", err)
+		}
+
+		// Verify bundles were created in each subdirectory
+		for _, subdir := range []string{"pending", "current", "complete"} {
+			bundleDir := filepath.Join(tmpDir, subdir, subdir+"-plan")
+			if _, err := os.Stat(bundleDir); os.IsNotExist(err) {
+				t.Errorf("bundle not created in %s", subdir)
+			}
+			if _, err := os.Stat(filepath.Join(bundleDir, "plan.md")); os.IsNotExist(err) {
+				t.Errorf("plan.md not found in %s bundle", subdir)
+			}
+		}
+	})
+
+	t.Run("handles missing subdirectories gracefully", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		// Don't create any subdirectories
+
+		// Should not error
+		err := MigrateToBundles(tmpDir)
+		if err != nil {
+			t.Fatalf("MigrateToBundles failed on empty plansDir: %v", err)
+		}
+	})
+
+	t.Run("skips non-md files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pendingDir := filepath.Join(tmpDir, "pending")
+		os.MkdirAll(pendingDir, 0755)
+
+		// Create a non-md file
+		os.WriteFile(filepath.Join(pendingDir, "notes.txt"), []byte("some notes"), 0644)
+
+		// Create a plan file
+		os.WriteFile(filepath.Join(pendingDir, "real-plan.md"), []byte("# Plan\n"), 0644)
+
+		err := MigrateToBundles(tmpDir)
+		if err != nil {
+			t.Fatalf("MigrateToBundles failed: %v", err)
+		}
+
+		// notes.txt should still exist
+		if _, err := os.Stat(filepath.Join(pendingDir, "notes.txt")); os.IsNotExist(err) {
+			t.Error("non-md file was incorrectly removed")
+		}
+
+		// real-plan should be migrated
+		if _, err := os.Stat(filepath.Join(pendingDir, "real-plan", "plan.md")); os.IsNotExist(err) {
+			t.Error("plan file was not migrated")
+		}
+	})
+}

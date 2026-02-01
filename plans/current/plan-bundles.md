@@ -182,21 +182,21 @@ Key design decisions:
 > Convert existing flat files to bundles
 
 **Requires:** T3
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `MigrateToBundles(plansDir string) error` converts all flat files
-- [ ] Migration moves plan.md into bundle directory
-- [ ] Migration moves associated .progress.md and .feedback.md files
-- [ ] Migration skips existing bundles (directories)
-- [ ] Migration creates scaffolded files if associated files missing
+- [x] `MigrateToBundles(plansDir string) error` converts all flat files
+- [x] Migration moves plan.md into bundle directory
+- [x] Migration moves associated .progress.md and .feedback.md files
+- [x] Migration skips existing bundles (directories)
+- [x] Migration creates scaffolded files if associated files missing
 
 **Subtasks:**
-1. [ ] Add `MigrateToBundles()` function to `internal/plan/bundle.go`
-2. [ ] Iterate pending/, current/, complete/ directories
-3. [ ] For each .md file (not .progress.md or .feedback.md), create bundle
-4. [ ] Move associated files into bundle, renaming to progress.md/feedback.md
-5. [ ] Add tests for migration scenarios
+1. [x] Add `MigrateToBundles()` function to `internal/plan/bundle.go`
+2. [x] Iterate pending/, current/, complete/ directories
+3. [x] For each .md file (not .progress.md or .feedback.md), create bundle
+4. [x] Move associated files into bundle, renaming to progress.md/feedback.md
+5. [x] Add tests for migration scenarios
 
 ---
 
@@ -204,7 +204,7 @@ Key design decisions:
 > User-facing commands for creating plans and migrating
 
 **Requires:** T3, T8
-**Status:** blocked
+**Status:** open
 
 **Done when:**
 - [ ] `ralph plan create <name>` creates scaffolded bundle in pending/
