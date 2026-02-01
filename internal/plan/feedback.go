@@ -11,9 +11,15 @@ import (
 )
 
 // FeedbackPath returns the path to the feedback file for a plan.
-// The feedback file is named "<plan-name>.feedback.md" in the same directory as the plan.
-// Example: "plans/current/go-rewrite.md" → "plans/current/go-rewrite.feedback.md"
+// For bundles: returns "{bundleDir}/feedback.md"
+// For flat files: returns "<plan-name>.feedback.md" in the same directory as the plan.
+// Example (bundle): "plans/current/my-plan/" → "plans/current/my-plan/feedback.md"
+// Example (flat): "plans/current/go-rewrite.md" → "plans/current/go-rewrite.feedback.md"
 func FeedbackPath(plan *Plan) string {
+	if plan.IsBundle() {
+		return filepath.Join(plan.BundleDir, "feedback.md")
+	}
+	// Legacy flat file path
 	ext := filepath.Ext(plan.Path)
 	return strings.TrimSuffix(plan.Path, ext) + ".feedback.md"
 }

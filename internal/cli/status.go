@@ -45,6 +45,20 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	queue := plan.NewQueue(plansDir)
+
+	// Get current plan directly to access tasks for progress
+	currentPlan, err := queue.Current()
+	if err != nil {
+		return fmt.Errorf("getting current plan: %w", err)
+	}
+
+	// Get pending plans directly to access tasks for progress
+	pendingPlans, err := queue.Pending()
+	if err != nil {
+		return fmt.Errorf("getting pending plans: %w", err)
+	}
+
+	// Get complete count
 	status, err := queue.Status()
 	if err != nil {
 		return fmt.Errorf("getting queue status: %w", err)
@@ -58,16 +72,20 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("============")
 	fmt.Println()
 
-	// Current plan (green)
-	if status.CurrentPlan != "" {
+	// Current plan (green) with progress
+	if currentPlan != nil {
+		progress := plan.CalculateProgress(currentPlan.Tasks)
 		if useColor {
-			fmt.Printf("%sCurrent:%s %s (branch: feat/%s)\n",
+			fmt.Printf("%sCurrent:%s %s (branch: %s)\n",
 				statusColorGreen, statusColorReset,
-				status.CurrentPlan, status.CurrentPlan)
+				currentPlan.Name, currentPlan.Branch)
 		} else {
-			fmt.Printf("Current: %s (branch: feat/%s)\n",
-				status.CurrentPlan, status.CurrentPlan)
+			fmt.Printf("Current: %s (branch: %s)\n",
+				currentPlan.Name, currentPlan.Branch)
 		}
+		// Progress bar and task count
+		fmt.Printf("         %s %d%%\n", progress.Bar(20), progress.Percent)
+		fmt.Printf("         Tasks: %d/%d completed\n", progress.Completed, progress.Total)
 	} else {
 		if useColor {
 			fmt.Printf("%sCurrent:%s (none)\n", statusColorGray, statusColorReset)
@@ -77,15 +95,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
-	// Pending plans (yellow)
+	// Pending plans (yellow) with progress
 	if useColor {
-		fmt.Printf("%sPending:%s %d plan(s)\n", statusColorYellow, statusColorReset, status.PendingCount)
+		fmt.Printf("%sPending:%s %d plan(s)\n", statusColorYellow, statusColorReset, len(pendingPlans))
 	} else {
-		fmt.Printf("Pending: %d plan(s)\n", status.PendingCount)
+		fmt.Printf("Pending: %d plan(s)\n", len(pendingPlans))
 	}
-	if len(status.PendingPlans) > 0 {
-		for _, name := range status.PendingPlans {
-			fmt.Printf("  - %s\n", name)
+	if len(pendingPlans) > 0 {
+		for _, p := range pendingPlans {
+			progress := plan.CalculateProgress(p.Tasks)
+			fmt.Printf("  - %s %s\n", p.Name, progress.String())
 		}
 	}
 	fmt.Println()

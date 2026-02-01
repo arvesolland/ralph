@@ -347,3 +347,124 @@ func TestExtractTasks_RealWorldPlan(t *testing.T) {
 		t.Errorf("expected 4 complete tasks, got %d", complete)
 	}
 }
+
+func TestCalculateProgress(t *testing.T) {
+	tests := []struct {
+		name      string
+		tasks     []Task
+		wantTotal int
+		wantDone  int
+		wantPct   int
+	}{
+		{
+			name:      "empty",
+			tasks:     nil,
+			wantTotal: 0,
+			wantDone:  0,
+			wantPct:   0,
+		},
+		{
+			name: "all complete",
+			tasks: []Task{
+				{Complete: true},
+				{Complete: true},
+			},
+			wantTotal: 2,
+			wantDone:  2,
+			wantPct:   100,
+		},
+		{
+			name: "none complete",
+			tasks: []Task{
+				{Complete: false},
+				{Complete: false},
+			},
+			wantTotal: 2,
+			wantDone:  0,
+			wantPct:   0,
+		},
+		{
+			name: "40% complete",
+			tasks: []Task{
+				{Complete: true},
+				{Complete: true},
+				{Complete: false},
+				{Complete: false},
+				{Complete: false},
+			},
+			wantTotal: 5,
+			wantDone:  2,
+			wantPct:   40,
+		},
+		{
+			name: "with subtasks",
+			tasks: []Task{
+				{Complete: true, Subtasks: []Task{
+					{Complete: true},
+					{Complete: false},
+				}},
+				{Complete: false},
+			},
+			wantTotal: 4,
+			wantDone:  2,
+			wantPct:   50,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := CalculateProgress(tc.tasks)
+			if p.Total != tc.wantTotal {
+				t.Errorf("Total: got %d, want %d", p.Total, tc.wantTotal)
+			}
+			if p.Completed != tc.wantDone {
+				t.Errorf("Completed: got %d, want %d", p.Completed, tc.wantDone)
+			}
+			if p.Percent != tc.wantPct {
+				t.Errorf("Percent: got %d, want %d", p.Percent, tc.wantPct)
+			}
+		})
+	}
+}
+
+func TestProgress_String(t *testing.T) {
+	tests := []struct {
+		progress Progress
+		want     string
+	}{
+		{Progress{Total: 10, Completed: 4, Percent: 40}, "4/10 (40%)"},
+		{Progress{Total: 5, Completed: 5, Percent: 100}, "5/5 (100%)"},
+		{Progress{Total: 3, Completed: 0, Percent: 0}, "0/3 (0%)"},
+		{Progress{Total: 0, Completed: 0, Percent: 0}, "0/0 (0%)"},
+	}
+
+	for _, tc := range tests {
+		got := tc.progress.String()
+		if got != tc.want {
+			t.Errorf("Progress%+v.String() = %q, want %q", tc.progress, got, tc.want)
+		}
+	}
+}
+
+func TestProgress_Bar(t *testing.T) {
+	tests := []struct {
+		progress Progress
+		width    int
+		want     string
+	}{
+		{Progress{Total: 10, Completed: 4, Percent: 40}, 10, "[████░░░░░░]"},
+		{Progress{Total: 10, Completed: 10, Percent: 100}, 10, "[██████████]"},
+		{Progress{Total: 10, Completed: 0, Percent: 0}, 10, "[░░░░░░░░░░]"},
+		{Progress{Total: 2, Completed: 1, Percent: 50}, 20, "[██████████░░░░░░░░░░]"},
+		{Progress{Total: 0, Completed: 0, Percent: 0}, 5, "[░░░░░]"},
+		{Progress{Total: 10, Completed: 5, Percent: 50}, 0, "[]"},
+		{Progress{Total: 10, Completed: 5, Percent: 50}, -1, "[]"},
+	}
+
+	for _, tc := range tests {
+		got := tc.progress.Bar(tc.width)
+		if got != tc.want {
+			t.Errorf("Progress%+v.Bar(%d) = %q, want %q", tc.progress, tc.width, got, tc.want)
+		}
+	}
+}

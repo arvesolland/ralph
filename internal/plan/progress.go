@@ -10,9 +10,15 @@ import (
 )
 
 // ProgressPath returns the path to the progress file for a plan.
-// The progress file is named "<plan-name>.progress.md" in the same directory as the plan.
-// Example: "plans/current/go-rewrite.md" → "plans/current/go-rewrite.progress.md"
+// For bundles: returns "{bundleDir}/progress.md"
+// For flat files: returns "<plan-name>.progress.md" in the same directory as the plan.
+// Example (bundle): "plans/current/my-plan/" → "plans/current/my-plan/progress.md"
+// Example (flat): "plans/current/go-rewrite.md" → "plans/current/go-rewrite.progress.md"
 func ProgressPath(plan *Plan) string {
+	if plan.IsBundle() {
+		return filepath.Join(plan.BundleDir, "progress.md")
+	}
+	// Legacy flat file path
 	ext := filepath.Ext(plan.Path)
 	return strings.TrimSuffix(plan.Path, ext) + ".progress.md"
 }
@@ -34,11 +40,31 @@ func ReadProgress(plan *Plan) (string, error) {
 	return string(content), nil
 }
 
+// stripTemplateComments removes the HTML comment block containing format instructions
+// from scaffolded progress files. This is called on first real entry to clean up the file.
+func stripTemplateComments(content string) string {
+	// Find and remove the template comment block
+	start := strings.Index(content, "<!--\nFORMAT FOR EACH ITERATION:")
+	if start == -1 {
+		return content
+	}
+	end := strings.Index(content[start:], "-->")
+	if end == -1 {
+		return content
+	}
+	// Remove the comment block and any trailing newline
+	end += start + 3 // 3 = len("-->")
+	result := content[:start] + content[end:]
+	// Trim excess whitespace but keep the header format
+	result = strings.TrimRight(result, "\n") + "\n"
+	return result
+}
+
 // AppendProgress appends a new timestamped entry to the progress file.
 // Creates the file if it doesn't exist.
 // Entry format:
 //
-//	## Iteration N (YYYY-MM-DD HH:MM)
+//	## Iteration N (YYYY-MM-DD HH:MM) - X/Y (Z%)
 //	{content}
 func AppendProgress(plan *Plan, iteration int, content string) error {
 	path := ProgressPath(plan)
@@ -49,11 +75,19 @@ func AppendProgress(plan *Plan, iteration int, content string) error {
 		return err
 	}
 
+	// Strip template comments on first real entry (iteration 1)
+	if iteration == 1 {
+		existing = stripTemplateComments(existing)
+	}
+
 	// Generate timestamp
 	timestamp := time.Now().Format("2006-01-02 15:04")
 
-	// Build new entry
-	entry := fmt.Sprintf("\n## Iteration %d (%s)\n%s\n", iteration, timestamp, content)
+	// Calculate progress
+	progress := CalculateProgress(plan.Tasks)
+
+	// Build new entry with progress
+	entry := fmt.Sprintf("\n## Iteration %d (%s) - %s\n%s\n", iteration, timestamp, progress.String(), content)
 
 	// Append to existing content
 	newContent := existing + entry
@@ -83,11 +117,19 @@ func AppendProgressWithTime(plan *Plan, iteration int, content string, timestamp
 		return err
 	}
 
+	// Strip template comments on first real entry (iteration 1)
+	if iteration == 1 {
+		existing = stripTemplateComments(existing)
+	}
+
 	// Format timestamp
 	ts := timestamp.Format("2006-01-02 15:04")
 
-	// Build new entry
-	entry := fmt.Sprintf("\n## Iteration %d (%s)\n%s\n", iteration, ts, content)
+	// Calculate progress
+	progress := CalculateProgress(plan.Tasks)
+
+	// Build new entry with progress
+	entry := fmt.Sprintf("\n## Iteration %d (%s) - %s\n%s\n", iteration, ts, progress.String(), content)
 
 	// Append to existing content
 	newContent := existing + entry
