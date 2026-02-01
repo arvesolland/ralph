@@ -48,9 +48,9 @@ test-coverage:
 	$(GOTEST) -v -coverprofile=coverage.out ./...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 
-# Run integration tests (requires Claude CLI or RALPH_MOCK_CLAUDE=1)
+# Run integration tests (requires Claude CLI)
 test-integration: build
-	$(GOTEST) -v -tags=integration ./internal/integration/...
+	$(GOTEST) -v -tags=integration -timeout 30m ./test/integration/...
 
 # Clean build artifacts
 clean:
