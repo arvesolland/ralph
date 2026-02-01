@@ -24,7 +24,8 @@ go test ./... -v        # Verbose test output
 # Run ralph commands
 ./ralph init --detect   # Initialize project with auto-detection
 ./ralph status          # Show queue status
-./ralph run plan.md     # Run implementation loop on a plan
+./ralph run plans/current/my-plan  # Run implementation loop on a plan
+./ralph plan create my-feature     # Create new plan bundle
 ./ralph worker          # Process queue (continuous)
 ./ralph worker --once   # Process one plan and exit
 ./ralph reset           # Move current plan back to pending
@@ -43,15 +44,17 @@ make release-dry-run    # Dry run release
 ```
 cmd/ralph/              # Main entry point
 internal/
-├── cli/                # Cobra commands (init, run, worker, status, reset, cleanup, version)
+├── cli/                # Cobra commands (init, run, worker, status, reset, cleanup, plan, version)
 ├── config/             # Config loading, YAML parsing, project detection
-├── plan/               # Plan parsing, task extraction, queue management
+├── plan/               # Plan parsing, task extraction, queue management, bundles
 ├── runner/             # Claude execution, streaming, retry logic, verification
 ├── git/                # Git operations (commit, branch, worktree)
 ├── worktree/           # Worktree management, file sync, hooks
 ├── notify/             # Slack notifications (webhook, bot API, Socket Mode)
 ├── prompt/             # Prompt template building with embedded defaults
 └── log/                # Structured logging with color support
+test/
+└── integration/        # End-to-end integration tests (requires Claude CLI)
 ```
 
 Key packages:
@@ -67,12 +70,16 @@ Each plan executes in an isolated git worktree, preventing branch-switching conf
 ```
 repo/                          # Main worktree (always on base branch)
 ├── plans/
-│   ├── pending/              # Queue of plans to run
-│   ├── current/              # Currently active plan
-│   └── complete/             # Archived plans
+│   ├── pending/              # Queue of plan bundles to run
+│   │   └── my-feature/       # Plan bundle (directory)
+│   │       ├── plan.md       # The plan itself
+│   │       ├── progress.md   # Iteration log
+│   │       └── feedback.md   # Human input
+│   ├── current/              # Currently active plan bundle
+│   └── complete/             # Archived plan bundles (with date suffix)
 ├── .ralph/
 │   └── worktrees/            # Execution worktrees (gitignored)
-│       └── feat-my-plan/     # One per active plan
+│       └── feat-my-feature/  # One per active plan
 ```
 
 **Concurrency Protection (Three-Layer Lock):**
@@ -205,7 +212,7 @@ Resume: What happens once resolved.
 3. Human provides input via `<plan>.feedback.md` file
 4. Agent reads feedback file next iteration and continues
 
-**Feedback file format** (`plans/current/<plan>.feedback.md`):
+**Feedback file format** (`plans/current/<plan-name>/feedback.md`):
 ```markdown
 # Feedback: plan-name
 
@@ -217,11 +224,10 @@ Resume: What happens once resolved.
 ```
 
 **Files involved:**
-- `<plan>.feedback.md` - Human writes here, agent reads and acts
-- `<plan>.blockers` - Tracks notified blockers (avoids Slack spam)
+- `<plan>/feedback.md` - Human writes here, agent reads and acts
 - `.ralph/slack_threads.json` - Maps Slack threads to plans (for reply tracking)
 
-Both feedback and blocker files are synced between queue directory and worktree.
+Plan bundles are synced between queue directory and worktree. Feedback only syncs TO worktree (one-way).
 
 ### Slack Notifications
 
@@ -260,6 +266,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/cli/root.go` | Cobra root command and global flags |
 | `internal/cli/run.go` | `ralph run` command |
 | `internal/cli/worker.go` | `ralph worker` command |
+| `internal/cli/plan.go` | `ralph plan create/migrate` commands |
 | `internal/runner/loop.go` | Main iteration loop |
 | `internal/runner/runner.go` | Claude CLI execution with streaming |
 | `internal/runner/verify.go` | Plan completion verification via Haiku |
@@ -267,6 +274,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/config/config.go` | Config struct and YAML loading |
 | `internal/config/detect.go` | Project type auto-detection |
 | `internal/plan/plan.go` | Plan parsing and task extraction |
+| `internal/plan/bundle.go` | Plan bundle scaffolding and migration |
 | `internal/plan/queue.go` | Plan queue management (pending/current/complete) |
 | `internal/git/git.go` | Git CLI wrapper |
 | `internal/worktree/manager.go` | Worktree lifecycle management |
@@ -277,6 +285,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/log/log.go` | Structured logging with color |
 | `.goreleaser.yaml` | Release configuration |
 | `Makefile` | Build targets |
+| `test/integration/integration_test.go` | End-to-end integration tests |
 
 ## Testing
 
@@ -299,11 +308,32 @@ make test-short
 # Test coverage
 make test-coverage
 
-# Run integration tests (requires claude CLI)
+# Run integration tests (requires Claude CLI)
 make test-integration
 ```
 
-Test fixtures are in `internal/*/testdata/` directories. Integration test plans are in `internal/integration/testdata/plans/`.
+### Unit Tests
+
+Unit test fixtures are in `internal/*/testdata/` directories. These tests mock external dependencies and run quickly.
+
+### Integration Tests
+
+Integration tests are in `test/integration/` and require:
+- Built ralph binary (`make build`)
+- Claude CLI available in PATH
+
+They test real end-to-end flows:
+- `TestSingleTask` - Basic task completion with `ralph run`
+- `TestDependencies` - Task dependency ordering
+- `TestProgressTracking` - Progress.md updates during execution
+- `TestWorkerQueue` - Worker queue with worktree isolation
+- `TestDirtyState` - Dirty main worktree handling
+- `TestWorktreeCleanup` - `ralph cleanup` command
+- `TestCorePrinciples` - Comprehensive verification of all Ralph principles
+- `TestPlanBundleCreate` - `ralph plan create` scaffolding
+- `TestReset` - `ralph reset` command
+
+Each test creates an isolated temp workspace with git repo and ralph structure.
 
 ## Development Patterns
 
@@ -367,13 +397,15 @@ Release configuration is in `.goreleaser.yaml`. CI/CD workflows are in `.github/
 
 ## Gotchas
 
+- **Plan bundles**: Plans are now directories (bundles) not single files. Use `ralph plan create <name>` to scaffold
 - **Plan validation removed**: Plans can be any markdown format; Claude handles parsing
 - **Feature branches**: Created via worktree by Ralph, not Claude - prompt just tells agent the branch name
 - **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion - Haiku verification catches this
 - **Verification failures**: When Haiku says plan is incomplete, detailed explanation is written to feedback file for agent to address
 - **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph cleanup`
-- **Plan file sync**: Plan file is copied into worktree; changes are synced back to `current/` after each iteration
+- **Plan file sync**: Plan bundle is copied into worktree; changes are synced back to `current/` after each iteration
 - **Build artifacts**: Binary is named `ralph` (no extension on Unix, `.exe` on Windows). Add `ralph` to `.gitignore`
-- **Test fixtures**: Located in `internal/*/testdata/` - some tests create temp directories that may need cleanup on failure
+- **Test fixtures**: Unit tests in `internal/*/testdata/`, integration tests in `test/integration/`
 - **Embedded prompts**: Default prompts are embedded via `//go:embed` in `internal/prompt/templates.go`
 - **Claude CLI flags**: When using `--output-format=stream-json`, the `--print` and `--verbose` flags are required
+- **Completion archive**: Completed plans are archived with date suffix (e.g., `my-plan-20260201`) to prevent collisions

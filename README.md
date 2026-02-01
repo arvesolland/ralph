@@ -90,19 +90,24 @@ This creates:
 - `plans/` - Queue directories (pending, current, complete)
 - `specs/INDEX.md` - Feature specification index
 
-### 2. Create a Plan
+### 2. Create a Plan Bundle
 
-Create a plan file at `plans/pending/my-feature.md`:
+```bash
+ralph plan create my-feature
+```
+
+This creates a plan bundle at `plans/pending/my-feature/` with scaffolded files:
+- `plan.md` - Task template with acceptance criteria
+- `progress.md` - Iteration log
+- `feedback.md` - Human input for blockers
+
+Edit `plans/pending/my-feature/plan.md` to define your tasks:
 
 ```markdown
 # Plan: My Feature
 
-**Status:** pending
-
 ## Context
 Brief description of what this plan implements.
-
----
 
 ## Tasks
 
@@ -123,7 +128,7 @@ Brief description of what this plan implements.
 ---
 
 ### T2: Second Task
-> Description of the second task
+> Description (requires T1)
 
 **Requires:** T1
 **Status:** open
@@ -133,18 +138,13 @@ Brief description of what this plan implements.
 
 **Subtasks:**
 1. [ ] Implementation step
-
----
-
-## Discovered
-<!-- New work found during implementation -->
 ```
 
 ### 3. Run Ralph
 
 ```bash
 # Run a single plan
-ralph run plans/pending/my-feature.md
+ralph run plans/pending/my-feature
 
 # Or use the worker to process the queue
 ralph worker --once
@@ -173,14 +173,18 @@ Flags:
 
 ### `ralph run`
 
-Run the implementation loop on a specific plan.
+Run the implementation loop on a specific plan bundle.
 
 ```bash
-ralph run <plan-file> [flags]
+ralph run <plan-bundle> [flags]
 
 Flags:
   --max int       Max iterations (default 30)
-  --review        Run plan review before execution
+```
+
+Example:
+```bash
+ralph run plans/pending/my-feature
 ```
 
 ### `ralph worker`
