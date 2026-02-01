@@ -163,18 +163,18 @@ Key design decisions:
 > Remove complex filepath.Rel() gymnastics - use bundle name as key
 
 **Requires:** T6
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `SyncToWorktree()` copies bundle files to `{worktree}/plans/current/{name}/`
-- [ ] `SyncFromWorktree()` copies plan.md and progress.md back (NOT feedback.md)
-- [ ] No more `filepath.Rel()` with fallback logic
+- [x] `SyncToWorktree()` copies bundle files to `{worktree}/plans/current/{name}/`
+- [x] `SyncFromWorktree()` copies plan.md and progress.md back (NOT feedback.md)
+- [x] No more `filepath.Rel()` with fallback logic
 
 **Subtasks:**
-1. [ ] Update `SyncToWorktree()` to use `p.Name` for destination path
-2. [ ] Update `SyncFromWorktree()` to use `p.Name` for source path
-3. [ ] Remove old path computation logic
-4. [ ] Update tests in `internal/worktree/sync_test.go`
+1. [x] Update `SyncToWorktree()` to use `p.Name` for destination path
+2. [x] Update `SyncFromWorktree()` to use `p.Name` for source path
+3. [x] Remove old path computation logic
+4. [x] Update tests in `internal/worktree/sync_test.go`
 
 ---
 

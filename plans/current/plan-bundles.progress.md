@@ -90,3 +90,22 @@ Iteration log - what was done, gotchas, and next steps.
 **Note:** listPlans() correctly handles BOTH bundles and flat files for backwards compatibility during migration period, per the Context section "Must support both flat files and bundles during migration period"
 
 **Next:** T7 - Simplify worktree sync for bundles (now unblocked), or T10 - Enhance status command with progress
+
+---
+### Iteration 8: T7 - Simplify worktree sync for bundles
+**Completed:**
+- Updated `SyncToWorktree()` in `internal/worktree/sync.go:20-48` to use `p.Name` for bundles
+  - For bundles: files go to `{worktree}/plans/current/{name}/plan.md`, `progress.md`, `feedback.md`
+  - For flat files: keeps existing `filepath.Rel()` logic for backwards compatibility
+- Updated `SyncFromWorktree()` in `internal/worktree/sync.go:100-135` with same pattern
+  - Bundles use `p.Name` for source paths
+  - Flat files keep `filepath.Rel()` logic
+- Added 3 new tests in `internal/worktree/sync_test.go`:
+  - `TestSyncToWorktree_Bundle` - verifies all 3 files sync to bundle structure
+  - `TestSyncFromWorktree_Bundle` - verifies plan.md and progress.md sync back
+  - `TestSyncFromWorktree_Bundle_NoFeedbackSync` - verifies feedback.md is NOT synced back (human input is one-way)
+- All 60 worktree tests pass
+
+**Gotcha:** The "remove old path computation logic" subtask (T7.3) means removing it FOR BUNDLES. Flat files still need filepath.Rel() for backwards compat during migration period.
+
+**Next:** T10 - Enhance status command with progress (T8/T9 are blocked on other tasks)
