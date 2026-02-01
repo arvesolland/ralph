@@ -75,3 +75,27 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The `listPlans()` function needs to support BOTH bundles and flat files for backwards compatibility during migration. It scans directories for plan.md and also processes standalone .md files.
 
 **Next:** T7 - Simplify worktree sync for bundles (requires T6, which is now complete)
+
+---
+### Iteration 5: T7, T8, T9, T10, T11 - Final tasks completion
+**Completed:**
+- Verified T7 (worktree sync bundle-aware) was already implemented in commit 434f410
+  - `SyncToWorktree()` and `SyncFromWorktree()` use `p.Name` for bundle paths
+  - Tests exist: `TestSyncToWorktree_Bundle`, `TestSyncFromWorktree_Bundle`, `TestSyncFromWorktree_Bundle_NoFeedbackSync`
+- Verified T8 (MigrateToBundles) was already implemented in commit d3a771b
+  - Function `MigrateToBundles()` exists in `internal/plan/bundle.go:179`
+- Verified T10 (status command progress) was already implemented in commit d79c51b
+  - `internal/cli/status.go` uses `CalculateProgress()` and `Progress.Bar()`
+- Updated plan.md to mark T7, T8, T10 as complete (plan file was out of sync with code)
+- Implemented T9: Created `internal/cli/plan.go` with:
+  - `planCmd` parent command for bundle management
+  - `planCreateCmd` - calls `plan.CreateBundle()` to scaffold new bundles
+  - `planMigrateCmd` - calls `plan.MigrateToBundles()` for legacy migration
+  - Comprehensive help text explaining bundle structure and usage
+- Implemented T11: Updated `internal/cli/init.go` line 153
+  - Changed "Create a plan in plans/pending/" to "Create a plan: ralph plan create <name>"
+- All tests pass (including new CLI tests for plan commands)
+
+**Gotcha:** Plan file was significantly out of sync with actual implementation. T7, T8, and T10 were already completed in previous iterations but the plan file still showed them as blocked.
+
+**Next:** Plan complete - all 11 tasks are done

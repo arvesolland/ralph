@@ -2,7 +2,7 @@
 
 **Spec:** N/A (internal refactor)
 **Created:** 2026-02-01
-**Status:** pending
+**Status:** complete
 
 ## Context
 
@@ -163,18 +163,18 @@ Key design decisions:
 > Remove complex filepath.Rel() gymnastics - use bundle name as key
 
 **Requires:** T6
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `SyncToWorktree()` copies bundle files to `{worktree}/plans/current/{name}/`
-- [ ] `SyncFromWorktree()` copies plan.md and progress.md back (NOT feedback.md)
-- [ ] No more `filepath.Rel()` with fallback logic
+- [x] `SyncToWorktree()` copies bundle files to `{worktree}/plans/current/{name}/`
+- [x] `SyncFromWorktree()` copies plan.md and progress.md back (NOT feedback.md)
+- [x] No more `filepath.Rel()` with fallback logic
 
 **Subtasks:**
-1. [ ] Update `SyncToWorktree()` to use `p.Name` for destination path
-2. [ ] Update `SyncFromWorktree()` to use `p.Name` for source path
-3. [ ] Remove old path computation logic
-4. [ ] Update tests in `internal/worktree/sync_test.go`
+1. [x] Update `SyncToWorktree()` to use `p.Name` for destination path
+2. [x] Update `SyncFromWorktree()` to use `p.Name` for source path
+3. [x] Remove old path computation logic
+4. [x] Update tests in `internal/worktree/sync_test.go`
 
 ---
 
@@ -182,21 +182,21 @@ Key design decisions:
 > Convert existing flat files to bundles
 
 **Requires:** T3
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `MigrateToBundles(plansDir string) error` converts all flat files
-- [ ] Migration moves plan.md into bundle directory
-- [ ] Migration moves associated .progress.md and .feedback.md files
-- [ ] Migration skips existing bundles (directories)
-- [ ] Migration creates scaffolded files if associated files missing
+- [x] `MigrateToBundles(plansDir string) error` converts all flat files
+- [x] Migration moves plan.md into bundle directory
+- [x] Migration moves associated .progress.md and .feedback.md files
+- [x] Migration skips existing bundles (directories)
+- [x] Migration creates scaffolded files if associated files missing
 
 **Subtasks:**
-1. [ ] Add `MigrateToBundles()` function to `internal/plan/bundle.go`
-2. [ ] Iterate pending/, current/, complete/ directories
-3. [ ] For each .md file (not .progress.md or .feedback.md), create bundle
-4. [ ] Move associated files into bundle, renaming to progress.md/feedback.md
-5. [ ] Add tests for migration scenarios
+1. [x] Add `MigrateToBundles()` function to `internal/plan/bundle.go`
+2. [x] Iterate pending/, current/, complete/ directories
+3. [x] For each .md file (not .progress.md or .feedback.md), create bundle
+4. [x] Move associated files into bundle, renaming to progress.md/feedback.md
+5. [x] Add tests for migration scenarios
 
 ---
 
@@ -204,20 +204,20 @@ Key design decisions:
 > User-facing commands for creating plans and migrating
 
 **Requires:** T3, T8
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph plan create <name>` creates scaffolded bundle in pending/
-- [ ] `ralph plan migrate` converts all flat files to bundles
-- [ ] Help text explains the commands
+- [x] `ralph plan create <name>` creates scaffolded bundle in pending/
+- [x] `ralph plan migrate` converts all flat files to bundles
+- [x] Help text explains the commands
 
 **Subtasks:**
-1. [ ] Create `internal/cli/plan.go`
-2. [ ] Add `planCmd` as parent command
-3. [ ] Add `planCreateCmd` that calls `plan.CreateBundle()`
-4. [ ] Add `planMigrateCmd` that calls `plan.MigrateToBundles()`
-5. [ ] Register commands in init()
-6. [ ] Update help text
+1. [x] Create `internal/cli/plan.go`
+2. [x] Add `planCmd` as parent command
+3. [x] Add `planCreateCmd` that calls `plan.CreateBundle()`
+4. [x] Add `planMigrateCmd` that calls `plan.MigrateToBundles()`
+5. [x] Register commands in init()
+6. [x] Update help text
 
 ---
 
@@ -225,18 +225,18 @@ Key design decisions:
 > Show progress bars and task counts in ralph status
 
 **Requires:** T2
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] Current plan shows progress bar: `[████████░░░░░░░░░░░░] 40%`
-- [ ] Current plan shows task count: `Tasks: 4/10 completed`
-- [ ] Pending plans show task counts: `add-auth 0/5 (0%)`
+- [x] Current plan shows progress bar: `[████████░░░░░░░░░░░░] 40%`
+- [x] Current plan shows task count: `Tasks: 4/10 completed`
+- [x] Pending plans show task counts: `add-auth 0/5 (0%)`
 
 **Subtasks:**
-1. [ ] Update `internal/cli/status.go` to calculate progress for current plan
-2. [ ] Add progress bar display using `Progress.Bar()`
-3. [ ] Add task counts for pending plans
-4. [ ] Test output formatting
+1. [x] Update `internal/cli/status.go` to calculate progress for current plan
+2. [x] Add progress bar display using `Progress.Bar()`
+3. [x] Add task counts for pending plans
+4. [x] Test output formatting
 
 ---
 
@@ -244,13 +244,13 @@ Key design decisions:
 > Point users to new plan create command
 
 **Requires:** T9
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] "Next steps" in `ralph init` mentions `ralph plan create <name>`
+- [x] "Next steps" in `ralph init` mentions `ralph plan create <name>`
 
 **Subtasks:**
-1. [ ] Update next steps text in `internal/cli/init.go`
+1. [x] Update next steps text in `internal/cli/init.go`
 
 ---
 
