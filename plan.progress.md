@@ -29,3 +29,22 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The Bar() method calculates filled blocks based on `Completed/Total * width`, not `Percent/100 * width`, to ensure accurate representation even for edge cases.
 
 **Next:** T3 - Create bundle scaffolding functions (requires T1, which is complete)
+
+---
+### Iteration 3: T3 - Create bundle scaffolding functions
+**Completed:**
+- Created `internal/plan/bundle.go` with all scaffolding functions
+- `CreateBundle(plansDir, name string) (*Plan, error)` creates bundle in `pending/` with sanitized name
+- `scaffoldPlan()` creates plan.md with template including: title, status, context, rules, tasks section, discovered, completed sections
+- `scaffoldProgress()` creates progress.md with header and format instructions/example
+- `scaffoldFeedback()` creates feedback.md with Pending and Processed sections plus instructions
+- `sanitizeBundleName()` converts plan names to valid directory names (lowercase, hyphens, no special chars)
+- Created `internal/plan/bundle_test.go` with comprehensive tests:
+  - `TestCreateBundle`: creates bundle, fails on duplicate, fails on empty/invalid names, sanitizes names
+  - `TestScaffoldPlan`, `TestScaffoldProgress`, `TestScaffoldFeedback`: verify file contents
+  - `TestSanitizeBundleName`: edge cases for name sanitization
+- All 96 tests in plan package pass
+
+**Gotcha:** None - straightforward implementation following existing patterns.
+
+**Next:** T4 - Update progress.go for bundle-aware paths OR T5/T6 (all require T1 which is complete)

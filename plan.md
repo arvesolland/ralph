@@ -81,22 +81,22 @@ Key design decisions:
 > Core feature - create plan bundles with all files and proper headers
 
 **Requires:** T1
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `CreateBundle(plansDir, name string) (*Plan, error)` creates complete bundle
-- [ ] `plan.md` has template with overview, tasks sections, and instructions
-- [ ] `progress.md` has header explaining format with example entry
-- [ ] `feedback.md` has Pending/Processed sections with instructions
-- [ ] Bundle creation fails if plan already exists
+- [x] `CreateBundle(plansDir, name string) (*Plan, error)` creates complete bundle
+- [x] `plan.md` has template with overview, tasks sections, and instructions
+- [x] `progress.md` has header explaining format with example entry
+- [x] `feedback.md` has Pending/Processed sections with instructions
+- [x] Bundle creation fails if plan already exists
 
 **Subtasks:**
-1. [ ] Create `internal/plan/bundle.go` file
-2. [ ] Implement `scaffoldPlan(bundleDir, name string) error` with template
-3. [ ] Implement `scaffoldProgress(bundleDir, name string) error` with header
-4. [ ] Implement `scaffoldFeedback(bundleDir, name string) error` with sections
-5. [ ] Implement `CreateBundle()` that calls all scaffold functions
-6. [ ] Add tests in `internal/plan/bundle_test.go`
+1. [x] Create `internal/plan/bundle.go` file
+2. [x] Implement `scaffoldPlan(bundleDir, name string) error` with template
+3. [x] Implement `scaffoldProgress(bundleDir, name string) error` with header
+4. [x] Implement `scaffoldFeedback(bundleDir, name string) error` with sections
+5. [x] Implement `CreateBundle()` that calls all scaffold functions
+6. [x] Add tests in `internal/plan/bundle_test.go`
 
 ---
 
