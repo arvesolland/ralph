@@ -14,6 +14,7 @@ type Plan struct {
 	Path string
 
 	// Name is derived from the filename without extension (e.g., "go-rewrite" from "go-rewrite.md").
+	// For bundles, this is the directory name.
 	Name string
 
 	// Content is the raw markdown content of the plan.
@@ -28,13 +29,24 @@ type Plan struct {
 
 	// Branch is the git branch name for this plan (e.g., "feat/go-rewrite").
 	Branch string
+
+	// BundleDir is the absolute path to the bundle directory.
+	// Empty string indicates a legacy flat file (not a bundle).
+	BundleDir string
 }
 
 // statusRegex matches **Status:** value patterns in markdown.
 var statusRegex = regexp.MustCompile(`(?m)^\*\*Status:\*\*\s*(\S+)`)
 
+// IsBundle returns true if the plan is a bundle (directory-based),
+// false if it's a legacy flat file.
+func (p *Plan) IsBundle() bool {
+	return p.BundleDir != ""
+}
+
 // Load reads and parses a plan file from the given path.
 // It extracts the name, status, and branch from the content.
+// If path is a directory (bundle), it loads plan.md from inside.
 // Returns an error if the file cannot be read.
 func Load(path string) (*Plan, error) {
 	absPath, err := filepath.Abs(path)
@@ -42,31 +54,61 @@ func Load(path string) (*Plan, error) {
 		return nil, err
 	}
 
-	content, err := os.ReadFile(absPath)
+	// Check if path is a directory (bundle) or file
+	info, err := os.Stat(absPath)
 	if err != nil {
 		return nil, err
 	}
 
-	name := deriveName(absPath)
+	var bundleDir string
+	var planPath string
+
+	if info.IsDir() {
+		// Bundle: directory containing plan.md
+		bundleDir = absPath
+		planPath = filepath.Join(absPath, "plan.md")
+	} else {
+		// Legacy flat file
+		bundleDir = ""
+		planPath = absPath
+	}
+
+	content, err := os.ReadFile(planPath)
+	if err != nil {
+		return nil, err
+	}
+
+	name := deriveName(absPath, bundleDir != "")
 	status := extractStatus(string(content))
 	branch := deriveBranch(name)
 	tasks := ExtractTasks(string(content))
 
 	return &Plan{
-		Path:    absPath,
-		Name:    name,
-		Content: string(content),
-		Tasks:   tasks,
-		Status:  status,
-		Branch:  branch,
+		Path:      planPath,
+		Name:      name,
+		Content:   string(content),
+		Tasks:     tasks,
+		Status:    status,
+		Branch:    branch,
+		BundleDir: bundleDir,
 	}, nil
 }
 
-// deriveName extracts the plan name from the file path.
-// "go-rewrite.md" → "go-rewrite"
-// "plans/current/my-plan.md" → "my-plan"
-func deriveName(path string) string {
+// deriveName extracts the plan name from the path.
+// For bundles (isBundle=true): uses directory name as-is.
+// For flat files: removes .md extension from filename.
+//
+// Examples:
+//   - "plans/pending/my-bundle" (bundle) → "my-bundle"
+//   - "go-rewrite.md" (flat file) → "go-rewrite"
+//   - "plans/current/my-plan.md" (flat file) → "my-plan"
+func deriveName(path string, isBundle bool) string {
 	base := filepath.Base(path)
+	if isBundle {
+		// Bundle: directory name is the plan name
+		return base
+	}
+	// Flat file: remove extension
 	ext := filepath.Ext(base)
 	return strings.TrimSuffix(base, ext)
 }

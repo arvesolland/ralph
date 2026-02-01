@@ -33,6 +33,55 @@ func TestLoad_ValidPlan(t *testing.T) {
 	if !filepath.IsAbs(p.Path) {
 		t.Errorf("Path = %q, want absolute path", p.Path)
 	}
+
+	// Flat file should not be a bundle
+	if p.IsBundle() {
+		t.Error("IsBundle() = true, want false for flat file")
+	}
+	if p.BundleDir != "" {
+		t.Errorf("BundleDir = %q, want empty for flat file", p.BundleDir)
+	}
+}
+
+func TestLoad_Bundle(t *testing.T) {
+	path := filepath.Join("testdata", "test-bundle")
+	p, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if p.Name != "test-bundle" {
+		t.Errorf("Name = %q, want %q", p.Name, "test-bundle")
+	}
+
+	if p.Status != "open" {
+		t.Errorf("Status = %q, want %q", p.Status, "open")
+	}
+
+	if p.Branch != "feat/test-bundle" {
+		t.Errorf("Branch = %q, want %q", p.Branch, "feat/test-bundle")
+	}
+
+	// Should be a bundle
+	if !p.IsBundle() {
+		t.Error("IsBundle() = false, want true for bundle")
+	}
+
+	// BundleDir should be set
+	if p.BundleDir == "" {
+		t.Error("BundleDir should not be empty for bundle")
+	}
+	if !filepath.IsAbs(p.BundleDir) {
+		t.Errorf("BundleDir = %q, want absolute path", p.BundleDir)
+	}
+
+	// Path should point to plan.md inside bundle
+	if !filepath.IsAbs(p.Path) {
+		t.Errorf("Path = %q, want absolute path", p.Path)
+	}
+	if filepath.Base(p.Path) != "plan.md" {
+		t.Errorf("Path = %q, want to end with plan.md", p.Path)
+	}
 }
 
 func TestLoad_MissingStatus(t *testing.T) {
@@ -86,21 +135,26 @@ func TestLoad_NonexistentFile(t *testing.T) {
 
 func TestDeriveName(t *testing.T) {
 	tests := []struct {
-		path string
-		want string
+		path     string
+		isBundle bool
+		want     string
 	}{
-		{"go-rewrite.md", "go-rewrite"},
-		{"plans/current/my-plan.md", "my-plan"},
-		{"/absolute/path/test.md", "test"},
-		{"plan.with.dots.md", "plan.with.dots"},
-		{"no-extension", "no-extension"},
+		// Flat files (isBundle=false)
+		{"go-rewrite.md", false, "go-rewrite"},
+		{"plans/current/my-plan.md", false, "my-plan"},
+		{"/absolute/path/test.md", false, "test"},
+		{"plan.with.dots.md", false, "plan.with.dots"},
+		{"no-extension", false, "no-extension"},
+		// Bundles (isBundle=true)
+		{"plans/pending/my-bundle", true, "my-bundle"},
+		{"/absolute/path/feature-x", true, "feature-x"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := deriveName(tt.path)
+			got := deriveName(tt.path, tt.isBundle)
 			if got != tt.want {
-				t.Errorf("deriveName(%q) = %q, want %q", tt.path, got, tt.want)
+				t.Errorf("deriveName(%q, %v) = %q, want %q", tt.path, tt.isBundle, got, tt.want)
 			}
 		})
 	}
