@@ -410,3 +410,183 @@ func TestSyncToWorktree_PreservesPermissions(t *testing.T) {
 		t.Errorf("Permissions not preserved: src %v, dst %v", srcInfo.Mode(), dstInfo.Mode())
 	}
 }
+
+func TestSyncToWorktree_Bundle(t *testing.T) {
+	// Create temp directories for main and worktree
+	mainDir := t.TempDir()
+	worktreeDir := t.TempDir()
+
+	// Create bundle directory in main: plans/current/test-bundle/
+	bundleDir := filepath.Join(mainDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create plan.md inside bundle
+	planPath := filepath.Join(bundleDir, "plan.md")
+	planContent := "# Test Bundle Plan\n\n**Status:** pending\n"
+	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create progress.md inside bundle
+	progressPath := filepath.Join(bundleDir, "progress.md")
+	progressContent := "# Progress: test-bundle\n\nSome progress...\n"
+	if err := os.WriteFile(progressPath, []byte(progressContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create feedback.md inside bundle
+	feedbackPath := filepath.Join(bundleDir, "feedback.md")
+	feedbackContent := "# Feedback: test-bundle\n\n## Pending\n\n## Processed\n"
+	if err := os.WriteFile(feedbackPath, []byte(feedbackContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create plan struct as a bundle
+	p := &plan.Plan{
+		Path:      planPath,
+		Name:      "test-bundle",
+		BundleDir: bundleDir,
+	}
+
+	// Sync to worktree
+	cfg := &config.Config{}
+	if err := SyncToWorktree(p, worktreeDir, cfg, mainDir); err != nil {
+		t.Fatalf("SyncToWorktree failed: %v", err)
+	}
+
+	// Verify files were copied to bundle structure in worktree
+	// Should be at {worktree}/plans/current/test-bundle/plan.md
+	dstPlanPath := filepath.Join(worktreeDir, "plans", "current", "test-bundle", "plan.md")
+	if content, err := os.ReadFile(dstPlanPath); err != nil {
+		t.Errorf("Plan file not copied to bundle: %v", err)
+	} else if string(content) != planContent {
+		t.Errorf("Plan content mismatch: got %q, want %q", string(content), planContent)
+	}
+
+	dstProgressPath := filepath.Join(worktreeDir, "plans", "current", "test-bundle", "progress.md")
+	if content, err := os.ReadFile(dstProgressPath); err != nil {
+		t.Errorf("Progress file not copied to bundle: %v", err)
+	} else if string(content) != progressContent {
+		t.Errorf("Progress content mismatch: got %q, want %q", string(content), progressContent)
+	}
+
+	dstFeedbackPath := filepath.Join(worktreeDir, "plans", "current", "test-bundle", "feedback.md")
+	if content, err := os.ReadFile(dstFeedbackPath); err != nil {
+		t.Errorf("Feedback file not copied to bundle: %v", err)
+	} else if string(content) != feedbackContent {
+		t.Errorf("Feedback content mismatch: got %q, want %q", string(content), feedbackContent)
+	}
+}
+
+func TestSyncFromWorktree_Bundle(t *testing.T) {
+	mainDir := t.TempDir()
+	worktreeDir := t.TempDir()
+
+	// Create bundle directory structure in worktree
+	worktreeBundleDir := filepath.Join(worktreeDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(worktreeBundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create updated plan.md in worktree bundle
+	planContent := "# Test Bundle Plan\n\n**Status:** complete\n"
+	planPath := filepath.Join(worktreeBundleDir, "plan.md")
+	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create updated progress.md in worktree bundle
+	progressContent := "# Progress\n\n## Iteration 1\nDid stuff\n"
+	progressPath := filepath.Join(worktreeBundleDir, "progress.md")
+	if err := os.WriteFile(progressPath, []byte(progressContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create destination bundle directory in main
+	mainBundleDir := filepath.Join(mainDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(mainBundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plan struct points to main worktree bundle location
+	mainPlanPath := filepath.Join(mainBundleDir, "plan.md")
+	p := &plan.Plan{
+		Path:      mainPlanPath,
+		Name:      "test-bundle",
+		BundleDir: mainBundleDir,
+	}
+
+	if err := SyncFromWorktree(p, worktreeDir, mainDir); err != nil {
+		t.Fatalf("SyncFromWorktree failed: %v", err)
+	}
+
+	// Verify plan file was copied back to bundle
+	if content, err := os.ReadFile(mainPlanPath); err != nil {
+		t.Errorf("Plan file not copied back: %v", err)
+	} else if string(content) != planContent {
+		t.Errorf("Plan content mismatch: got %q, want %q", string(content), planContent)
+	}
+
+	// Verify progress file was copied back to bundle
+	mainProgressPath := filepath.Join(mainBundleDir, "progress.md")
+	if content, err := os.ReadFile(mainProgressPath); err != nil {
+		t.Errorf("Progress file not copied back: %v", err)
+	} else if string(content) != progressContent {
+		t.Errorf("Progress content mismatch: got %q, want %q", string(content), progressContent)
+	}
+}
+
+func TestSyncFromWorktree_Bundle_NoFeedbackSync(t *testing.T) {
+	mainDir := t.TempDir()
+	worktreeDir := t.TempDir()
+
+	// Create bundle directory structure in worktree with feedback file
+	worktreeBundleDir := filepath.Join(worktreeDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(worktreeBundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create plan.md
+	planPath := filepath.Join(worktreeBundleDir, "plan.md")
+	if err := os.WriteFile(planPath, []byte("# Plan\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create feedback.md in worktree (should NOT be synced back)
+	worktreeFeedbackPath := filepath.Join(worktreeBundleDir, "feedback.md")
+	worktreeFeedbackContent := "# Feedback\n\nAgent modified this\n"
+	if err := os.WriteFile(worktreeFeedbackPath, []byte(worktreeFeedbackContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create destination bundle directory in main with original feedback
+	mainBundleDir := filepath.Join(mainDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(mainBundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	mainFeedbackPath := filepath.Join(mainBundleDir, "feedback.md")
+	mainFeedbackContent := "# Feedback\n\nHuman input here\n"
+	if err := os.WriteFile(mainFeedbackPath, []byte(mainFeedbackContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	mainPlanPath := filepath.Join(mainBundleDir, "plan.md")
+	p := &plan.Plan{
+		Path:      mainPlanPath,
+		Name:      "test-bundle",
+		BundleDir: mainBundleDir,
+	}
+
+	if err := SyncFromWorktree(p, worktreeDir, mainDir); err != nil {
+		t.Fatalf("SyncFromWorktree failed: %v", err)
+	}
+
+	// Verify feedback was NOT overwritten (should still have original content)
+	if content, err := os.ReadFile(mainFeedbackPath); err != nil {
+		t.Errorf("Feedback file missing: %v", err)
+	} else if string(content) != mainFeedbackContent {
+		t.Errorf("Feedback should not be synced back: got %q, want %q", string(content), mainFeedbackContent)
+	}
+}

@@ -16,6 +16,9 @@ import (
 // SyncToWorktree copies plan, progress, and feedback files from the main worktree
 // to the execution worktree. Also copies .env files based on config.worktree.copy_env_files.
 //
+// For bundles, files are copied to {worktree}/plans/current/{name}/.
+// For legacy flat files, uses filepath.Rel() to preserve path structure.
+//
 // Missing source files are silently skipped (not an error).
 func SyncToWorktree(p *plan.Plan, worktreePath string, cfg *config.Config, mainWorktreePath string) error {
 	log.Debug("Syncing files to worktree: %s", worktreePath)
@@ -25,27 +28,35 @@ func SyncToWorktree(p *plan.Plan, worktreePath string, cfg *config.Config, mainW
 	progressPath := plan.ProgressPath(p)
 	feedbackPath := plan.FeedbackPath(p)
 
-	// Compute destination paths in worktree
-	// Plan files should go to the same relative location in the worktree
-	// e.g., plans/current/go-rewrite.md -> worktree/plans/current/go-rewrite.md
-	planRelPath, err := filepath.Rel(mainWorktreePath, planPath)
-	if err != nil {
-		// If we can't get relative path, use just the filename in plans/current/
-		planRelPath = filepath.Join("plans", "current", filepath.Base(planPath))
-	}
-	planDstPath := filepath.Join(worktreePath, planRelPath)
+	var planDstPath, progressDstPath, feedbackDstPath string
 
-	progressRelPath, err := filepath.Rel(mainWorktreePath, progressPath)
-	if err != nil {
-		progressRelPath = filepath.Join("plans", "current", filepath.Base(progressPath))
-	}
-	progressDstPath := filepath.Join(worktreePath, progressRelPath)
+	if p.IsBundle() {
+		// Bundle: use p.Name to build destination paths
+		// e.g., {worktree}/plans/current/{name}/plan.md
+		bundleDst := filepath.Join(worktreePath, "plans", "current", p.Name)
+		planDstPath = filepath.Join(bundleDst, "plan.md")
+		progressDstPath = filepath.Join(bundleDst, "progress.md")
+		feedbackDstPath = filepath.Join(bundleDst, "feedback.md")
+	} else {
+		// Legacy flat file: use filepath.Rel() to preserve path structure
+		planRelPath, err := filepath.Rel(mainWorktreePath, planPath)
+		if err != nil {
+			planRelPath = filepath.Join("plans", "current", filepath.Base(planPath))
+		}
+		planDstPath = filepath.Join(worktreePath, planRelPath)
 
-	feedbackRelPath, err := filepath.Rel(mainWorktreePath, feedbackPath)
-	if err != nil {
-		feedbackRelPath = filepath.Join("plans", "current", filepath.Base(feedbackPath))
+		progressRelPath, err := filepath.Rel(mainWorktreePath, progressPath)
+		if err != nil {
+			progressRelPath = filepath.Join("plans", "current", filepath.Base(progressPath))
+		}
+		progressDstPath = filepath.Join(worktreePath, progressRelPath)
+
+		feedbackRelPath, err := filepath.Rel(mainWorktreePath, feedbackPath)
+		if err != nil {
+			feedbackRelPath = filepath.Join("plans", "current", filepath.Base(feedbackPath))
+		}
+		feedbackDstPath = filepath.Join(worktreePath, feedbackRelPath)
 	}
-	feedbackDstPath := filepath.Join(worktreePath, feedbackRelPath)
 
 	// Copy plan file (required)
 	if err := copyFile(planPath, planDstPath); err != nil {
@@ -100,6 +111,9 @@ func SyncToWorktree(p *plan.Plan, worktreePath string, cfg *config.Config, mainW
 // SyncFromWorktree copies plan and progress files from the execution worktree
 // back to the main worktree. This syncs changes made by the agent back to the queue.
 //
+// For bundles, files are read from {worktree}/plans/current/{name}/.
+// For legacy flat files, uses filepath.Rel() to locate files.
+//
 // Missing source files are silently skipped (not an error).
 // Feedback file is NOT synced back (human input comes from main worktree).
 func SyncFromWorktree(p *plan.Plan, worktreePath string, mainWorktreePath string) error {
@@ -109,18 +123,28 @@ func SyncFromWorktree(p *plan.Plan, worktreePath string, mainWorktreePath string
 	planPath := p.Path
 	progressPath := plan.ProgressPath(p)
 
-	// Compute source paths in worktree
-	planRelPath, err := filepath.Rel(mainWorktreePath, planPath)
-	if err != nil {
-		planRelPath = filepath.Join("plans", "current", filepath.Base(planPath))
-	}
-	planSrcPath := filepath.Join(worktreePath, planRelPath)
+	var planSrcPath, progressSrcPath string
 
-	progressRelPath, err := filepath.Rel(mainWorktreePath, progressPath)
-	if err != nil {
-		progressRelPath = filepath.Join("plans", "current", filepath.Base(progressPath))
+	if p.IsBundle() {
+		// Bundle: use p.Name to build source paths
+		// e.g., {worktree}/plans/current/{name}/plan.md
+		bundleSrc := filepath.Join(worktreePath, "plans", "current", p.Name)
+		planSrcPath = filepath.Join(bundleSrc, "plan.md")
+		progressSrcPath = filepath.Join(bundleSrc, "progress.md")
+	} else {
+		// Legacy flat file: use filepath.Rel() to locate files
+		planRelPath, err := filepath.Rel(mainWorktreePath, planPath)
+		if err != nil {
+			planRelPath = filepath.Join("plans", "current", filepath.Base(planPath))
+		}
+		planSrcPath = filepath.Join(worktreePath, planRelPath)
+
+		progressRelPath, err := filepath.Rel(mainWorktreePath, progressPath)
+		if err != nil {
+			progressRelPath = filepath.Join("plans", "current", filepath.Base(progressPath))
+		}
+		progressSrcPath = filepath.Join(worktreePath, progressRelPath)
 	}
-	progressSrcPath := filepath.Join(worktreePath, progressRelPath)
 
 	// Copy plan file back
 	if err := copyFile(planSrcPath, planPath); err != nil {

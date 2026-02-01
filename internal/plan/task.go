@@ -2,6 +2,7 @@
 package plan
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -156,6 +157,50 @@ func CountTotal(tasks []Task) int {
 		count += CountTotal(t.Subtasks)
 	}
 	return count
+}
+
+// Progress represents the completion status of a plan's tasks.
+type Progress struct {
+	// Total is the total number of tasks.
+	Total int
+	// Completed is the number of completed tasks.
+	Completed int
+	// Percent is the completion percentage (0-100).
+	Percent int
+}
+
+// CalculateProgress computes progress from a list of tasks.
+func CalculateProgress(tasks []Task) Progress {
+	total := CountTotal(tasks)
+	completed := CountComplete(tasks)
+	percent := 0
+	if total > 0 {
+		percent = (completed * 100) / total
+	}
+	return Progress{
+		Total:     total,
+		Completed: completed,
+		Percent:   percent,
+	}
+}
+
+// String returns a human-readable progress string like "4/10 (40%)".
+func (p Progress) String() string {
+	return fmt.Sprintf("%d/%d (%d%%)", p.Completed, p.Total, p.Percent)
+}
+
+// Bar returns a visual progress bar of the specified width.
+// Example with width 10: "[████░░░░░░]" for 40% progress.
+func (p Progress) Bar(width int) string {
+	if width <= 0 {
+		return "[]"
+	}
+	filled := 0
+	if p.Total > 0 {
+		filled = (p.Completed * width) / p.Total
+	}
+	empty := width - filled
+	return "[" + strings.Repeat("█", filled) + strings.Repeat("░", empty) + "]"
 }
 
 // FindNextIncomplete returns the first incomplete task where all dependencies

@@ -42,6 +42,41 @@ func TestFeedbackPath(t *testing.T) {
 	}
 }
 
+func TestFeedbackPath_Bundle(t *testing.T) {
+	tests := []struct {
+		name      string
+		bundleDir string
+		planPath  string
+		want      string
+	}{
+		{
+			name:      "bundle in current",
+			bundleDir: "plans/current/my-plan",
+			planPath:  "plans/current/my-plan/plan.md",
+			want:      "plans/current/my-plan/feedback.md",
+		},
+		{
+			name:      "bundle with absolute path",
+			bundleDir: "/home/user/project/plans/pending/feature",
+			planPath:  "/home/user/project/plans/pending/feature/plan.md",
+			want:      "/home/user/project/plans/pending/feature/feedback.md",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := &Plan{
+				Path:      tt.planPath,
+				BundleDir: tt.bundleDir,
+			}
+			got := FeedbackPath(plan)
+			if got != tt.want {
+				t.Errorf("FeedbackPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestReadFeedback_NonExistent(t *testing.T) {
 	plan := &Plan{
 		Path: "/nonexistent/path/plan.md",
@@ -54,6 +89,52 @@ func TestReadFeedback_NonExistent(t *testing.T) {
 	}
 	if content != "" {
 		t.Errorf("ReadFeedback() = %q, want empty string", content)
+	}
+}
+
+func TestReadFeedback_Bundle(t *testing.T) {
+	dir := t.TempDir()
+	bundleDir := filepath.Join(dir, "my-plan")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	planPath := filepath.Join(bundleDir, "plan.md")
+	feedbackPath := filepath.Join(bundleDir, "feedback.md")
+
+	// Create feedback file in bundle
+	feedbackContent := `# Feedback: my-plan
+
+## Pending
+- [2024-01-30 14:32] Package is now public
+- [2024-01-30 15:00] Use OAuth instead of API keys
+
+## Processed
+- [2024-01-30 10:00] Already handled item
+`
+	if err := os.WriteFile(feedbackPath, []byte(feedbackContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := &Plan{
+		Path:      planPath,
+		BundleDir: bundleDir,
+		Name:      "my-plan",
+	}
+	content, err := ReadFeedback(plan)
+	if err != nil {
+		t.Errorf("ReadFeedback() error = %v", err)
+	}
+
+	// Should only return pending section content
+	if !strings.Contains(content, "Package is now public") {
+		t.Errorf("ReadFeedback() should contain pending items, got %q", content)
+	}
+	if !strings.Contains(content, "Use OAuth") {
+		t.Errorf("ReadFeedback() should contain all pending items, got %q", content)
+	}
+	if strings.Contains(content, "Already handled") {
+		t.Errorf("ReadFeedback() should NOT contain processed items, got %q", content)
 	}
 }
 
@@ -153,6 +234,49 @@ func TestAppendFeedback_NewFile(t *testing.T) {
 	}
 	if !strings.Contains(contentStr, "## Processed") {
 		t.Errorf("File should have Processed section, got %q", contentStr)
+	}
+}
+
+func TestAppendFeedback_Bundle(t *testing.T) {
+	dir := t.TempDir()
+	bundleDir := filepath.Join(dir, "my-plan")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	planPath := filepath.Join(bundleDir, "plan.md")
+	feedbackPath := filepath.Join(bundleDir, "feedback.md")
+
+	plan := &Plan{
+		Path:      planPath,
+		BundleDir: bundleDir,
+		Name:      "my-plan",
+	}
+	timestamp := time.Date(2024, 1, 30, 14, 32, 0, 0, time.UTC)
+
+	err := AppendFeedbackWithTime(plan, "slack", "Task completed successfully", timestamp)
+	if err != nil {
+		t.Fatalf("AppendFeedback() error = %v", err)
+	}
+
+	// Check file was created in bundle directory
+	content, err := os.ReadFile(feedbackPath)
+	if err != nil {
+		t.Fatalf("Reading feedback file: %v", err)
+	}
+
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "# Feedback: my-plan") {
+		t.Errorf("File should have header, got %q", contentStr)
+	}
+	if !strings.Contains(contentStr, "[2024-01-30 14:32] slack: Task completed successfully") {
+		t.Errorf("File should have entry, got %q", contentStr)
+	}
+
+	// Verify file was NOT created at flat file location
+	flatPath := filepath.Join(dir, "my-plan.feedback.md")
+	if _, err := os.Stat(flatPath); !os.IsNotExist(err) {
+		t.Errorf("Feedback file should NOT be created at flat file location for bundles")
 	}
 }
 

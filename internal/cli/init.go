@@ -150,7 +150,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Edit .ralph/config.yaml to customize settings")
-	fmt.Println("  2. Create a plan in plans/pending/")
+	fmt.Println("  2. Create a plan: ralph plan create <name>")
 	fmt.Println("  3. Run 'ralph worker' to start processing")
 
 	return nil

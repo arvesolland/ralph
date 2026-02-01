@@ -2,7 +2,7 @@
 
 **Spec:** N/A (internal refactor)
 **Created:** 2026-02-01
-**Status:** complete
+**Status:** pending
 
 ## Context
 
@@ -204,20 +204,20 @@ Key design decisions:
 > User-facing commands for creating plans and migrating
 
 **Requires:** T3, T8
-**Status:** complete
+**Status:** open
 
 **Done when:**
-- [x] `ralph plan create <name>` creates scaffolded bundle in pending/
-- [x] `ralph plan migrate` converts all flat files to bundles
-- [x] Help text explains the commands
+- [ ] `ralph plan create <name>` creates scaffolded bundle in pending/
+- [ ] `ralph plan migrate` converts all flat files to bundles
+- [ ] Help text explains the commands
 
 **Subtasks:**
-1. [x] Create `internal/cli/plan.go`
-2. [x] Add `planCmd` as parent command
-3. [x] Add `planCreateCmd` that calls `plan.CreateBundle()`
-4. [x] Add `planMigrateCmd` that calls `plan.MigrateToBundles()`
-5. [x] Register commands in init()
-6. [x] Update help text
+1. [ ] Create `internal/cli/plan.go`
+2. [ ] Add `planCmd` as parent command
+3. [ ] Add `planCreateCmd` that calls `plan.CreateBundle()`
+4. [ ] Add `planMigrateCmd` that calls `plan.MigrateToBundles()`
+5. [ ] Register commands in init()
+6. [ ] Update help text
 
 ---
 
@@ -244,13 +244,13 @@ Key design decisions:
 > Point users to new plan create command
 
 **Requires:** T9
-**Status:** complete
+**Status:** blocked
 
 **Done when:**
-- [x] "Next steps" in `ralph init` mentions `ralph plan create <name>`
+- [ ] "Next steps" in `ralph init` mentions `ralph plan create <name>`
 
 **Subtasks:**
-1. [x] Update next steps text in `internal/cli/init.go`
+1. [ ] Update next steps text in `internal/cli/init.go`
 
 ---
 

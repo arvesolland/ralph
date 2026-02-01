@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Queue manages the plan queue lifecycle: pending → current → complete.
@@ -84,6 +85,39 @@ func resolvePath(path string) string {
 	return resolved
 }
 
+// planDir returns the directory containing the plan.
+// For bundles: returns BundleDir (the plan IS the directory)
+// For flat files: returns filepath.Dir(Path) (the directory containing the plan.md)
+func planDir(p *Plan) string {
+	if p.IsBundle() {
+		return p.BundleDir
+	}
+	return filepath.Dir(p.Path)
+}
+
+// uniqueCompleteName generates a unique name for completed bundles.
+// Format: name-YYYYMMDD or name-YYYYMMDD-N for collisions.
+// Example: "my-plan-20260201" or "my-plan-20260201-2"
+func (q *Queue) uniqueCompleteName(name string) string {
+	dateSuffix := time.Now().Format("20060102")
+	baseName := name + "-" + dateSuffix
+
+	// Check if base name is available
+	candidatePath := filepath.Join(q.completeDir(), baseName)
+	if _, err := os.Stat(candidatePath); os.IsNotExist(err) {
+		return baseName
+	}
+
+	// Add counter suffix for collisions
+	for i := 2; ; i++ {
+		candidateName := fmt.Sprintf("%s-%d", baseName, i)
+		candidatePath := filepath.Join(q.completeDir(), candidateName)
+		if _, err := os.Stat(candidatePath); os.IsNotExist(err) {
+			return candidateName
+		}
+	}
+}
+
 // Pending returns all plans in the pending/ directory, sorted by name.
 func (q *Queue) Pending() ([]*Plan, error) {
 	return q.listPlans(q.pendingDir())
@@ -109,6 +143,8 @@ func (q *Queue) Current() (*Plan, error) {
 }
 
 // Activate moves a plan from pending/ to current/.
+// For bundles: moves the entire directory.
+// For flat files: moves just the .md file.
 // Returns ErrQueueFull if current/ already has a plan.
 // Returns ErrPlanNotInPending if the plan is not in pending/.
 func (q *Queue) Activate(plan *Plan) error {
@@ -122,64 +158,125 @@ func (q *Queue) Activate(plan *Plan) error {
 	}
 
 	// Verify plan is in pending/
-	planDir := resolvePath(filepath.Dir(plan.Path))
+	pDir := planDir(plan)
+	parentDir := resolvePath(filepath.Dir(pDir))
 	pendingDir := resolvePath(q.pendingDir())
-	if planDir != pendingDir {
-		return ErrPlanNotInPending
+
+	// For flat files, the parent is the pending dir
+	// For bundles, the bundle itself is in pending, so parent == pending
+	if plan.IsBundle() {
+		if parentDir != pendingDir {
+			return ErrPlanNotInPending
+		}
+	} else {
+		resolvedPDir := resolvePath(pDir)
+		if resolvedPDir != pendingDir {
+			return ErrPlanNotInPending
+		}
 	}
 
-	// Move to current/
-	newPath := filepath.Join(q.currentDir(), filepath.Base(plan.Path))
-	if err := os.Rename(plan.Path, newPath); err != nil {
-		return fmt.Errorf("moving plan to current: %w", err)
+	if plan.IsBundle() {
+		// Move entire bundle directory
+		newBundleDir := filepath.Join(q.currentDir(), filepath.Base(plan.BundleDir))
+		if err := os.Rename(plan.BundleDir, newBundleDir); err != nil {
+			return fmt.Errorf("moving bundle to current: %w", err)
+		}
+		// Update plan's paths
+		plan.BundleDir = newBundleDir
+		plan.Path = filepath.Join(newBundleDir, "plan.md")
+	} else {
+		// Move just the .md file (legacy flat file)
+		newPath := filepath.Join(q.currentDir(), filepath.Base(plan.Path))
+		if err := os.Rename(plan.Path, newPath); err != nil {
+			return fmt.Errorf("moving plan to current: %w", err)
+		}
+		plan.Path = newPath
 	}
-
-	// Update plan's path
-	plan.Path = newPath
 
 	return nil
 }
 
 // Complete moves a plan from current/ to complete/.
+// For bundles: moves entire directory with date suffix (name-YYYYMMDD).
+// For flat files: moves just the .md file.
 // Returns ErrPlanNotInCurrent if the plan is not in current/.
 func (q *Queue) Complete(plan *Plan) error {
 	// Verify plan is in current/
-	planDir := resolvePath(filepath.Dir(plan.Path))
+	pDir := planDir(plan)
+	parentDir := resolvePath(filepath.Dir(pDir))
 	currentDir := resolvePath(q.currentDir())
-	if planDir != currentDir {
-		return ErrPlanNotInCurrent
+
+	if plan.IsBundle() {
+		if parentDir != currentDir {
+			return ErrPlanNotInCurrent
+		}
+	} else {
+		resolvedPDir := resolvePath(pDir)
+		if resolvedPDir != currentDir {
+			return ErrPlanNotInCurrent
+		}
 	}
 
-	// Move to complete/
-	newPath := filepath.Join(q.completeDir(), filepath.Base(plan.Path))
-	if err := os.Rename(plan.Path, newPath); err != nil {
-		return fmt.Errorf("moving plan to complete: %w", err)
+	if plan.IsBundle() {
+		// Move entire bundle directory with unique dated name
+		uniqueName := q.uniqueCompleteName(plan.Name)
+		newBundleDir := filepath.Join(q.completeDir(), uniqueName)
+		if err := os.Rename(plan.BundleDir, newBundleDir); err != nil {
+			return fmt.Errorf("moving bundle to complete: %w", err)
+		}
+		// Update plan's paths
+		plan.BundleDir = newBundleDir
+		plan.Path = filepath.Join(newBundleDir, "plan.md")
+	} else {
+		// Move just the .md file (legacy flat file)
+		newPath := filepath.Join(q.completeDir(), filepath.Base(plan.Path))
+		if err := os.Rename(plan.Path, newPath); err != nil {
+			return fmt.Errorf("moving plan to complete: %w", err)
+		}
+		plan.Path = newPath
 	}
-
-	// Update plan's path
-	plan.Path = newPath
 
 	return nil
 }
 
 // Reset moves a plan from current/ back to pending/.
+// For bundles: moves entire directory.
+// For flat files: moves just the .md file.
 // Returns ErrPlanNotInCurrent if the plan is not in current/.
 func (q *Queue) Reset(plan *Plan) error {
 	// Verify plan is in current/
-	planDir := resolvePath(filepath.Dir(plan.Path))
+	pDir := planDir(plan)
+	parentDir := resolvePath(filepath.Dir(pDir))
 	currentDir := resolvePath(q.currentDir())
-	if planDir != currentDir {
-		return ErrPlanNotInCurrent
+
+	if plan.IsBundle() {
+		if parentDir != currentDir {
+			return ErrPlanNotInCurrent
+		}
+	} else {
+		resolvedPDir := resolvePath(pDir)
+		if resolvedPDir != currentDir {
+			return ErrPlanNotInCurrent
+		}
 	}
 
-	// Move to pending/
-	newPath := filepath.Join(q.pendingDir(), filepath.Base(plan.Path))
-	if err := os.Rename(plan.Path, newPath); err != nil {
-		return fmt.Errorf("moving plan to pending: %w", err)
+	if plan.IsBundle() {
+		// Move entire bundle directory back to pending
+		newBundleDir := filepath.Join(q.pendingDir(), filepath.Base(plan.BundleDir))
+		if err := os.Rename(plan.BundleDir, newBundleDir); err != nil {
+			return fmt.Errorf("moving bundle to pending: %w", err)
+		}
+		// Update plan's paths
+		plan.BundleDir = newBundleDir
+		plan.Path = filepath.Join(newBundleDir, "plan.md")
+	} else {
+		// Move just the .md file (legacy flat file)
+		newPath := filepath.Join(q.pendingDir(), filepath.Base(plan.Path))
+		if err := os.Rename(plan.Path, newPath); err != nil {
+			return fmt.Errorf("moving plan to pending: %w", err)
+		}
+		plan.Path = newPath
 	}
-
-	// Update plan's path
-	plan.Path = newPath
 
 	return nil
 }
@@ -220,7 +317,10 @@ func (q *Queue) Status() (*QueueStatus, error) {
 	return status, nil
 }
 
-// listPlans lists all .md files in the given directory as plans.
+// listPlans lists all plans in the given directory.
+// Scans for both:
+// - Bundle directories (directories containing plan.md)
+// - Legacy flat .md files (for backwards compatibility)
 // Returns an empty slice if the directory doesn't exist.
 func (q *Queue) listPlans(dir string) ([]*Plan, error) {
 	entries, err := os.ReadDir(dir)
@@ -234,10 +334,22 @@ func (q *Queue) listPlans(dir string) ([]*Plan, error) {
 	var plans []*Plan
 	for _, entry := range entries {
 		if entry.IsDir() {
+			// Check if this is a bundle directory (contains plan.md)
+			bundleDir := filepath.Join(dir, entry.Name())
+			planPath := filepath.Join(bundleDir, "plan.md")
+			if _, err := os.Stat(planPath); err == nil {
+				// It's a bundle - load it
+				plan, err := Load(bundleDir)
+				if err != nil {
+					return nil, fmt.Errorf("loading bundle %s: %w", bundleDir, err)
+				}
+				plans = append(plans, plan)
+			}
+			// Skip directories that aren't bundles
 			continue
 		}
 
-		// Only process .md files
+		// Only process .md files (legacy flat files)
 		if filepath.Ext(entry.Name()) != ".md" {
 			continue
 		}
