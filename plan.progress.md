@@ -48,3 +48,30 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** None - straightforward implementation following existing patterns.
 
 **Next:** T4 - Update progress.go for bundle-aware paths OR T5/T6 (all require T1 which is complete)
+
+---
+### Iteration 4: T4, T5, T6 - Bundle-aware paths and queue operations
+**Completed:**
+- Confirmed T4 (progress.go bundle-aware) was already complete from commit a908cc8
+- Confirmed T5 (feedback.go bundle-aware) was already complete from commit fae213d
+- Updated plan.md to mark T4 and T5 as complete (plan file was out of sync)
+- Implemented T6: Updated `internal/plan/queue.go` to move directories for bundles:
+  - Added `planDir(p *Plan) string` helper that returns BundleDir for bundles, Dir(Path) for flat files
+  - Added `uniqueCompleteName(name string) string` for date suffix with collision counter (name-YYYYMMDD, name-YYYYMMDD-2, etc.)
+  - Updated `Activate()` to move entire bundle directory and update Plan.BundleDir/Path
+  - Updated `Complete()` to move bundle with unique dated name
+  - Updated `Reset()` to move bundle back to pending
+  - Updated `listPlans()` to scan for both bundle directories (containing plan.md) AND legacy flat .md files
+- Added comprehensive tests in `internal/plan/queue_test.go`:
+  - `TestQueue_Pending_WithBundles` - mix of bundles and flat files
+  - `TestQueue_Activate_Bundle` - moving bundle from pending to current
+  - `TestQueue_Complete_Bundle` - moving bundle to complete with date suffix
+  - `TestQueue_Complete_Bundle_Collision` - collision handling (-2, -3, etc.)
+  - `TestQueue_Reset_Bundle` - moving bundle back to pending
+  - `TestQueue_FullLifecycle_Bundle` - full activate/reset/complete cycle
+  - `TestQueue_UniqueCompleteName` - unit test for date suffix generation
+  - `TestPlanDir` - unit test for planDir helper
+
+**Gotcha:** The `listPlans()` function needs to support BOTH bundles and flat files for backwards compatibility during migration. It scans directories for plan.md and also processes standalone .md files.
+
+**Next:** T7 - Simplify worktree sync for bundles (requires T6, which is now complete)

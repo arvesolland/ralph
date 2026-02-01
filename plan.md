@@ -104,18 +104,18 @@ Key design decisions:
 > ProgressPath must work with both bundles and flat files
 
 **Requires:** T1
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `ProgressPath()` returns `{bundleDir}/progress.md` for bundles
-- [ ] `ProgressPath()` returns legacy path for flat files (backwards compat)
-- [ ] `AppendProgress()` includes progress percentage in iteration header
+- [x] `ProgressPath()` returns `{bundleDir}/progress.md` for bundles
+- [x] `ProgressPath()` returns legacy path for flat files (backwards compat)
+- [x] `AppendProgress()` includes progress percentage in iteration header
 
 **Subtasks:**
-1. [ ] Update `ProgressPath()` to check `p.BundleDir` first
-2. [ ] Update `AppendProgress()` to calculate and include progress in header format: `## Iteration N (YYYY-MM-DD HH:MM) - X/Y (Z%)`
-3. [ ] Add helper to strip template comments on first real entry
-4. [ ] Update tests in `internal/plan/progress_test.go`
+1. [x] Update `ProgressPath()` to check `p.BundleDir` first
+2. [x] Update `AppendProgress()` to calculate and include progress in header format: `## Iteration N (YYYY-MM-DD HH:MM) - X/Y (Z%)`
+3. [x] Add helper to strip template comments on first real entry
+4. [x] Update tests in `internal/plan/progress_test.go`
 
 ---
 
@@ -123,15 +123,15 @@ Key design decisions:
 > FeedbackPath must work with both bundles and flat files
 
 **Requires:** T1
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `FeedbackPath()` returns `{bundleDir}/feedback.md` for bundles
-- [ ] `FeedbackPath()` returns legacy path for flat files (backwards compat)
+- [x] `FeedbackPath()` returns `{bundleDir}/feedback.md` for bundles
+- [x] `FeedbackPath()` returns legacy path for flat files (backwards compat)
 
 **Subtasks:**
-1. [ ] Update `FeedbackPath()` to check `p.BundleDir` first
-2. [ ] Update tests in `internal/plan/feedback_test.go`
+1. [x] Update `FeedbackPath()` to check `p.BundleDir` first
+2. [x] Update tests in `internal/plan/feedback_test.go`
 
 ---
 
@@ -139,23 +139,23 @@ Key design decisions:
 > Queue operations must move entire bundle directories atomically
 
 **Requires:** T1
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `Activate()` moves entire bundle directory to current/
-- [ ] `Complete()` moves bundle to complete/ with date suffix (name-YYYYMMDD)
-- [ ] `Reset()` moves bundle back to pending/
-- [ ] `listPlans()` scans for directories only, skips files
-- [ ] Collision handling: name-YYYYMMDD-2, name-YYYYMMDD-3, etc.
+- [x] `Activate()` moves entire bundle directory to current/
+- [x] `Complete()` moves bundle to complete/ with date suffix (name-YYYYMMDD)
+- [x] `Reset()` moves bundle back to pending/
+- [x] `listPlans()` scans for directories only, skips files
+- [x] Collision handling: name-YYYYMMDD-2, name-YYYYMMDD-3, etc.
 
 **Subtasks:**
-1. [ ] Add `planDir(p *Plan) string` helper (returns BundleDir or Dir(Path))
-2. [ ] Add `uniqueCompleteName(name string) string` for date suffix with collision counter
-3. [ ] Update `Activate()` to move directory and update Plan.BundleDir/Path
-4. [ ] Update `Complete()` to move directory with unique name
-5. [ ] Update `Reset()` to move directory back to pending
-6. [ ] Update `listPlans()` to only process directories (skip files)
-7. [ ] Update tests in `internal/plan/queue_test.go`
+1. [x] Add `planDir(p *Plan) string` helper (returns BundleDir or Dir(Path))
+2. [x] Add `uniqueCompleteName(name string) string` for date suffix with collision counter
+3. [x] Update `Activate()` to move directory and update Plan.BundleDir/Path
+4. [x] Update `Complete()` to move directory with unique name
+5. [x] Update `Reset()` to move directory back to pending
+6. [x] Update `listPlans()` to only process directories (skip files)
+7. [x] Update tests in `internal/plan/queue_test.go`
 
 ---
 
