@@ -39,20 +39,20 @@ Key design decisions:
 > Foundation for all bundle operations - Plan must know if it's a bundle or flat file
 
 **Requires:** —
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `Plan` struct has `BundleDir string` field
-- [ ] `IsBundle() bool` method returns true when BundleDir is set
-- [ ] `Load()` detects directory vs file and sets fields accordingly
-- [ ] Existing tests still pass (backwards compatible)
+- [x] `Plan` struct has `BundleDir string` field
+- [x] `IsBundle() bool` method returns true when BundleDir is set
+- [x] `Load()` detects directory vs file and sets fields accordingly
+- [x] Existing tests still pass (backwards compatible)
 
 **Subtasks:**
-1. [ ] Add `BundleDir string` field to Plan struct in `internal/plan/plan.go`
-2. [ ] Add `IsBundle() bool` method to Plan
-3. [ ] Update `Load()` to check if path is directory, set BundleDir and load plan.md from inside
-4. [ ] Update `deriveName()` to use directory name for bundles
-5. [ ] Run `go test ./internal/plan/...` to verify no regressions
+1. [x] Add `BundleDir string` field to Plan struct in `internal/plan/plan.go`
+2. [x] Add `IsBundle() bool` method to Plan
+3. [x] Update `Load()` to check if path is directory, set BundleDir and load plan.md from inside
+4. [x] Update `deriveName()` to use directory name for bundles
+5. [x] Run `go test ./internal/plan/...` to verify no regressions
 
 ---
 
@@ -60,20 +60,20 @@ Key design decisions:
 > Enable progress tracking (e.g., "4/10 (40%)") needed for status display and scaffolding
 
 **Requires:** —
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `Progress` struct exists with Total, Completed, Percent fields
-- [ ] `CalculateProgress(tasks []Task) Progress` works correctly
-- [ ] `Progress.String()` returns "4/10 (40%)" format
-- [ ] `Progress.Bar(width int)` returns visual bar like "[████░░░░░░]"
+- [x] `Progress` struct exists with Total, Completed, Percent fields
+- [x] `CalculateProgress(tasks []Task) Progress` works correctly
+- [x] `Progress.String()` returns "4/10 (40%)" format
+- [x] `Progress.Bar(width int)` returns visual bar like "[████░░░░░░]"
 
 **Subtasks:**
-1. [ ] Add Progress struct to `internal/plan/task.go`
-2. [ ] Add `CalculateProgress()` function using existing `CountTotal()`/`CountComplete()`
-3. [ ] Add `String()` method for text format
-4. [ ] Add `Bar(width int)` method for visual progress bar
-5. [ ] Add tests in `internal/plan/task_test.go`
+1. [x] Add Progress struct to `internal/plan/task.go`
+2. [x] Add `CalculateProgress()` function using existing `CountTotal()`/`CountComplete()`
+3. [x] Add `String()` method for text format
+4. [x] Add `Bar(width int)` method for visual progress bar
+5. [x] Add tests in `internal/plan/task_test.go`
 
 ---
 
@@ -81,7 +81,7 @@ Key design decisions:
 > Core feature - create plan bundles with all files and proper headers
 
 **Requires:** T1
-**Status:** blocked
+**Status:** open
 
 **Done when:**
 - [ ] `CreateBundle(plansDir, name string) (*Plan, error)` creates complete bundle
@@ -104,7 +104,7 @@ Key design decisions:
 > ProgressPath must work with both bundles and flat files
 
 **Requires:** T1
-**Status:** blocked
+**Status:** open
 
 **Done when:**
 - [ ] `ProgressPath()` returns `{bundleDir}/progress.md` for bundles
@@ -123,7 +123,7 @@ Key design decisions:
 > FeedbackPath must work with both bundles and flat files
 
 **Requires:** T1
-**Status:** blocked
+**Status:** open
 
 **Done when:**
 - [ ] `FeedbackPath()` returns `{bundleDir}/feedback.md` for bundles
@@ -139,7 +139,7 @@ Key design decisions:
 > Queue operations must move entire bundle directories atomically
 
 **Requires:** T1
-**Status:** blocked
+**Status:** open
 
 **Done when:**
 - [ ] `Activate()` moves entire bundle directory to current/
@@ -225,7 +225,7 @@ Key design decisions:
 > Show progress bars and task counts in ralph status
 
 **Requires:** T2
-**Status:** blocked
+**Status:** open
 
 **Done when:**
 - [ ] Current plan shows progress bar: `[████████░░░░░░░░░░░░] 40%`
