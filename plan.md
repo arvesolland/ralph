@@ -60,20 +60,20 @@ Key design decisions:
 > Enable progress tracking (e.g., "4/10 (40%)") needed for status display and scaffolding
 
 **Requires:** —
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `Progress` struct exists with Total, Completed, Percent fields
-- [ ] `CalculateProgress(tasks []Task) Progress` works correctly
-- [ ] `Progress.String()` returns "4/10 (40%)" format
-- [ ] `Progress.Bar(width int)` returns visual bar like "[████░░░░░░]"
+- [x] `Progress` struct exists with Total, Completed, Percent fields
+- [x] `CalculateProgress(tasks []Task) Progress` works correctly
+- [x] `Progress.String()` returns "4/10 (40%)" format
+- [x] `Progress.Bar(width int)` returns visual bar like "[████░░░░░░]"
 
 **Subtasks:**
-1. [ ] Add Progress struct to `internal/plan/task.go`
-2. [ ] Add `CalculateProgress()` function using existing `CountTotal()`/`CountComplete()`
-3. [ ] Add `String()` method for text format
-4. [ ] Add `Bar(width int)` method for visual progress bar
-5. [ ] Add tests in `internal/plan/task_test.go`
+1. [x] Add Progress struct to `internal/plan/task.go`
+2. [x] Add `CalculateProgress()` function using existing `CountTotal()`/`CountComplete()`
+3. [x] Add `String()` method for text format
+4. [x] Add `Bar(width int)` method for visual progress bar
+5. [x] Add tests in `internal/plan/task_test.go`
 
 ---
 

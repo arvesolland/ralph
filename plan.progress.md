@@ -16,3 +16,16 @@ Iteration log - what was done, gotchas, and next steps.
 **Gotcha:** The `deriveName()` function signature changed to accept an `isBundle` parameter. This is a breaking change for any external callers, but the function is unexported so it's fine.
 
 **Next:** T2 - Add Progress type and calculation (no dependencies)
+
+---
+### Iteration 2: T2 - Add Progress type and calculation
+**Completed:**
+- Added `Progress` struct with `Total`, `Completed`, and `Percent` fields (`internal/plan/task.go:163-170`)
+- Added `CalculateProgress(tasks []Task) Progress` function that uses existing `CountTotal()` and `CountComplete()` (`internal/plan/task.go:172-183`)
+- Added `String()` method that returns format like "4/10 (40%)" (`internal/plan/task.go:185-188`)
+- Added `Bar(width int)` method that returns visual bar like "[████░░░░░░]" (`internal/plan/task.go:190-200`)
+- Added comprehensive tests in `internal/plan/task_test.go`: `TestCalculateProgress`, `TestProgress_String`, `TestProgress_Bar`
+
+**Gotcha:** The Bar() method calculates filled blocks based on `Completed/Total * width`, not `Percent/100 * width`, to ensure accurate representation even for edge cases.
+
+**Next:** T3 - Create bundle scaffolding functions (requires T1, which is complete)
