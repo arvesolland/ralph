@@ -139,23 +139,23 @@ Key design decisions:
 > Queue operations must move entire bundle directories atomically
 
 **Requires:** T1
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `Activate()` moves entire bundle directory to current/
-- [ ] `Complete()` moves bundle to complete/ with date suffix (name-YYYYMMDD)
-- [ ] `Reset()` moves bundle back to pending/
-- [ ] `listPlans()` scans for directories only, skips files
-- [ ] Collision handling: name-YYYYMMDD-2, name-YYYYMMDD-3, etc.
+- [x] `Activate()` moves entire bundle directory to current/
+- [x] `Complete()` moves bundle to complete/ with date suffix (name-YYYYMMDD)
+- [x] `Reset()` moves bundle back to pending/
+- [x] `listPlans()` scans for directories only, skips files
+- [x] Collision handling: name-YYYYMMDD-2, name-YYYYMMDD-3, etc.
 
 **Subtasks:**
-1. [ ] Add `planDir(p *Plan) string` helper (returns BundleDir or Dir(Path))
-2. [ ] Add `uniqueCompleteName(name string) string` for date suffix with collision counter
-3. [ ] Update `Activate()` to move directory and update Plan.BundleDir/Path
-4. [ ] Update `Complete()` to move directory with unique name
-5. [ ] Update `Reset()` to move directory back to pending
-6. [ ] Update `listPlans()` to only process directories (skip files)
-7. [ ] Update tests in `internal/plan/queue_test.go`
+1. [x] Add `planDir(p *Plan) string` helper (returns BundleDir or Dir(Path))
+2. [x] Add `uniqueCompleteName(name string) string` for date suffix with collision counter
+3. [x] Update `Activate()` to move directory and update Plan.BundleDir/Path
+4. [x] Update `Complete()` to move directory with unique name
+5. [x] Update `Reset()` to move directory back to pending
+6. [x] Update `listPlans()` to only process directories (skip files)
+7. [x] Update tests in `internal/plan/queue_test.go`
 
 ---
 
@@ -163,7 +163,7 @@ Key design decisions:
 > Remove complex filepath.Rel() gymnastics - use bundle name as key
 
 **Requires:** T6
-**Status:** blocked
+**Status:** open
 
 **Done when:**
 - [ ] `SyncToWorktree()` copies bundle files to `{worktree}/plans/current/{name}/`

@@ -73,3 +73,20 @@ Iteration log - what was done, gotchas, and next steps.
 - All acceptance criteria verified
 
 **Next:** T6 - Update queue.go to move directories (or T10 - Enhance status command with progress)
+
+---
+### Iteration 7: T6 - Update queue.go to move directories
+**Completed:**
+- Verified T6 implementation already exists in `internal/plan/queue.go`
+- `planDir()` helper at lines 91-96 returns BundleDir for bundles, filepath.Dir(Path) for flat files
+- `uniqueCompleteName()` at lines 98-119 generates date suffix with collision counter (name-YYYYMMDD, name-YYYYMMDD-2, etc.)
+- `Activate()` at lines 150-197 moves entire bundle directory to current/ and updates Plan.BundleDir/Path
+- `Complete()` at lines 203-240 moves bundle to complete/ with unique dated name
+- `Reset()` at lines 246-282 moves bundle back to pending/
+- `listPlans()` at lines 325-381 handles both bundles (directories) and legacy flat files for backwards compatibility
+- Comprehensive tests exist: TestQueue_Activate_Bundle, TestQueue_Complete_Bundle, TestQueue_Complete_Bundle_Collision, TestQueue_Reset_Bundle, TestQueue_FullLifecycle_Bundle, TestQueue_UniqueCompleteName, TestPlanDir
+- All 24 queue tests pass
+
+**Note:** listPlans() correctly handles BOTH bundles and flat files for backwards compatibility during migration period, per the Context section "Must support both flat files and bundles during migration period"
+
+**Next:** T7 - Simplify worktree sync for bundles (now unblocked), or T10 - Enhance status command with progress
