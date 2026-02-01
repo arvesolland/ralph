@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- add bundle scaffolding functions
 - mark T1 and T2 complete, update task status
 - add Progress type for task completion tracking
 - address code review findings

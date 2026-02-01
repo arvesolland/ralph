@@ -35,3 +35,17 @@ Iteration log - what was done, gotchas, and next steps.
 - Created this progress file
 
 **Next:** T3 - Create bundle scaffolding functions
+
+---
+### Iteration 4: T3 - Create bundle scaffolding functions
+**Completed:**
+- Verified T3 implementation already exists in `internal/plan/bundle.go`
+- `CreateBundle()` at line 104 creates complete bundle directory with all files
+- `scaffoldPlan()` at line 152 creates plan.md with template (Context, Rules, Tasks, Discovered sections)
+- `scaffoldProgress()` at line 160 creates progress.md with header and format example
+- `scaffoldFeedback()` at line 167 creates feedback.md with Pending/Processed sections
+- Tests exist in `internal/plan/bundle_test.go` and all pass
+- All acceptance criteria verified: duplicate name detection, empty name rejection, proper sanitization
+
+**Commit:** (previous iteration - `dee638f feat(plan): add bundle scaffolding functions`)
+**Next:** T4 - Update progress.go for bundle-aware paths (or T5, T10 - all are unblocked)
