@@ -232,11 +232,19 @@ When in doubt, do one subtask and end.
 
 When ALL tasks in the plan are complete (all acceptance criteria verified):
 
+**BEFORE outputting the completion marker, you MUST:**
+1. Update ALL checkboxes in the plan file: `[ ]` → `[x]` for every subtask and "Done when" item
+2. Update ALL task statuses: `**Status:** open` → `**Status:** complete`
+3. Commit these plan file changes
+
+**The verification system checks the plan file checkboxes.** If you output the completion marker but the plan file still has unchecked boxes, verification will fail and you'll have to try again.
+
+Only after updating the plan file, output:
 ```
 <promise>COMPLETE</promise>
 ```
 
-Output this marker and end your response. The orchestrator will handle the rest.
+The orchestrator will verify that all checkboxes are checked before accepting completion.
 
 If tasks remain incomplete, end your response normally after completing your subtask(s).
 
@@ -303,9 +311,9 @@ Resume: Once public, I will verify anonymous pull works and complete T1.
 7. ☐ Select next task/subtask
 8. ☐ Implement (or signal `<blocker>` if human action required)
 9. ☐ Validate (lint + test)
-10. ☐ Update plan checkboxes
+10. ☐ Update plan checkboxes: `[ ]` → `[x]`
 11. ☐ **Verify acceptance criteria if task may be complete**
-12. ☐ Update task status if ALL criteria met
+12. ☐ Update task status: `**Status:** open` → `**Status:** complete`
 13. ☐ **Update progress file** (EVERY iteration - log what you did)
 14. ☐ **Commit ALL changes** (code + plan + progress file - always include progress file)
-15. ☐ Output `<promise>COMPLETE</promise>` if plan done, else end normally
+15. ☐ **If ALL tasks complete:** Update ALL remaining checkboxes, commit, THEN output `<promise>COMPLETE</promise>`

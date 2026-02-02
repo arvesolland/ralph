@@ -52,7 +52,8 @@ func TestVerify_Complete(t *testing.T) {
 	}
 }
 
-func TestVerify_Incomplete(t *testing.T) {
+func TestVerify_Incomplete_UncheckedBoxes(t *testing.T) {
+	// Programmatic check catches unchecked boxes before LLM is called
 	mock := &mockRunner{response: "NO: Task 2 is not checked off"}
 	p := &plan.Plan{
 		Name:    "test-plan",
@@ -67,8 +68,39 @@ func TestVerify_Incomplete(t *testing.T) {
 	if result.Verified {
 		t.Errorf("expected Verified=false, got true")
 	}
-	if result.Reason != "Task 2 is not checked off" {
-		t.Errorf("expected specific reason, got %q", result.Reason)
+	// Should be caught by programmatic check, not LLM
+	if !strings.Contains(result.Reason, "unchecked checkboxes") {
+		t.Errorf("expected reason about unchecked checkboxes, got %q", result.Reason)
+	}
+	// LLM should NOT be called since programmatic check fails
+	if mock.callCount != 0 {
+		t.Errorf("expected LLM to not be called, got %d calls", mock.callCount)
+	}
+}
+
+func TestVerify_Incomplete_LLMRejects(t *testing.T) {
+	// When all checkboxes are checked but LLM still rejects (e.g., semantic issues)
+	mock := &mockRunner{response: "NO: The implementation doesn't match the acceptance criteria"}
+	p := &plan.Plan{
+		Name:    "test-plan",
+		Content: "# Plan\n\n**Status:** complete\n\n- [x] Task 1\n- [x] Task 2",
+	}
+
+	result, err := Verify(context.Background(), p, mock, "")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Verified {
+		t.Errorf("expected Verified=false, got true")
+	}
+	// LLM response should be used
+	if !strings.Contains(result.Reason, "acceptance criteria") {
+		t.Errorf("expected LLM reason, got %q", result.Reason)
+	}
+	// LLM should be called since programmatic check passes
+	if mock.callCount != 1 {
+		t.Errorf("expected LLM to be called once, got %d calls", mock.callCount)
 	}
 }
 
@@ -314,6 +346,56 @@ func TestTruncate(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("truncate(%q, %d) = %q, want %q", tt.input, tt.maxLen, got, tt.want)
 		}
+	}
+}
+
+func TestCheckCheckboxes(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		wantOK  bool
+	}{
+		{
+			name:    "all checked",
+			content: "# Plan\n- [x] Task 1\n- [x] Task 2",
+			wantOK:  true,
+		},
+		{
+			name:    "one unchecked",
+			content: "# Plan\n- [x] Task 1\n- [ ] Task 2",
+			wantOK:  false,
+		},
+		{
+			name:    "all unchecked",
+			content: "# Plan\n- [ ] Task 1\n- [ ] Task 2",
+			wantOK:  false,
+		},
+		{
+			name:    "mixed case X",
+			content: "# Plan\n- [X] Task 1\n- [x] Task 2",
+			wantOK:  true,
+		},
+		{
+			name:    "no checkboxes",
+			content: "# Plan\nJust text, no tasks",
+			wantOK:  true,
+		},
+		{
+			name:    "nested unchecked",
+			content: "# Plan\n- [x] Task 1\n  - [x] Subtask 1\n  - [ ] Subtask 2",
+			wantOK:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &plan.Plan{Content: tt.content}
+			reason := checkCheckboxes(p)
+			gotOK := reason == ""
+			if gotOK != tt.wantOK {
+				t.Errorf("checkCheckboxes() ok=%v, want %v (reason: %s)", gotOK, tt.wantOK, reason)
+			}
+		})
 	}
 }
 

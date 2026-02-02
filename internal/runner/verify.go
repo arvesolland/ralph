@@ -53,12 +53,24 @@ Your response must start with either "YES" or "NO:". Be specific about what is i
 var yesNoRegex = regexp.MustCompile(`(?im)^(YES|NO)\s*:?\s*(.*)`)
 
 // Verify checks if a plan is complete using a fast model for verification.
-// It builds a prompt with the plan state and asks the model to verify completion.
+// It first performs a quick programmatic check of checkboxes, then uses an LLM
+// for semantic verification.
 // The model parameter specifies which model to use; if empty, uses DefaultVerificationModel.
 // Returns (true, "", nil) if verified complete.
 // Returns (false, reason, nil) if not complete, with an explanation.
 // Returns (false, "", err) on execution errors.
 func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*VerificationResult, error) {
+	// STEP 1: Quick programmatic check of checkboxes
+	// This catches the common case where agent claims completion but didn't update checkboxes
+	if reason := checkCheckboxes(p); reason != "" {
+		return &VerificationResult{
+			Verified:    false,
+			Reason:      reason,
+			RawResponse: "",
+		}, nil
+	}
+
+	// STEP 2: LLM verification for semantic check
 	// Build the verification prompt with plan content
 	prompt := buildVerificationPrompt(p)
 
@@ -94,6 +106,32 @@ func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*Ve
 		Reason:      reason,
 		RawResponse: result.TextContent,
 	}, nil
+}
+
+// checkCheckboxes performs a quick programmatic check that all checkboxes are checked.
+// Returns empty string if all checkboxes are checked, otherwise returns explanation.
+func checkCheckboxes(p *plan.Plan) string {
+	// Count unchecked checkboxes in the plan content
+	uncheckedCount := strings.Count(p.Content, "[ ]")
+	checkedCount := strings.Count(p.Content, "[x]") + strings.Count(p.Content, "[X]")
+
+	if uncheckedCount > 0 {
+		return fmt.Sprintf("Plan has %d unchecked checkboxes ([ ]). "+
+			"You must update the plan file to check off all completed items ([x]) "+
+			"before outputting the completion marker. "+
+			"Currently: %d checked, %d unchecked.",
+			uncheckedCount, checkedCount, uncheckedCount)
+	}
+
+	// Also check using the parsed task structure
+	incomplete := findIncompleteTasks(p.Tasks, "")
+	if len(incomplete) > 0 {
+		return fmt.Sprintf("Plan has %d incomplete tasks: %s. "+
+			"Update task status to complete and check all subtask boxes.",
+			len(incomplete), strings.Join(incomplete, "; "))
+	}
+
+	return ""
 }
 
 // buildVerificationPrompt creates the prompt for plan verification.

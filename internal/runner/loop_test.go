@@ -126,10 +126,11 @@ func TestIterationLoop_Run_CompletesSuccessfully(t *testing.T) {
 	os.MkdirAll(planDir, 0755)
 
 	planPath := filepath.Join(planDir, "test-plan.md")
+	// Plan has checked boxes - simulates agent having updated the plan before claiming completion
 	planContent := `# Plan: Test
-**Status:** open
+**Status:** complete
 ## Tasks
-- [ ] Task 1
+- [x] Task 1
 `
 	os.WriteFile(planPath, []byte(planContent), 0644)
 

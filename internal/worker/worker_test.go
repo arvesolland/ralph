@@ -139,14 +139,14 @@ func TestWorker_RunOnce_ActivatesPlan(t *testing.T) {
 	os.MkdirAll(filepath.Join(queueDir, "current"), 0755)
 	os.MkdirAll(filepath.Join(queueDir, "complete"), 0755)
 
-	// Create a test plan
+	// Create a test plan with checked boxes (simulates agent having updated plan)
 	planContent := `# Test Plan
 
-**Status:** pending
+**Status:** complete
 
 ## Tasks
 
-- [ ] Task 1
+- [x] Task 1
 `
 	planPath := filepath.Join(queueDir, "pending", "test-plan.md")
 	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
@@ -292,14 +292,14 @@ func TestWorker_RunOnce_ResumesCurrent(t *testing.T) {
 	os.MkdirAll(filepath.Join(queueDir, "current"), 0755)
 	os.MkdirAll(filepath.Join(queueDir, "complete"), 0755)
 
-	// Create a test plan directly in current/
+	// Create a test plan directly in current/ with checked boxes (simulates agent having updated plan)
 	planContent := `# Test Plan
 
-**Status:** pending
+**Status:** complete
 
 ## Tasks
 
-- [ ] Task 1
+- [x] Task 1
 `
 	planPath := filepath.Join(queueDir, "current", "test-plan.md")
 	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
