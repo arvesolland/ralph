@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- improve verification to check checkboxes before LLM verification
+- add --force flag to TestReset integration test
 - add integration test for blocker flow from Claude output to Slack
 - write Slack replies to correct feedback path for plan bundles
 - use Claude to create PRs with intelligent descriptions
