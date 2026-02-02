@@ -98,13 +98,15 @@ Integration test: verify Ralph can complete a single-task plan.
 2. [ ] Create file `+"`output/marker.txt`"+` containing exactly "ralph-test-complete"
 `)
 
-	// Run ralph
-	ws.RunRalph(t, "run", "plans/pending/test-plan", "--max", fmt.Sprintf("%d", maxIterations))
+	// Run ralph with verbose mode for debugging
+	// Note: `ralph run` runs directly on the current branch without creating feature branches
+	// Use `ralph worker` to test full queue workflow with branch creation
+	ws.RunRalph(t, "run", "plans/pending/test-plan", "--max", fmt.Sprintf("%d", maxIterations), "-v")
 
 	// Verify results
 	ws.AssertFileExists(t, "output/marker.txt", "Marker file should be created")
 	ws.AssertFileContains(t, "output/marker.txt", "ralph-test-complete", "Marker should have correct content")
-	ws.AssertBranchExists(t, "feat/test-plan", "Feature branch should be created")
+	// Note: `ralph run` doesn't create feature branches - that's the worker's job
 }
 
 // =============================================================================
@@ -152,7 +154,7 @@ Test that Ralph respects task dependencies (T2 requires T1).
 2. [ ] Create `+"`output/second.txt`"+` with content "step-2-done"
 `)
 
-	ws.RunRalph(t, "run", "plans/pending/test-plan", "--max", fmt.Sprintf("%d", maxIterations))
+	ws.RunRalph(t, "run", "plans/pending/test-plan", "--max", fmt.Sprintf("%d", maxIterations), "-v")
 
 	// Both files should exist
 	ws.AssertFileExists(t, "output/first.txt", "First file should exist")
@@ -192,7 +194,7 @@ Test that progress.md is updated during execution.
 2. [ ] Create `+"`output/encoded.txt`"+` with any base64-encoded string
 `)
 
-	ws.RunRalph(t, "run", "plans/pending/test-plan", "--max", fmt.Sprintf("%d", maxIterations))
+	ws.RunRalph(t, "run", "plans/pending/test-plan", "--max", fmt.Sprintf("%d", maxIterations), "-v")
 
 	ws.AssertFileExists(t, "output/encoded.txt", "Encoded file should exist")
 
@@ -238,7 +240,7 @@ Test worker picks up plan from pending, processes in worktree, and completes.
 `)
 
 	// Run worker with --once --merge
-	ws.RunRalph(t, "worker", "--once", "--merge", "--max", fmt.Sprintf("%d", maxIterations))
+	ws.RunRalph(t, "worker", "--once", "--merge", "--max", fmt.Sprintf("%d", maxIterations), "-v")
 
 	// Main worktree should stay on main
 	ws.AssertOnBranch(t, "main", "Main worktree should stay on main")
@@ -289,7 +291,7 @@ func TestDirtyState(t *testing.T) {
 `)
 
 	// Worker should succeed despite dirty main worktree
-	ws.RunRalph(t, "worker", "--once", "--merge", "--max", fmt.Sprintf("%d", maxIterations))
+	ws.RunRalph(t, "worker", "--once", "--merge", "--max", fmt.Sprintf("%d", maxIterations), "-v")
 
 	// Dirty file should still exist (not lost)
 	ws.AssertFileExists(t, "dirty-file.txt", "Dirty file should be preserved")
@@ -399,7 +401,7 @@ Verifies all Ralph core principles:
 `)
 
 	// Run worker
-	ws.RunRalph(t, "worker", "--once", "--merge", "--max", "10")
+	ws.RunRalph(t, "worker", "--once", "--merge", "--max", "10", "-v")
 
 	// PRINCIPLE 1 & 2: Tasks completed in dependency order
 	ws.AssertFileExists(t, "output/step1.txt", "P1: T1 completed")
@@ -493,8 +495,8 @@ func TestReset(t *testing.T) {
 		t.Fatalf("Failed to create plan: %v", err)
 	}
 
-	// Run reset
-	ws.RunRalph(t, "reset")
+	// Run reset (--force to skip confirmation prompt)
+	ws.RunRalph(t, "reset", "--force")
 
 	// Plan should be back in pending/
 	ws.AssertDirNotExists(t, "plans/current/test-plan", "Plan should be removed from current/")
