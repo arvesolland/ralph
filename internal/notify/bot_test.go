@@ -603,3 +603,81 @@ func TestWriteFeedback_Integration(t *testing.T) {
 		t.Errorf("feedback should contain message, got: %s", feedbackContent)
 	}
 }
+
+func TestWriteFeedback_Bundle(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create thread tracker
+	trackerPath := filepath.Join(tmpDir, "threads.json")
+	tracker, err := NewThreadTracker(trackerPath)
+	if err != nil {
+		t.Fatalf("failed to create tracker: %v", err)
+	}
+
+	// Set up a thread
+	if err := tracker.Set("bundle-plan", &ThreadInfo{
+		ThreadTS:  "1234567890.123456",
+		ChannelID: "C123",
+	}); err != nil {
+		t.Fatalf("failed to set thread: %v", err)
+	}
+
+	// Create plan base path with a bundle directory
+	planDir := filepath.Join(tmpDir, "plans", "current")
+	bundleDir := filepath.Join(planDir, "bundle-plan")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatalf("failed to create bundle dir: %v", err)
+	}
+
+	// Create plan.md inside the bundle
+	planPath := filepath.Join(bundleDir, "plan.md")
+	if err := os.WriteFile(planPath, []byte("# Test Plan\n"), 0644); err != nil {
+		t.Fatalf("failed to create plan.md: %v", err)
+	}
+
+	cfg := BotConfig{
+		BotToken:      "xoxb-test",
+		AppToken:      "xapp-test",
+		ChannelID:     "C123",
+		ThreadTracker: tracker,
+		PlanBasePath:  planDir,
+	}
+
+	bot := NewSocketModeBot(cfg)
+	if bot == nil {
+		t.Fatal("expected non-nil bot")
+	}
+
+	// Write feedback
+	err = bot.writeFeedback("bundle-plan", "U456", "Bundle test message")
+	if err != nil {
+		t.Fatalf("writeFeedback failed: %v", err)
+	}
+
+	// Verify feedback file is in the bundle directory
+	feedbackPath := filepath.Join(bundleDir, "feedback.md")
+	if _, err := os.Stat(feedbackPath); err != nil {
+		t.Fatalf("feedback.md should be in bundle dir: %v", err)
+	}
+
+	// Read and verify content
+	p := &plan.Plan{
+		Name:      "bundle-plan",
+		Path:      planPath,
+		BundleDir: bundleDir,
+	}
+	feedbackContent, err := plan.ReadFeedback(p)
+	if err != nil {
+		t.Fatalf("ReadFeedback failed: %v", err)
+	}
+
+	if !contains(feedbackContent, "Bundle test message") {
+		t.Errorf("feedback should contain message, got: %s", feedbackContent)
+	}
+
+	// Verify it was NOT written to the legacy location
+	legacyPath := filepath.Join(planDir, "bundle-plan.feedback.md")
+	if _, err := os.Stat(legacyPath); err == nil {
+		t.Error("feedback should NOT be at legacy path")
+	}
+}

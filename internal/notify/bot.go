@@ -302,10 +302,23 @@ func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
 		}
 	}
 
-	// Create a minimal plan for feedback path calculation
-	p := &plan.Plan{
-		Name: planName,
-		Path: filepath.Join(b.planBasePath, planName+".md"),
+	// Check if plan is a bundle (directory) or flat file
+	bundleDir := filepath.Join(b.planBasePath, planName)
+	var p *plan.Plan
+
+	if info, err := os.Stat(bundleDir); err == nil && info.IsDir() {
+		// Bundle: feedback goes in {bundleDir}/feedback.md
+		p = &plan.Plan{
+			Name:      planName,
+			Path:      filepath.Join(bundleDir, "plan.md"),
+			BundleDir: bundleDir,
+		}
+	} else {
+		// Legacy flat file: feedback goes in {planBasePath}/{planName}.feedback.md
+		p = &plan.Plan{
+			Name: planName,
+			Path: filepath.Join(b.planBasePath, planName+".md"),
+		}
 	}
 
 	// Append to feedback file
