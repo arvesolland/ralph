@@ -196,16 +196,24 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 }
 
 // runIteration executes a single iteration of the loop.
+// Debug logging throughout helps diagnose hangs and performance issues in production.
 func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
+	log.Debug("Building prompt for iteration %d", l.ctx.Iteration)
+
 	// Build the prompt
 	prompt, err := l.buildPrompt()
 	if err != nil {
 		return nil, fmt.Errorf("building prompt: %w", err)
 	}
 
+	log.Debug("Prompt built successfully (%d bytes)", len(prompt))
+
 	// Set up options for Claude
 	opts := DefaultOptions()
 	opts.WorkDir = l.worktreePath
+	opts.NoPermissions = true // Skip interactive permission prompts
+
+	log.Debug("Starting Claude CLI execution (timeout: %v)", l.iterationTimeout)
 
 	// Create timeout context for this iteration
 	iterCtx, cancel := context.WithTimeout(ctx, l.iterationTimeout)
@@ -214,8 +222,11 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 	// Run Claude
 	result, err := l.runner.Run(iterCtx, prompt, opts)
 	if err != nil {
+		log.Debug("Claude execution failed: %v", err)
 		return result, fmt.Errorf("claude execution: %w", err)
 	}
+
+	log.Debug("Claude execution completed (duration: %v, complete: %v)", result.Duration, result.IsComplete)
 
 	// Reload the plan to get updated content
 	updatedPlan, err := plan.Load(l.plan.Path)

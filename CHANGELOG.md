@@ -143,6 +143,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update prompt to commit plan and progress files together
 - Add retry logic and prevent progress files from being treated as plans
 
+### Documentation
+- update changelog for recent fixes
+
 ## [1.1.0] - 2026-01-28
 
 ### Added

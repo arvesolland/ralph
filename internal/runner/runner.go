@@ -113,10 +113,15 @@ func (r *CLIRunner) Run(ctx context.Context, prompt string, opts Options) (*Resu
 }
 
 // runOnce executes a single Claude CLI invocation.
+// Debug logging throughout helps diagnose hangs, timeouts, and process lifecycle issues.
 func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*Result, error) {
+	log.Debug("runOnce: building command")
+
 	// Build the command
 	cmd := BuildCommand(prompt, opts)
 	cmd.Stdin = strings.NewReader(prompt)
+
+	log.Debug("runOnce: command built: %s", CommandString(cmd))
 
 	// Set up pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()
@@ -141,18 +146,26 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 	}()
 
 	// Start the command
-	log.Debug("Starting Claude CLI: %s", CommandString(cmd))
+	log.Info("Executing: %s", CommandString(cmd))
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start claude: %w", err)
 	}
+	log.Debug("runOnce: Claude CLI process started (pid: %d)", cmd.Process.Pid)
 
-	// Set up streaming parser
+	// Set up streaming parser for JSON output, or direct capture for text.
+	// Text format support allows running Claude with --output-format=text for simpler output.
 	parser := NewStreamParser()
-	parser.OnText = func(text string) {
-		// Real-time output to user
-		fmt.Print(text)
+	var textOutputBuf strings.Builder
+	useStreamParser := opts.OutputFormat == "" || opts.OutputFormat == "stream-json"
+
+	if useStreamParser {
+		parser.OnText = func(text string) {
+			// Real-time output to user
+			fmt.Print(text)
+		}
 	}
 
+	log.Debug("runOnce: collecting stderr")
 	// Collect stderr in background
 	var stderrBuf strings.Builder
 	stderrDone := make(chan struct{})
@@ -161,13 +174,21 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 		close(stderrDone)
 	}()
 
+	log.Debug("runOnce: starting stdout reader (stream parser: %v)", useStreamParser)
 	// Stream and parse stdout
 	streamDone := make(chan error, 1)
 	go func() {
-		err := parser.ParseReader(stdout)
-		streamDone <- err
+		if useStreamParser {
+			err := parser.ParseReader(stdout)
+			streamDone <- err
+		} else {
+			// For text format, capture raw output
+			_, err := io.Copy(&textOutputBuf, stdout)
+			streamDone <- err
+		}
 	}()
 
+	log.Debug("runOnce: waiting for process completion or context cancellation")
 	// Wait for completion or context cancellation
 	waitDone := make(chan error, 1)
 	go func() {
@@ -178,7 +199,7 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 	select {
 	case <-ctx.Done():
 		// Context cancelled/timeout - terminate the process
-		log.Warn("Context cancelled, terminating Claude process")
+		log.Warn("Context cancelled, terminating Claude process (pid: %d)", cmd.Process.Pid)
 		if termErr := r.terminateProcess(cmd); termErr != nil {
 			log.Error("Failed to terminate process: %v", termErr)
 		}
@@ -206,16 +227,31 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 
 	case waitErr = <-waitDone:
 		// Process finished normally
+		log.Debug("runOnce: Claude process finished (exit error: %v)", waitErr)
 	}
 
 	// Wait for stream parsing to complete
+	log.Debug("runOnce: waiting for stream parser to complete")
 	<-streamDone
+	log.Debug("runOnce: waiting for stderr collection to complete")
 	<-stderrDone
+	log.Debug("runOnce: all goroutines finished")
 
 	// Build result
-	result := &Result{
-		Output:      parser.FullOutput(),
-		TextContent: parser.TextContent(),
+	var result *Result
+	if useStreamParser {
+		result = &Result{
+			Output:      parser.FullOutput(),
+			TextContent: parser.TextContent(),
+		}
+	} else {
+		// For text format, use the raw captured output
+		textOutput := textOutputBuf.String()
+		result = &Result{
+			Output:      textOutput,
+			TextContent: textOutput,
+		}
+		log.Debug("runOnce: text output captured (%d bytes)", len(textOutput))
 	}
 
 	// Check for completion marker
