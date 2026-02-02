@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add proper timeout handling for verification calls to prevent infinite hangs
 
 ### Changed
+- write Slack replies to correct feedback path for plan bundles
 - use Claude to create PRs with intelligent descriptions
 - correct context.json path and bundle file references in prompts
 - update for plan bundles and new integration tests
