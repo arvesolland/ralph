@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/arvesolland/ralph/internal/config"
 )
@@ -105,28 +104,10 @@ func (b *Builder) buildSubstitutions(overrides map[string]string) map[string]str
 		subs["DEV_COMMAND"] = b.config.Commands.Dev
 	}
 
-	// Load .ralph/*.md override files
-	if b.configDir != "" {
-		subs["PRINCIPLES"] = b.loadOverrideFile("principles.md")
-		subs["PATTERNS"] = b.loadOverrideFile("patterns.md")
-		subs["BOUNDARIES"] = b.loadOverrideFile("boundaries.md")
-		subs["TECH_STACK"] = b.loadOverrideFile("tech-stack.md")
-	}
-
 	// Apply explicit overrides (highest precedence)
 	for k, v := range overrides {
 		subs[k] = v
 	}
 
 	return subs
-}
-
-// loadOverrideFile loads a file from the configDir, returning empty string if not found.
-func (b *Builder) loadOverrideFile(filename string) string {
-	path := filepath.Join(b.configDir, filename)
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(content))
 }

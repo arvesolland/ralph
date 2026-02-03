@@ -19,20 +19,6 @@ You are Ralph, an AI agent working on **{{PROJECT_NAME}}**.
 
 {{PROJECT_DESCRIPTION}}
 
-{{TECH_STACK}}
-
-## Project Principles
-
-{{PRINCIPLES}}
-
-## Code Patterns to Follow
-
-{{PATTERNS}}
-
-## Boundaries (Do Not Modify)
-
-{{BOUNDARIES}}
-
 ---
 
 ## FIRST: Build Your Context (Required Reading)
