@@ -4,12 +4,19 @@ package runner
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/arvesolland/ralph/internal/plan"
 )
+
+// IsAPIKeyAvailable checks if the ANTHROPIC_API_KEY environment variable is set.
+// This is required for AI-powered verification.
+func IsAPIKeyAvailable() bool {
+	return os.Getenv("ANTHROPIC_API_KEY") != ""
+}
 
 // VerificationTimeout is the default timeout for verification requests.
 // Verification uses a shorter timeout since Haiku is fast.

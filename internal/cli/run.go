@@ -2,12 +2,14 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/arvesolland/ralph/internal/config"
@@ -84,6 +86,21 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		log.Warn("Failed to load config, using defaults: %v", err)
 		cfg = config.Defaults()
+	}
+
+	// Check for API key - warn if verification won't work
+	if !runner.IsAPIKeyAvailable() {
+		log.Warn("ANTHROPIC_API_KEY not set - plan verification will be skipped")
+		log.Warn("Plans may be marked complete without AI verification")
+		fmt.Print("Continue without verification? [y/N]: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input != "y" && input != "yes" {
+			log.Info("Set ANTHROPIC_API_KEY and try again")
+			return nil
+		}
 	}
 
 	// Determine worktree path (current directory for now - worker will handle actual worktree)

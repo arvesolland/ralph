@@ -2,11 +2,13 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -181,6 +183,21 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		log.Warn("Received signal %v, stopping after current iteration...", sig)
 		cancel()
 	}()
+
+	// Check for API key - warn if verification won't work
+	if !runner.IsAPIKeyAvailable() {
+		log.Warn("ANTHROPIC_API_KEY not set - plan verification will be skipped")
+		log.Warn("Plans may be marked complete without AI verification")
+		fmt.Print("Continue without verification? [y/N]: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input != "y" && input != "yes" {
+			log.Info("Set ANTHROPIC_API_KEY and try again")
+			return nil
+		}
+	}
 
 	// Run the worker
 	log.Info("Worker starting...")

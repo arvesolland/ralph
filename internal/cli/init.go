@@ -124,26 +124,33 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Extract project name and description using AI
-	log.Info("Extracting project info...")
-	projectInfo, err := extractProjectInfo(cwd)
-	if err != nil {
-		log.Debug("AI extraction failed: %v", err)
-		// Fall back to folder name
-		cfg.Project.Name = filepath.Base(cwd)
-		log.Info("  Project name: %s (from folder)", cfg.Project.Name)
-	} else {
-		if projectInfo.Name != "" {
-			cfg.Project.Name = projectInfo.Name
-			log.Info("  Project name: %s", cfg.Project.Name)
-		} else {
+	// Extract project name and description using AI (if available)
+	// This is optional - gracefully falls back to folder name if Claude CLI
+	// is not available or ANTHROPIC_API_KEY is not set
+	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		log.Info("Extracting project info...")
+		projectInfo, err := extractProjectInfo(cwd)
+		if err != nil {
+			log.Debug("AI extraction failed: %v", err)
 			cfg.Project.Name = filepath.Base(cwd)
 			log.Info("  Project name: %s (from folder)", cfg.Project.Name)
+		} else {
+			if projectInfo.Name != "" {
+				cfg.Project.Name = projectInfo.Name
+				log.Info("  Project name: %s", cfg.Project.Name)
+			} else {
+				cfg.Project.Name = filepath.Base(cwd)
+				log.Info("  Project name: %s (from folder)", cfg.Project.Name)
+			}
+			if projectInfo.Description != "" {
+				cfg.Project.Description = projectInfo.Description
+				log.Info("  Description: %s", cfg.Project.Description)
+			}
 		}
-		if projectInfo.Description != "" {
-			cfg.Project.Description = projectInfo.Description
-			log.Info("  Description: %s", cfg.Project.Description)
-		}
+	} else {
+		// No API key - use folder name as default
+		cfg.Project.Name = filepath.Base(cwd)
+		log.Info("Project name: %s (set ANTHROPIC_API_KEY for AI extraction)", cfg.Project.Name)
 	}
 
 	// Write config file
