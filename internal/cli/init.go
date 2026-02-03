@@ -76,6 +76,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 		log.Debug("Created worktrees .gitignore")
 	}
 
+	// Add .ralph/ to root .gitignore
+	rootGitignore := filepath.Join(cwd, ".gitignore")
+	if err := appendToGitignore(rootGitignore, ".ralph/"); err != nil {
+		log.Warn("Failed to update .gitignore: %v", err)
+	} else {
+		log.Debug("Added .ralph/ to .gitignore")
+	}
+
 	// Build config
 	cfg := config.Defaults()
 
@@ -175,6 +183,37 @@ func confirmOverwrite(path string) bool {
 
 	input = strings.TrimSpace(strings.ToLower(input))
 	return input == "y" || input == "yes"
+}
+
+// appendToGitignore adds an entry to .gitignore if it doesn't already exist.
+func appendToGitignore(path, entry string) error {
+	// Read existing content if file exists
+	var content string
+	if data, err := os.ReadFile(path); err == nil {
+		content = string(data)
+		// Check if entry already exists
+		for _, line := range strings.Split(content, "\n") {
+			if strings.TrimSpace(line) == entry {
+				return nil // Already present
+			}
+		}
+	}
+
+	// Append entry
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Add newline before entry if file doesn't end with one
+	prefix := ""
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		prefix = "\n"
+	}
+
+	_, err = f.WriteString(prefix + entry + "\n")
+	return err
 }
 
 // createSpecsIndex creates a starter INDEX.md file for specs.
