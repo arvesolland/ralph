@@ -552,7 +552,7 @@ func setupWorkspace(t *testing.T) *Workspace {
 		}
 	}
 
-	// Create minimal config
+	// Create config - include Slack settings if credentials are available globally
 	configContent := `project:
   name: "Test Project"
   description: "Integration test workspace"
@@ -564,6 +564,13 @@ commands:
   test: "echo 'no tests'"
   lint: "echo 'no lint'"
 `
+	// Check for global Slack credentials and include them
+	slackConfig := getGlobalSlackConfig()
+	if slackConfig != "" {
+		configContent += slackConfig
+		t.Log("Using global Slack credentials for notifications")
+	}
+
 	if err := os.WriteFile(filepath.Join(dir, ".ralph/config.yaml"), []byte(configContent), 0644); err != nil {
 		t.Fatalf("Failed to create config: %v", err)
 	}
@@ -759,6 +766,90 @@ func (ws *Workspace) AssertWorktreeNotExists(t *testing.T, planName, msg string)
 	if _, err := os.Stat(worktreePath); err == nil {
 		t.Errorf("%s: worktree still exists: %s", msg, worktreePath)
 	}
+}
+
+// =============================================================================
+// SLACK HELPERS
+// =============================================================================
+
+// getGlobalSlackConfig checks for global Slack credentials and returns
+// a YAML config snippet if found. This allows integration tests to send
+// real Slack notifications when credentials are available.
+func getGlobalSlackConfig() string {
+	// Check environment variables first
+	botToken := os.Getenv("SLACK_BOT_TOKEN")
+	channel := os.Getenv("SLACK_CHANNEL")
+
+	// If not in env, try loading from ~/.ralph/slack.env
+	if botToken == "" {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			envPath := filepath.Join(homeDir, ".ralph", "slack.env")
+			if data, err := os.ReadFile(envPath); err == nil {
+				for _, line := range strings.Split(string(data), "\n") {
+					line = strings.TrimSpace(line)
+					if strings.HasPrefix(line, "SLACK_BOT_TOKEN=") {
+						botToken = strings.TrimPrefix(line, "SLACK_BOT_TOKEN=")
+						botToken = strings.Trim(botToken, "\"'")
+					}
+					if strings.HasPrefix(line, "SLACK_CHANNEL=") {
+						channel = strings.TrimPrefix(line, "SLACK_CHANNEL=")
+						channel = strings.Trim(channel, "\"'")
+					}
+				}
+			}
+		}
+	}
+
+	// Also check the global config file
+	if botToken == "" || channel == "" {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			configPath := filepath.Join(homeDir, ".ralph", "config.yaml")
+			if data, err := os.ReadFile(configPath); err == nil {
+				// Simple extraction - look for bot_token and channel under slack:
+				lines := strings.Split(string(data), "\n")
+				inSlack := false
+				for _, line := range lines {
+					trimmed := strings.TrimSpace(line)
+					if trimmed == "slack:" {
+						inSlack = true
+						continue
+					}
+					if inSlack && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && trimmed != "" {
+						inSlack = false
+					}
+					if inSlack {
+						if strings.HasPrefix(trimmed, "bot_token:") && botToken == "" {
+							botToken = strings.TrimSpace(strings.TrimPrefix(trimmed, "bot_token:"))
+							botToken = strings.Trim(botToken, "\"'")
+						}
+						if strings.HasPrefix(trimmed, "channel:") && channel == "" {
+							channel = strings.TrimSpace(strings.TrimPrefix(trimmed, "channel:"))
+							channel = strings.Trim(channel, "\"'")
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Return empty if no credentials found
+	if botToken == "" || channel == "" {
+		return ""
+	}
+
+	// Return YAML snippet for Slack config
+	return fmt.Sprintf(`
+slack:
+  bot_token: "%s"
+  channel: "%s"
+  notify_start: true
+  notify_complete: true
+  notify_iteration: false
+  notify_error: true
+  notify_blocker: true
+`, botToken, channel)
 }
 
 // =============================================================================
