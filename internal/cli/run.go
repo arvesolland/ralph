@@ -66,6 +66,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading plan: %w", err)
 	}
 
+	// Auto-migrate flat files to bundles
+	if !p.IsBundle() {
+		log.Info("Migrating flat file to bundle: %s", p.Name)
+		if err := plan.MigrateToBundle(p); err != nil {
+			return fmt.Errorf("migrating to bundle: %w", err)
+		}
+		log.Info("Created bundle at: %s", p.BundleDir)
+	}
+
 	log.Info("Running plan: %s", p.Name)
 	log.Info("Branch: %s", p.Branch)
 	log.Info("Max iterations: %d", maxIterations)

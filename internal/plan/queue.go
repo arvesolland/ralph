@@ -175,23 +175,21 @@ func (q *Queue) Activate(plan *Plan) error {
 		}
 	}
 
-	if plan.IsBundle() {
-		// Move entire bundle directory
-		newBundleDir := filepath.Join(q.currentDir(), filepath.Base(plan.BundleDir))
-		if err := os.Rename(plan.BundleDir, newBundleDir); err != nil {
-			return fmt.Errorf("moving bundle to current: %w", err)
+	// Auto-migrate flat files to bundles before activation
+	if !plan.IsBundle() {
+		if err := MigrateToBundle(plan); err != nil {
+			return fmt.Errorf("migrating flat file to bundle: %w", err)
 		}
-		// Update plan's paths
-		plan.BundleDir = newBundleDir
-		plan.Path = filepath.Join(newBundleDir, "plan.md")
-	} else {
-		// Move just the .md file (legacy flat file)
-		newPath := filepath.Join(q.currentDir(), filepath.Base(plan.Path))
-		if err := os.Rename(plan.Path, newPath); err != nil {
-			return fmt.Errorf("moving plan to current: %w", err)
-		}
-		plan.Path = newPath
 	}
+
+	// Move entire bundle directory to current/
+	newBundleDir := filepath.Join(q.currentDir(), filepath.Base(plan.BundleDir))
+	if err := os.Rename(plan.BundleDir, newBundleDir); err != nil {
+		return fmt.Errorf("moving bundle to current: %w", err)
+	}
+	// Update plan's paths
+	plan.BundleDir = newBundleDir
+	plan.Path = filepath.Join(newBundleDir, "plan.md")
 
 	return nil
 }
@@ -315,6 +313,67 @@ func (q *Queue) Status() (*QueueStatus, error) {
 	}
 
 	return status, nil
+}
+
+// MigrateToBundle converts a flat plan file to a bundle directory in-place.
+// Updates the Plan struct's paths to reflect the new bundle structure.
+// Creates progress.md and feedback.md if they don't exist.
+func MigrateToBundle(p *Plan) error {
+	if p.IsBundle() {
+		return nil // Already a bundle
+	}
+
+	dir := filepath.Dir(p.Path)
+	bundleDir := filepath.Join(dir, p.Name)
+
+	// Create bundle directory
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		return fmt.Errorf("creating bundle directory: %w", err)
+	}
+
+	// Move plan file into bundle as plan.md
+	destPlanPath := filepath.Join(bundleDir, "plan.md")
+	if err := os.Rename(p.Path, destPlanPath); err != nil {
+		// Clean up on failure
+		os.RemoveAll(bundleDir)
+		return fmt.Errorf("moving plan file: %w", err)
+	}
+
+	// Look for associated progress file and move/scaffold it
+	progressSrc := filepath.Join(dir, p.Name+".progress.md")
+	progressDest := filepath.Join(bundleDir, "progress.md")
+	if _, err := os.Stat(progressSrc); err == nil {
+		if err := os.Rename(progressSrc, progressDest); err != nil {
+			return fmt.Errorf("moving progress file: %w", err)
+		}
+	} else {
+		// Scaffold progress file
+		content := fmt.Sprintf("# Progress: %s\n\nIteration log - what was done, gotchas, and next steps.\n", p.Name)
+		if err := os.WriteFile(progressDest, []byte(content), 0644); err != nil {
+			return fmt.Errorf("creating progress file: %w", err)
+		}
+	}
+
+	// Look for associated feedback file and move/scaffold it
+	feedbackSrc := filepath.Join(dir, p.Name+".feedback.md")
+	feedbackDest := filepath.Join(bundleDir, "feedback.md")
+	if _, err := os.Stat(feedbackSrc); err == nil {
+		if err := os.Rename(feedbackSrc, feedbackDest); err != nil {
+			return fmt.Errorf("moving feedback file: %w", err)
+		}
+	} else {
+		// Scaffold feedback file
+		content := fmt.Sprintf("# Feedback: %s\n\nHuman input and responses to blockers.\n\n## Pending\n\n## Processed\n", p.Name)
+		if err := os.WriteFile(feedbackDest, []byte(content), 0644); err != nil {
+			return fmt.Errorf("creating feedback file: %w", err)
+		}
+	}
+
+	// Update the Plan struct
+	p.BundleDir = bundleDir
+	p.Path = destPlanPath
+
+	return nil
 }
 
 // listPlans lists all plans in the given directory.

@@ -180,31 +180,48 @@ func TestQueue_Activate(t *testing.T) {
 
 	q := NewQueue(tmpDir)
 
-	// Create a pending plan
+	// Create a pending plan (flat file)
 	planPath := createTestPlanFile(t, q.pendingDir(), "to-activate")
 	plan, err := Load(planPath)
 	if err != nil {
 		t.Fatalf("loading plan: %v", err)
 	}
 
-	// Activate it
+	// Activate it (should auto-migrate to bundle)
 	if err := q.Activate(plan); err != nil {
 		t.Fatalf("activating plan: %v", err)
 	}
 
-	// Verify it moved
+	// Verify original flat file no longer exists
 	if _, err := os.Stat(planPath); !os.IsNotExist(err) {
 		t.Error("plan file still exists in pending")
 	}
 
-	expectedNewPath := filepath.Join(q.currentDir(), "to-activate.md")
-	if _, err := os.Stat(expectedNewPath); err != nil {
-		t.Errorf("plan file not in current: %v", err)
+	// Plan should now be a bundle in current/
+	expectedBundleDir := filepath.Join(q.currentDir(), "to-activate")
+	expectedPlanPath := filepath.Join(expectedBundleDir, "plan.md")
+
+	if _, err := os.Stat(expectedPlanPath); err != nil {
+		t.Errorf("plan.md not in bundle: %v", err)
 	}
 
-	// Plan's path should be updated
-	if plan.Path != expectedNewPath {
-		t.Errorf("plan path not updated: expected %s, got %s", expectedNewPath, plan.Path)
+	// Verify bundle has progress.md and feedback.md
+	if _, err := os.Stat(filepath.Join(expectedBundleDir, "progress.md")); err != nil {
+		t.Errorf("progress.md not in bundle: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(expectedBundleDir, "feedback.md")); err != nil {
+		t.Errorf("feedback.md not in bundle: %v", err)
+	}
+
+	// Plan's paths should be updated
+	if plan.Path != expectedPlanPath {
+		t.Errorf("plan path not updated: expected %s, got %s", expectedPlanPath, plan.Path)
+	}
+	if plan.BundleDir != expectedBundleDir {
+		t.Errorf("bundle dir not set: expected %s, got %s", expectedBundleDir, plan.BundleDir)
+	}
+	if !plan.IsBundle() {
+		t.Error("plan should be a bundle after activation")
 	}
 }
 
