@@ -212,6 +212,10 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
+	// Set up Slack notifications
+	cleanupNotifications := w.SetupNotifications(ctx)
+	defer cleanupNotifications()
+
 	// Check for API key - warn if verification won't work
 	if !runner.IsAPIKeyAvailable() {
 		log.Warn("ANTHROPIC_API_KEY not set - plan verification will be skipped")

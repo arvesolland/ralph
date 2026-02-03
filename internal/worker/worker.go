@@ -715,6 +715,9 @@ func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notif
 		return &notify.NoopNotifier{}
 	}
 
+	// Check for custom API URL (for testing)
+	apiURL := os.Getenv("SLACK_API_URL")
+
 	// Try Slack Bot API first
 	if cfg.Slack.BotToken != "" && cfg.Slack.Channel != "" {
 		return notify.NewSlackNotifier(notify.SlackNotifierConfig{
@@ -722,6 +725,7 @@ func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notif
 			Channel:       cfg.Slack.Channel,
 			ThreadTracker: tracker,
 			WebhookURL:    cfg.Slack.WebhookURL, // Fallback
+			APIURL:        apiURL,
 		})
 	}
 

@@ -27,6 +27,9 @@ type SlackNotifierConfig struct {
 	Channel       string
 	WebhookURL    string
 	ThreadTracker *ThreadTracker
+	// APIURL is an optional custom Slack API URL (for testing).
+	// If empty, the default Slack API URL is used.
+	APIURL string
 }
 
 // NewSlackNotifier creates a new SlackNotifier.
@@ -35,8 +38,12 @@ type SlackNotifierConfig struct {
 func NewSlackNotifier(cfg SlackNotifierConfig) Notifier {
 	// If bot token is configured, use Bot API
 	if cfg.BotToken != "" && cfg.Channel != "" {
+		opts := []slack.Option{}
+		if cfg.APIURL != "" {
+			opts = append(opts, slack.OptionAPIURL(cfg.APIURL))
+		}
 		return &SlackNotifier{
-			client:        slack.New(cfg.BotToken),
+			client:        slack.New(cfg.BotToken, opts...),
 			channel:       cfg.Channel,
 			threadTracker: cfg.ThreadTracker,
 		}

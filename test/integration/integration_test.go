@@ -11,12 +11,16 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -756,3 +760,254 @@ func (ws *Workspace) AssertWorktreeNotExists(t *testing.T, planName, msg string)
 		t.Errorf("%s: worktree still exists: %s", msg, worktreePath)
 	}
 }
+
+// =============================================================================
+// TEST: Slack Notifications
+// =============================================================================
+
+// slackRequest represents a captured Slack API request
+type slackRequest struct {
+	Endpoint  string
+	Channel   string
+	Text      string
+	Blocks    []json.RawMessage
+	ThreadTS  string
+	Timestamp string // for updates
+}
+
+// mockSlackServer captures Slack API requests for verification
+type mockSlackServer struct {
+	*httptest.Server
+	mu       sync.Mutex
+	requests []slackRequest
+}
+
+func newMockSlackServer() *mockSlackServer {
+	m := &mockSlackServer{
+		requests: make([]slackRequest, 0),
+	}
+
+	mux := http.NewServeMux()
+
+	// Handle chat.postMessage
+	mux.HandleFunc("/chat.postMessage", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		req := slackRequest{
+			Endpoint: "chat.postMessage",
+			Channel:  r.FormValue("channel"),
+			Text:     r.FormValue("text"),
+			ThreadTS: r.FormValue("thread_ts"),
+		}
+
+		if blocksStr := r.FormValue("blocks"); blocksStr != "" {
+			var blocks []json.RawMessage
+			if err := json.Unmarshal([]byte(blocksStr), &blocks); err == nil {
+				req.Blocks = blocks
+			}
+		}
+
+		m.requests = append(m.requests, req)
+
+		// Return success with timestamp
+		resp := map[string]interface{}{
+			"ok":      true,
+			"ts":      fmt.Sprintf("1234567890.%06d", len(m.requests)),
+			"channel": req.Channel,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	// Handle chat.update
+	mux.HandleFunc("/chat.update", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		req := slackRequest{
+			Endpoint:  "chat.update",
+			Channel:   r.FormValue("channel"),
+			Timestamp: r.FormValue("ts"),
+		}
+
+		if blocksStr := r.FormValue("blocks"); blocksStr != "" {
+			var blocks []json.RawMessage
+			if err := json.Unmarshal([]byte(blocksStr), &blocks); err == nil {
+				req.Blocks = blocks
+			}
+		}
+
+		m.requests = append(m.requests, req)
+
+		resp := map[string]interface{}{
+			"ok":      true,
+			"ts":      req.Timestamp,
+			"channel": req.Channel,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	m.Server = httptest.NewServer(mux)
+	return m
+}
+
+func (m *mockSlackServer) getRequests() []slackRequest {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]slackRequest, len(m.requests))
+	copy(result, m.requests)
+	return result
+}
+
+func (m *mockSlackServer) getRequestsByEndpoint(endpoint string) []slackRequest {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []slackRequest
+	for _, req := range m.requests {
+		if req.Endpoint == endpoint {
+			result = append(result, req)
+		}
+	}
+	return result
+}
+
+func TestSlackNotifications(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	// Start mock Slack server
+	slackServer := newMockSlackServer()
+	defer slackServer.Close()
+
+	ws := setupWorkspace(t)
+	defer ws.Cleanup()
+
+	// Update config to include Slack settings with mock server
+	configContent := fmt.Sprintf(`project:
+  name: "Test Project"
+  description: "Integration test with Slack notifications"
+
+git:
+  base_branch: "main"
+
+commands:
+  test: "echo 'no tests'"
+  lint: "echo 'no lint'"
+
+slack:
+  bot_token: "xoxb-test-token"
+  channel: "C12345TEST"
+  notify_start: true
+  notify_complete: true
+  notify_iteration: false
+  notify_error: true
+  notify_blocker: true
+`)
+
+	if err := os.WriteFile(filepath.Join(ws.Path, ".ralph/config.yaml"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to update config: %v", err)
+	}
+
+	// Commit the config change
+	ws.Git(t, "add", "-A")
+	ws.Git(t, "commit", "-q", "-m", "Add Slack config")
+
+	// Create a simple plan
+	ws.CreatePlanBundle("slack-test", `# Plan: Slack Notification Test
+
+## Context
+Integration test: verify Slack notifications are sent.
+
+## Tasks
+
+### T1: Create marker file
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] File `+"`output/done.txt`"+` exists with content "slack-test-complete"
+
+**Subtasks:**
+1. [ ] Create directory `+"`output/`"+` if needed
+2. [ ] Create file `+"`output/done.txt`"+` containing "slack-test-complete"
+`)
+
+	// Commit the plan
+	ws.Git(t, "add", "-A")
+	ws.Git(t, "commit", "-q", "-m", "Add slack test plan")
+
+	// Run ralph worker with mock Slack server URL via environment
+	// The slack-go library uses SLACK_API_URL if set
+	cmd := exec.Command(ralphBinary, "worker", "--once", "--max", fmt.Sprintf("%d", maxIterations), "-v")
+	cmd.Dir = ws.Path
+	cmd.Env = append(os.Environ(),
+		"RALPH_TEST=1",
+		"SLACK_API_URL="+slackServer.URL+"/",
+	)
+
+	t.Logf("Running: ralph worker --once (with mock Slack at %s)", slackServer.URL)
+	out, err := cmd.CombinedOutput()
+	t.Logf("Output:\n%s", out)
+
+	if err != nil {
+		// Worker may exit with error (max iterations, no remote for PR, etc.)
+		// This is expected - we're testing notifications, not task completion
+		t.Logf("Worker exited with error (expected in test): %v", err)
+	}
+
+	// Check Slack requests - this is the main thing we're testing
+	requests := slackServer.getRequests()
+	t.Logf("Captured %d Slack requests", len(requests))
+	for i, req := range requests {
+		t.Logf("  [%d] %s to channel %s (thread: %s, ts: %s)", i, req.Endpoint, req.Channel, req.ThreadTS, req.Timestamp)
+	}
+
+	// Verify we got at least a start notification (chat.postMessage)
+	postMessages := slackServer.getRequestsByEndpoint("chat.postMessage")
+	if len(postMessages) == 0 {
+		t.Error("Expected at least one chat.postMessage request (start notification)")
+	} else {
+		t.Logf("Got %d chat.postMessage requests", len(postMessages))
+	}
+
+	// Check that the first message was to the correct channel
+	if len(postMessages) > 0 && postMessages[0].Channel != "C12345TEST" {
+		t.Errorf("Expected channel C12345TEST, got %s", postMessages[0].Channel)
+	}
+
+	// Verify we got progress updates (chat.update calls)
+	updates := slackServer.getRequestsByEndpoint("chat.update")
+	t.Logf("Got %d progress updates (chat.update)", len(updates))
+
+	// We should have at least one update for iteration progress
+	if len(updates) == 0 {
+		t.Error("Expected at least one chat.update request (progress update)")
+	}
+
+	// Verify updates target the correct message timestamp
+	for i, update := range updates {
+		if update.Timestamp == "" {
+			t.Errorf("Update %d has empty timestamp", i)
+		}
+		if update.Channel != "C12345TEST" {
+			t.Errorf("Update %d to wrong channel: got %s, want C12345TEST", i, update.Channel)
+		}
+	}
+
+	// Log success
+	t.Logf("SUCCESS: Slack notifications working - %d posts, %d updates", len(postMessages), len(updates))
+}
+
