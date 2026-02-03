@@ -14,6 +14,33 @@ import (
 	"github.com/arvesolland/ralph/internal/runner"
 )
 
+// ProgressPhase represents the current phase of plan execution.
+type ProgressPhase string
+
+const (
+	PhaseInitializing ProgressPhase = "initializing"
+	PhaseRunning      ProgressPhase = "running"
+	PhaseVerifying    ProgressPhase = "verifying"
+	PhaseBlocked      ProgressPhase = "blocked"
+	PhaseComplete     ProgressPhase = "complete"
+	PhaseError        ProgressPhase = "error"
+)
+
+// ProgressStatus represents the current progress of a plan execution.
+type ProgressStatus struct {
+	// Iteration is the current iteration number.
+	Iteration int
+
+	// MaxIterations is the maximum number of iterations.
+	MaxIterations int
+
+	// Phase is the current execution phase.
+	Phase ProgressPhase
+
+	// Message is an optional status message.
+	Message string
+}
+
 // Notifier defines the interface for sending notifications.
 type Notifier interface {
 	// Start sends a notification when a plan starts.
@@ -30,6 +57,10 @@ type Notifier interface {
 
 	// Iteration sends a notification for each iteration (if enabled).
 	Iteration(p *plan.Plan, iteration, maxIterations int) error
+
+	// UpdateProgress updates the parent message with current progress.
+	// This provides a "living status card" that shows the current state.
+	UpdateProgress(p *plan.Plan, status *ProgressStatus) error
 }
 
 // WebhookNotifier sends notifications via Slack incoming webhooks.
@@ -242,6 +273,13 @@ func (w *WebhookNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) 
 	return nil
 }
 
+// UpdateProgress is a no-op for webhooks since they don't support message updates.
+// Webhooks are fire-and-forget, so we can't update the original message.
+func (w *WebhookNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) error {
+	// Webhooks don't support message updates
+	return nil
+}
+
 // sendAsync sends the message asynchronously.
 // Errors are logged but not returned.
 func (w *WebhookNotifier) sendAsync(msg slackMessage) {
@@ -300,6 +338,9 @@ func (n *NoopNotifier) Error(p *plan.Plan, err error) error { return nil }
 
 // Iteration does nothing.
 func (n *NoopNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) error { return nil }
+
+// UpdateProgress does nothing.
+func (n *NoopNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) error { return nil }
 
 // Ensure NoopNotifier implements Notifier.
 var _ Notifier = (*NoopNotifier)(nil)

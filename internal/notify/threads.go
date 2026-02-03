@@ -24,6 +24,16 @@ type ThreadInfo struct {
 	// ChannelID is the Slack channel ID where the thread was created.
 	ChannelID string `json:"channel_id"`
 
+	// MessageTS is the timestamp of the parent message to update.
+	// This is the same as ThreadTS but kept for clarity.
+	MessageTS string `json:"message_ts"`
+
+	// LastPhase tracks the last phase we updated to, for diffing.
+	LastPhase string `json:"last_phase,omitempty"`
+
+	// LastIteration tracks the last iteration we updated to.
+	LastIteration int `json:"last_iteration,omitempty"`
+
 	// NotifiedBlockers contains hashes of blockers that have been notified.
 	// Used to prevent duplicate notifications for the same blocker.
 	NotifiedBlockers []string `json:"notified_blockers,omitempty"`
@@ -163,6 +173,30 @@ func (t *ThreadTracker) HasNotifiedBlocker(planName, blockerHash string) bool {
 		}
 	}
 	return false
+}
+
+// UpdateProgress updates the progress tracking for a plan.
+// Returns true if the progress was actually updated (changed).
+func (t *ThreadTracker) UpdateProgress(planName string, iteration int, phase string) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	info, ok := t.threads[planName]
+	if !ok {
+		return false, fmt.Errorf("no thread info for plan: %s", planName)
+	}
+
+	// Check if anything changed
+	if info.LastIteration == iteration && info.LastPhase == phase {
+		return false, nil
+	}
+
+	// Update progress
+	info.LastIteration = iteration
+	info.LastPhase = phase
+	info.UpdatedAt = time.Now()
+
+	return true, t.saveUnlocked()
 }
 
 // List returns all tracked thread infos.

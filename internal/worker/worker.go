@@ -390,11 +390,17 @@ func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
 		PromptBuilder: w.promptBuilder,
 		WorktreePath:  wt.Path,
 		OnIteration: func(iteration int, result *runner.Result) {
-			// Send iteration notification if configured
+			// Update the parent message with progress (preferred)
+			w.updateProgress(p, iteration, notify.PhaseRunning, "")
+
+			// Also send iteration notification if configured (legacy behavior)
 			w.sendIterationNotification(p, iteration, w.maxIterations)
 		},
 		OnBlocker: func(blocker *runner.Blocker) {
-			// Send blocker notification via Slack
+			// Update parent message to show blocked state
+			w.updateProgress(p, execCtx.Iteration, notify.PhaseBlocked, blocker.Description)
+
+			// Send blocker notification via Slack (thread reply with details)
 			w.sendBlockerNotification(p, blocker)
 
 			// Call user callback
@@ -588,7 +594,10 @@ func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Wo
 
 // notifyError sends error notification and calls the error callback if set.
 func (w *Worker) notifyError(p *plan.Plan, err error) {
-	// Send error notification via Slack
+	// Update parent message to show error state
+	w.updateProgress(p, 0, notify.PhaseError, err.Error())
+
+	// Send error notification via Slack (thread reply with details)
 	if w.config != nil && w.config.Slack.NotifyError {
 		if notifyErr := w.notifier.Error(p, err); notifyErr != nil {
 			log.Debug("Failed to send error notification: %v", notifyErr)
@@ -607,11 +616,21 @@ func (w *Worker) sendStartNotification(p *plan.Plan) {
 		if err := w.notifier.Start(p); err != nil {
 			log.Debug("Failed to send start notification: %v", err)
 		}
+		// Start already creates the status card, but ensure we track the initial state
+		w.updateProgress(p, 1, notify.PhaseInitializing, "Setting up worktree...")
 	}
 }
 
 // sendCompleteNotification sends a completion notification if configured.
 func (w *Worker) sendCompleteNotification(p *plan.Plan, prURL string) {
+	// Update parent message to show complete state
+	message := ""
+	if prURL != "" {
+		message = fmt.Sprintf("<%s|View PR>", prURL)
+	}
+	w.updateProgress(p, w.maxIterations, notify.PhaseComplete, message)
+
+	// Send completion notification via Slack (thread reply with details)
 	if w.config != nil && w.config.Slack.NotifyComplete {
 		if err := w.notifier.Complete(p, prURL); err != nil {
 			log.Debug("Failed to send complete notification: %v", err)
@@ -634,6 +653,19 @@ func (w *Worker) sendIterationNotification(p *plan.Plan, iteration, maxIteration
 		if err := w.notifier.Iteration(p, iteration, maxIterations); err != nil {
 			log.Debug("Failed to send iteration notification: %v", err)
 		}
+	}
+}
+
+// updateProgress updates the parent message with current progress status.
+func (w *Worker) updateProgress(p *plan.Plan, iteration int, phase notify.ProgressPhase, message string) {
+	status := &notify.ProgressStatus{
+		Iteration:     iteration,
+		MaxIterations: w.maxIterations,
+		Phase:         phase,
+		Message:       message,
+	}
+	if err := w.notifier.UpdateProgress(p, status); err != nil {
+		log.Debug("Failed to update progress: %v", err)
 	}
 }
 

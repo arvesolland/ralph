@@ -21,6 +21,7 @@ type mockSlackServer struct {
 	*httptest.Server
 	mu       sync.Mutex
 	messages []mockMessage
+	updates  []mockUpdate
 }
 
 type mockMessage struct {
@@ -30,9 +31,16 @@ type mockMessage struct {
 	ThreadTS string
 }
 
+type mockUpdate struct {
+	Channel   string
+	Timestamp string
+	Blocks    []json.RawMessage
+}
+
 func newMockSlackServer() *mockSlackServer {
 	m := &mockSlackServer{
 		messages: make([]mockMessage, 0),
+		updates:  make([]mockUpdate, 0),
 	}
 
 	mux := http.NewServeMux()
@@ -73,6 +81,41 @@ func newMockSlackServer() *mockSlackServer {
 		json.NewEncoder(w).Encode(resp)
 	})
 
+	mux.HandleFunc("/chat.update", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		update := mockUpdate{
+			Channel:   r.FormValue("channel"),
+			Timestamp: r.FormValue("ts"),
+		}
+
+		// Parse blocks if present
+		if blocksStr := r.FormValue("blocks"); blocksStr != "" {
+			var blocks []json.RawMessage
+			if err := json.Unmarshal([]byte(blocksStr), &blocks); err == nil {
+				update.Blocks = blocks
+			}
+		}
+
+		m.updates = append(m.updates, update)
+
+		// Return a successful response
+		resp := map[string]interface{}{
+			"ok":      true,
+			"ts":      update.Timestamp,
+			"channel": update.Channel,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
 	m.Server = httptest.NewServer(mux)
 	return m
 }
@@ -82,6 +125,14 @@ func (m *mockSlackServer) getMessages() []mockMessage {
 	defer m.mu.Unlock()
 	result := make([]mockMessage, len(m.messages))
 	copy(result, m.messages)
+	return result
+}
+
+func (m *mockSlackServer) getUpdates() []mockUpdate {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]mockUpdate, len(m.updates))
+	copy(result, m.updates)
 	return result
 }
 
@@ -722,5 +773,277 @@ func TestSlackNotifier_ThreadTrackerPersistence(t *testing.T) {
 		t.Error("expected thread info to be persisted")
 	} else if info.ThreadTS != "1234567890.123456" {
 		t.Errorf("expected ThreadTS 1234567890.123456, got %s", info.ThreadTS)
+	}
+}
+
+func TestSlackNotifier_UpdateProgress(t *testing.T) {
+	server := newMockSlackServer()
+	defer server.Close()
+
+	client := slack.New("xoxb-test-token", slack.OptionAPIURL(server.URL+"/"))
+
+	tmpDir := t.TempDir()
+	tracker, err := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
+	if err != nil {
+		t.Fatalf("failed to create thread tracker: %v", err)
+	}
+
+	// Pre-populate thread info
+	tracker.Set("test-plan", &ThreadInfo{
+		PlanName:  "test-plan",
+		ThreadTS:  "1234567890.000000",
+		MessageTS: "1234567890.000000",
+		ChannelID: "C12345",
+	})
+
+	notifier := &SlackNotifier{
+		client:        client,
+		channel:       "C12345",
+		threadTracker: tracker,
+	}
+
+	p := &plan.Plan{
+		Name:   "test-plan",
+		Branch: "feat/test-plan",
+	}
+
+	status := &ProgressStatus{
+		Iteration:     5,
+		MaxIterations: 30,
+		Phase:         PhaseRunning,
+		Message:       "Processing task 3",
+	}
+
+	err = notifier.UpdateProgress(p, status)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Give async operation time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	updates := server.getUpdates()
+	if len(updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(updates))
+	}
+
+	// Verify the update targeted the correct message
+	if updates[0].Channel != "C12345" {
+		t.Errorf("expected channel C12345, got %s", updates[0].Channel)
+	}
+	if updates[0].Timestamp != "1234567890.000000" {
+		t.Errorf("expected timestamp 1234567890.000000, got %s", updates[0].Timestamp)
+	}
+
+	// Verify tracker was updated
+	info := tracker.Get("test-plan")
+	if info.LastIteration != 5 {
+		t.Errorf("expected LastIteration 5, got %d", info.LastIteration)
+	}
+	if info.LastPhase != "running" {
+		t.Errorf("expected LastPhase 'running', got %s", info.LastPhase)
+	}
+}
+
+func TestSlackNotifier_UpdateProgress_Deduplication(t *testing.T) {
+	server := newMockSlackServer()
+	defer server.Close()
+
+	client := slack.New("xoxb-test-token", slack.OptionAPIURL(server.URL+"/"))
+
+	tmpDir := t.TempDir()
+	tracker, err := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
+	if err != nil {
+		t.Fatalf("failed to create thread tracker: %v", err)
+	}
+
+	// Pre-populate thread info with existing progress
+	tracker.Set("test-plan", &ThreadInfo{
+		PlanName:      "test-plan",
+		ThreadTS:      "1234567890.000000",
+		MessageTS:     "1234567890.000000",
+		ChannelID:     "C12345",
+		LastIteration: 5,
+		LastPhase:     "running",
+	})
+
+	notifier := &SlackNotifier{
+		client:        client,
+		channel:       "C12345",
+		threadTracker: tracker,
+	}
+
+	p := &plan.Plan{
+		Name:   "test-plan",
+		Branch: "feat/test-plan",
+	}
+
+	// Send same progress - should be deduplicated
+	status := &ProgressStatus{
+		Iteration:     5,
+		MaxIterations: 30,
+		Phase:         PhaseRunning,
+	}
+
+	err = notifier.UpdateProgress(p, status)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Give async operation time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	updates := server.getUpdates()
+	if len(updates) != 0 {
+		t.Errorf("expected 0 updates (deduplicated), got %d", len(updates))
+	}
+}
+
+func TestSlackNotifier_UpdateProgress_NoThread(t *testing.T) {
+	server := newMockSlackServer()
+	defer server.Close()
+
+	client := slack.New("xoxb-test-token", slack.OptionAPIURL(server.URL+"/"))
+
+	tmpDir := t.TempDir()
+	tracker, err := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
+	if err != nil {
+		t.Fatalf("failed to create thread tracker: %v", err)
+	}
+
+	// No thread info set
+
+	notifier := &SlackNotifier{
+		client:        client,
+		channel:       "C12345",
+		threadTracker: tracker,
+	}
+
+	p := &plan.Plan{
+		Name:   "test-plan",
+		Branch: "feat/test-plan",
+	}
+
+	status := &ProgressStatus{
+		Iteration:     5,
+		MaxIterations: 30,
+		Phase:         PhaseRunning,
+	}
+
+	// Should not error even if no thread exists
+	err = notifier.UpdateProgress(p, status)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Give async operation time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	updates := server.getUpdates()
+	if len(updates) != 0 {
+		t.Errorf("expected 0 updates (no thread), got %d", len(updates))
+	}
+}
+
+func TestBuildProgressBlocks(t *testing.T) {
+	notifier := &SlackNotifier{}
+
+	testCases := []struct {
+		name           string
+		phase          ProgressPhase
+		expectedEmoji  string
+		expectedPhase  string
+	}{
+		{"initializing", PhaseInitializing, ":rocket:", "Initializing"},
+		{"running", PhaseRunning, ":hourglass_flowing_sand:", "Running"},
+		{"verifying", PhaseVerifying, ":mag:", "Verifying"},
+		{"blocked", PhaseBlocked, ":warning:", "Blocked"},
+		{"complete", PhaseComplete, ":white_check_mark:", "Complete"},
+		{"error", PhaseError, ":x:", "Error"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &plan.Plan{
+				Name:   "test-plan",
+				Branch: "feat/test-plan",
+			}
+
+			status := &ProgressStatus{
+				Iteration:     5,
+				MaxIterations: 10,
+				Phase:         tc.phase,
+			}
+
+			blocks := notifier.buildProgressBlocks(p, status)
+
+			if len(blocks) < 2 {
+				t.Fatalf("expected at least 2 blocks, got %d", len(blocks))
+			}
+
+			// Check first block contains expected emoji and phase
+			firstBlock, ok := blocks[0].(*slack.SectionBlock)
+			if !ok {
+				t.Fatal("first block is not a SectionBlock")
+			}
+
+			text := firstBlock.Text.Text
+			if !strings.Contains(text, tc.expectedEmoji) {
+				t.Errorf("expected emoji %s in text, got: %s", tc.expectedEmoji, text)
+			}
+			if !strings.Contains(text, tc.expectedPhase) {
+				t.Errorf("expected phase %s in text, got: %s", tc.expectedPhase, text)
+			}
+		})
+	}
+}
+
+func TestBuildProgressBlocks_ProgressBar(t *testing.T) {
+	notifier := &SlackNotifier{}
+
+	p := &plan.Plan{
+		Name:   "test-plan",
+		Branch: "feat/test-plan",
+	}
+
+	testCases := []struct {
+		iteration     int
+		maxIterations int
+		expectedBar   string
+	}{
+		{0, 10, "░░░░░░░░░░"},
+		{5, 10, "█████░░░░░"},
+		{10, 10, "██████████"},
+		{3, 30, "█░░░░░░░░░"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(strings.ReplaceAll(tc.expectedBar, "░", "0"), func(t *testing.T) {
+			status := &ProgressStatus{
+				Iteration:     tc.iteration,
+				MaxIterations: tc.maxIterations,
+				Phase:         PhaseRunning,
+			}
+
+			blocks := notifier.buildProgressBlocks(p, status)
+
+			// Check second block (fields) contains progress bar
+			secondBlock, ok := blocks[1].(*slack.SectionBlock)
+			if !ok {
+				t.Fatal("second block is not a SectionBlock")
+			}
+
+			found := false
+			for _, field := range secondBlock.Fields {
+				if strings.Contains(field.Text, tc.expectedBar) {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("expected progress bar %s not found in fields", tc.expectedBar)
+			}
+		})
 	}
 }

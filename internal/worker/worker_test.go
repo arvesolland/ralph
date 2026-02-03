@@ -463,15 +463,17 @@ func (c *execCommand) Run() error {
 
 // MockNotifier implements notify.Notifier for testing.
 type MockNotifier struct {
-	mu           sync.Mutex
-	StartCalls   int
-	CompleteCalls int
-	BlockerCalls int
-	ErrorCalls   int
+	mu             sync.Mutex
+	StartCalls     int
+	CompleteCalls  int
+	BlockerCalls   int
+	ErrorCalls     int
 	IterationCalls int
-	LastPRURL    string
-	LastBlocker  *runner.Blocker
-	LastError    error
+	ProgressCalls  int
+	LastPRURL      string
+	LastBlocker    *runner.Blocker
+	LastError      error
+	LastProgress   *notify.ProgressStatus
 }
 
 func (m *MockNotifier) Start(p *plan.Plan) error {
@@ -509,6 +511,14 @@ func (m *MockNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) err
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.IterationCalls++
+	return nil
+}
+
+func (m *MockNotifier) UpdateProgress(p *plan.Plan, status *notify.ProgressStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ProgressCalls++
+	m.LastProgress = status
 	return nil
 }
 

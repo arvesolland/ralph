@@ -2,6 +2,7 @@ package notify
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/plan"
@@ -52,18 +53,13 @@ func NewSlackNotifier(cfg SlackNotifierConfig) Notifier {
 
 // Start sends a notification when a plan starts and creates a new thread.
 func (s *SlackNotifier) Start(p *plan.Plan) error {
-	blocks := []slack.Block{
-		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(":rocket: *Plan Started*\n`%s`", p.Name), false, false),
-			nil, nil,
-		),
-		slack.NewSectionBlock(nil,
-			[]*slack.TextBlockObject{
-				slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Branch:*\n`%s`", p.Branch), false, false),
-			},
-			nil,
-		),
+	// Build initial status card with progress display
+	status := &ProgressStatus{
+		Iteration:     1,
+		MaxIterations: 30, // Default, will be updated on first UpdateProgress
+		Phase:         PhaseInitializing,
 	}
+	blocks := s.buildProgressBlocks(p, status)
 
 	// Post message to channel (this creates the thread)
 	_, ts, err := s.postMessage(blocks)
@@ -72,12 +68,15 @@ func (s *SlackNotifier) Start(p *plan.Plan) error {
 		return nil // Don't fail plan execution for notification errors
 	}
 
-	// Save thread info for future messages
+	// Save thread info for future messages and updates
 	if s.threadTracker != nil && ts != "" {
 		info := &ThreadInfo{
-			PlanName:  p.Name,
-			ThreadTS:  ts,
-			ChannelID: s.channel,
+			PlanName:      p.Name,
+			ThreadTS:      ts,
+			ChannelID:     s.channel,
+			MessageTS:     ts, // Same as ThreadTS - this is the message we'll update
+			LastPhase:     string(PhaseInitializing),
+			LastIteration: 1,
 		}
 		if err := s.threadTracker.Set(p.Name, info); err != nil {
 			log.Debug("Failed to save thread info: %v", err)
@@ -199,6 +198,7 @@ func (s *SlackNotifier) Error(p *plan.Plan, err error) error {
 }
 
 // Iteration sends a notification for each iteration (if enabled).
+// Note: Consider using UpdateProgress instead for cleaner thread display.
 func (s *SlackNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) error {
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
@@ -209,6 +209,114 @@ func (s *SlackNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) er
 
 	s.postMessageInThread(p.Name, blocks)
 	return nil
+}
+
+// UpdateProgress updates the parent message with current progress status.
+// This provides a "living status card" that shows the current state without flooding the thread.
+func (s *SlackNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) error {
+	if s.threadTracker == nil {
+		return nil
+	}
+
+	info := s.threadTracker.Get(p.Name)
+	if info == nil || info.MessageTS == "" {
+		log.Debug("No message to update for plan: %s", p.Name)
+		return nil
+	}
+
+	// Check if we should update (avoid redundant updates)
+	changed, err := s.threadTracker.UpdateProgress(p.Name, status.Iteration, string(status.Phase))
+	if err != nil {
+		log.Debug("Failed to check progress change: %v", err)
+		// Continue anyway - we'll try to update
+	}
+	if !changed {
+		log.Debug("Progress unchanged, skipping update")
+		return nil
+	}
+
+	// Build updated blocks
+	blocks := s.buildProgressBlocks(p, status)
+
+	// Update the message asynchronously
+	go func() {
+		_, _, _, err := s.client.UpdateMessage(
+			info.ChannelID,
+			info.MessageTS,
+			slack.MsgOptionBlocks(blocks...),
+		)
+		if err != nil {
+			log.Debug("Failed to update Slack progress: %v", err)
+		}
+	}()
+
+	return nil
+}
+
+// buildProgressBlocks creates the Block Kit blocks for a progress status card.
+func (s *SlackNotifier) buildProgressBlocks(p *plan.Plan, status *ProgressStatus) []slack.Block {
+	// Choose emoji based on phase
+	var emoji string
+	var phaseText string
+	switch status.Phase {
+	case PhaseInitializing:
+		emoji = ":rocket:"
+		phaseText = "Initializing"
+	case PhaseRunning:
+		emoji = ":hourglass_flowing_sand:"
+		phaseText = "Running"
+	case PhaseVerifying:
+		emoji = ":mag:"
+		phaseText = "Verifying"
+	case PhaseBlocked:
+		emoji = ":warning:"
+		phaseText = "Blocked"
+	case PhaseComplete:
+		emoji = ":white_check_mark:"
+		phaseText = "Complete"
+	case PhaseError:
+		emoji = ":x:"
+		phaseText = "Error"
+	default:
+		emoji = ":hourglass_flowing_sand:"
+		phaseText = "Running"
+	}
+
+	// Build progress bar (10 segments)
+	var progressBar string
+	if status.MaxIterations > 0 {
+		filled := int(float64(status.Iteration) / float64(status.MaxIterations) * 10)
+		if filled > 10 {
+			filled = 10
+		}
+		progressBar = strings.Repeat("█", filled) + strings.Repeat("░", 10-filled)
+	} else {
+		progressBar = "░░░░░░░░░░"
+	}
+
+	// Build header text
+	headerText := fmt.Sprintf("%s *Plan %s*\n`%s`", emoji, phaseText, p.Name)
+
+	// Build fields
+	fields := []*slack.TextBlockObject{
+		slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Branch:*\n`%s`", p.Branch), false, false),
+		slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Progress:*\n%s %d/%d", progressBar, status.Iteration, status.MaxIterations), false, false),
+	}
+
+	// Add message field if present
+	if status.Message != "" {
+		fields = append(fields, slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Status:*\n%s", status.Message), false, false))
+	}
+
+	blocks := []slack.Block{
+		slack.NewSectionBlock(
+			slack.NewTextBlockObject(slack.MarkdownType, headerText, false, false),
+			nil, nil,
+		),
+		slack.NewSectionBlock(nil, fields, nil),
+	}
+
+	return blocks
 }
 
 // postMessage posts a message to the channel and returns the channel ID and timestamp.
