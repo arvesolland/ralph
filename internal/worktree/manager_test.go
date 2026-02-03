@@ -39,6 +39,7 @@ func (m *mockGit) Commit(message string, files ...string) error        { return 
 func (m *mockGit) Push() error                                         { return nil }
 func (m *mockGit) PushWithUpstream(remote, branch string) error        { return nil }
 func (m *mockGit) Pull() error                                         { return nil }
+func (m *mockGit) PullRebase() error                                   { return nil }
 func (m *mockGit) CurrentBranch() (string, error)                      { return "main", nil }
 func (m *mockGit) CreateBranch(name string) error                      { m.branches[name] = true; return nil }
 func (m *mockGit) DeleteBranch(name string, force bool) error          {

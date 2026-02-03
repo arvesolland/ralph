@@ -64,6 +64,9 @@ type Git interface {
 	// Pull pulls changes from remote.
 	Pull() error
 
+	// PullRebase pulls changes from remote with rebase.
+	PullRebase() error
+
 	// CurrentBranch returns the name of the current branch.
 	CurrentBranch() (string, error)
 
@@ -288,6 +291,15 @@ func (g *CLIGit) Pull() error {
 	_, stderr, err := g.run("pull")
 	if err != nil {
 		return fmt.Errorf("git pull: %s: %w", stderr, err)
+	}
+	return nil
+}
+
+// PullRebase pulls changes from remote with rebase.
+func (g *CLIGit) PullRebase() error {
+	_, stderr, err := g.run("pull", "--rebase")
+	if err != nil {
+		return fmt.Errorf("git pull --rebase: %s: %w", stderr, err)
 	}
 	return nil
 }

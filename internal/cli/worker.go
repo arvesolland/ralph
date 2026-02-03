@@ -24,11 +24,13 @@ import (
 )
 
 var (
-	workerOnce        bool
-	workerPRMode      bool
-	workerMergeMode   bool
-	workerInterval    time.Duration
-	workerMaxIter     int
+	workerOnce         bool
+	workerPRMode       bool
+	workerMergeMode    bool
+	workerInterval     time.Duration
+	workerMaxIter      int
+	workerSync         bool
+	workerSyncInterval time.Duration
 )
 
 var workerCmd = &cobra.Command{
@@ -47,10 +49,16 @@ The worker will:
 With --once, it processes a single plan and exits.
 Without --once, it runs continuously, polling for new plans.
 
+With --sync, it pulls from remote before each queue check, enabling
+a "push-to-deploy" workflow where plans are pushed to the repo and
+workers automatically pick them up.
+
 Example:
-  ralph worker           # continuous mode
-  ralph worker --once    # single plan mode
-  ralph worker --merge   # merge directly instead of creating PR`,
+  ralph worker                    # continuous mode
+  ralph worker --once             # single plan mode
+  ralph worker --merge            # merge directly instead of creating PR
+  ralph worker --sync             # pull from remote before each check
+  ralph worker --sync --once      # pull once, process one plan, exit`,
 	RunE: runWorker,
 }
 
@@ -62,6 +70,8 @@ func init() {
 	workerCmd.Flags().BoolVar(&workerMergeMode, "merge", false, "use merge mode for completion")
 	workerCmd.Flags().DurationVar(&workerInterval, "interval", worker.DefaultPollInterval, "poll interval when queue is empty")
 	workerCmd.Flags().IntVar(&workerMaxIter, "max", worker.DefaultMaxIterations, "maximum iterations per plan")
+	workerCmd.Flags().BoolVar(&workerSync, "sync", false, "pull from remote before each queue check")
+	workerCmd.Flags().DurationVar(&workerSyncInterval, "sync-interval", 0, "minimum time between syncs (e.g., 60s)")
 }
 
 func runWorker(cmd *cobra.Command, args []string) error {
@@ -82,6 +92,22 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	// If completion mode not set via flags, use config
 	if !workerMergeMode && !workerPRMode && cfg.Completion.Mode != "" {
 		completionMode = cfg.Completion.Mode
+	}
+
+	// Determine sync settings (flags take precedence over config)
+	syncEnabled := workerSync
+	syncInterval := workerSyncInterval
+
+	// If not set via flags, check config
+	if !cmd.Flags().Changed("sync") && cfg.Worker.Sync {
+		syncEnabled = cfg.Worker.Sync
+	}
+	if !cmd.Flags().Changed("sync-interval") && cfg.Worker.SyncInterval != "" {
+		if parsed, parseErr := time.ParseDuration(cfg.Worker.SyncInterval); parseErr == nil {
+			syncInterval = parsed
+		} else {
+			log.Warn("Invalid worker.sync_interval in config: %v", parseErr)
+		}
 	}
 
 	// Get working directory (main worktree)
@@ -147,6 +173,8 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		PollInterval:     workerInterval,
 		MaxIterations:    workerMaxIter,
 		CompletionMode:   completionMode,
+		SyncEnabled:      syncEnabled,
+		SyncInterval:     syncInterval,
 		OnPlanStart: func(p *plan.Plan) {
 			log.Success("=== Starting plan: %s ===", p.Name)
 			log.Info("Branch: %s", p.Branch)
@@ -204,8 +232,23 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	log.Info("Completion mode: %s", completionMode)
 	log.Info("Poll interval: %v", workerInterval)
 	log.Info("Max iterations: %d", workerMaxIter)
+	if syncEnabled {
+		if syncInterval > 0 {
+			log.Info("Sync enabled (interval: %v)", syncInterval)
+		} else {
+			log.Info("Sync enabled (every check)")
+		}
+	}
 
 	if workerOnce {
+		// Sync before processing if enabled
+		if syncEnabled {
+			log.Info("Syncing with remote...")
+			if err := g.PullRebase(); err != nil {
+				log.Warn("Failed to sync with remote: %v (continuing with local state)", err)
+			}
+		}
+
 		// Process one plan and exit
 		err := w.RunOnce(ctx)
 		if err != nil {

@@ -17,6 +17,7 @@ type Config struct {
 	Slack      SlackConfig      `yaml:"slack"`
 	Worktree   WorktreeConfig   `yaml:"worktree"`
 	Completion CompletionConfig `yaml:"completion"`
+	Worker     WorkerRunConfig  `yaml:"worker"`
 }
 
 // ProjectConfig contains project identification settings.
@@ -62,6 +63,12 @@ type WorktreeConfig struct {
 type CompletionConfig struct {
 	Mode              string `yaml:"mode"`               // "pr" or "merge"
 	VerificationModel string `yaml:"verification_model"` // model for plan verification (default: claude-3-5-haiku-latest)
+}
+
+// WorkerRunConfig contains worker runtime settings.
+type WorkerRunConfig struct {
+	Sync         bool   `yaml:"sync"`          // Pull from remote before each queue check
+	SyncInterval string `yaml:"sync_interval"` // Minimum time between syncs (e.g., "60s")
 }
 
 // Load reads and parses a YAML config file.
@@ -222,5 +229,13 @@ func mergeConfig(dst, src *Config) {
 	}
 	if src.Completion.VerificationModel != "" {
 		dst.Completion.VerificationModel = src.Completion.VerificationModel
+	}
+
+	// Worker
+	if src.Worker.Sync {
+		dst.Worker.Sync = src.Worker.Sync
+	}
+	if src.Worker.SyncInterval != "" {
+		dst.Worker.SyncInterval = src.Worker.SyncInterval
 	}
 }

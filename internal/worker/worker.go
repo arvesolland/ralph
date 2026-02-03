@@ -82,6 +82,15 @@ type Worker struct {
 	// completionMode is "pr" or "merge"
 	completionMode string
 
+	// syncEnabled enables git pull before queue checks
+	syncEnabled bool
+
+	// syncInterval is the minimum time between syncs (0 = sync every time)
+	syncInterval time.Duration
+
+	// lastSyncTime tracks when we last synced
+	lastSyncTime time.Time
+
 	// onPlanStart is called when a plan starts processing
 	onPlanStart func(p *plan.Plan)
 
@@ -133,6 +142,12 @@ type WorkerConfig struct {
 	// CompletionMode is "pr" or "merge"
 	CompletionMode string
 
+	// SyncEnabled enables git pull --rebase before queue checks
+	SyncEnabled bool
+
+	// SyncInterval is the minimum time between syncs (0 = sync every time)
+	SyncInterval time.Duration
+
 	// Callbacks
 	OnPlanStart    func(p *plan.Plan)
 	OnPlanComplete func(p *plan.Plan, result *runner.LoopResult)
@@ -176,6 +191,8 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		pollInterval:     pollInterval,
 		maxIterations:    maxIterations,
 		completionMode:   completionMode,
+		syncEnabled:      cfg.SyncEnabled,
+		syncInterval:     cfg.SyncInterval,
 		onPlanStart:      cfg.OnPlanStart,
 		onPlanComplete:   cfg.OnPlanComplete,
 		onPlanError:      cfg.OnPlanError,
@@ -183,10 +200,37 @@ func NewWorker(cfg WorkerConfig) *Worker {
 	}
 }
 
+// syncFromRemote pulls changes from remote if sync is enabled and interval has passed.
+// Returns nil on success or if sync is disabled. Logs warnings on failure but doesn't error.
+func (w *Worker) syncFromRemote() {
+	if !w.syncEnabled {
+		return
+	}
+
+	// Check if we should sync based on interval
+	if w.syncInterval > 0 && time.Since(w.lastSyncTime) < w.syncInterval {
+		log.Debug("Skipping sync, last sync was %v ago (interval: %v)", time.Since(w.lastSyncTime), w.syncInterval)
+		return
+	}
+
+	log.Info("Syncing with remote...")
+	if err := w.git.PullRebase(); err != nil {
+		log.Warn("Failed to sync with remote: %v (continuing with local state)", err)
+		// Don't return error - sync failures are non-fatal
+	} else {
+		log.Debug("Sync complete")
+	}
+
+	w.lastSyncTime = time.Now()
+}
+
 // Run processes plans from the queue continuously until interrupted.
 // It polls for new plans when the queue is empty.
 func (w *Worker) Run(ctx context.Context) error {
 	log.Info("Worker started, polling interval: %v", w.pollInterval)
+	if w.syncEnabled {
+		log.Info("Sync enabled (interval: %v)", w.syncInterval)
+	}
 
 	// Set up interrupt handling
 	ctx, cancel := context.WithCancel(ctx)
@@ -212,6 +256,9 @@ func (w *Worker) Run(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
+
+		// Sync from remote before checking queue
+		w.syncFromRemote()
 
 		// Try to process a plan
 		err := w.RunOnce(ctx)
