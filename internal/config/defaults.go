@@ -34,7 +34,7 @@ func Defaults() *Config {
 		},
 		Completion: CompletionConfig{
 			Mode:              "pr",
-			VerificationModel: "claude-3-5-haiku-latest",
+			VerificationModel: "claude-sonnet-4-5-latest",
 		},
 	}
 }

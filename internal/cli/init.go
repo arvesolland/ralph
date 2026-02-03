@@ -3,8 +3,11 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -121,6 +124,28 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Extract project name and description using AI
+	log.Info("Extracting project info...")
+	projectInfo, err := extractProjectInfo(cwd)
+	if err != nil {
+		log.Debug("AI extraction failed: %v", err)
+		// Fall back to folder name
+		cfg.Project.Name = filepath.Base(cwd)
+		log.Info("  Project name: %s (from folder)", cfg.Project.Name)
+	} else {
+		if projectInfo.Name != "" {
+			cfg.Project.Name = projectInfo.Name
+			log.Info("  Project name: %s", cfg.Project.Name)
+		} else {
+			cfg.Project.Name = filepath.Base(cwd)
+			log.Info("  Project name: %s (from folder)", cfg.Project.Name)
+		}
+		if projectInfo.Description != "" {
+			cfg.Project.Description = projectInfo.Description
+			log.Info("  Description: %s", cfg.Project.Description)
+		}
+	}
+
 	// Write config file
 	configData, err := yaml.Marshal(cfg)
 	if err != nil {
@@ -214,6 +239,86 @@ func appendToGitignore(path, entry string) error {
 
 	_, err = f.WriteString(prefix + entry + "\n")
 	return err
+}
+
+// ProjectInfo holds extracted project information.
+type ProjectInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// extractProjectInfo uses Claude to extract project name and description.
+// It reads CLAUDE.md, agents/agent.md, or falls back to directory listing.
+func extractProjectInfo(cwd string) (*ProjectInfo, error) {
+	// Build context for Claude
+	var context string
+
+	// Try CLAUDE.md first
+	claudeMD := filepath.Join(cwd, "CLAUDE.md")
+	if data, err := os.ReadFile(claudeMD); err == nil {
+		context = fmt.Sprintf("# CLAUDE.md contents:\n\n%s", string(data))
+	} else {
+		// Try agents/agent.md
+		agentMD := filepath.Join(cwd, "agents", "agent.md")
+		if data, err := os.ReadFile(agentMD); err == nil {
+			context = fmt.Sprintf("# agents/agent.md contents:\n\n%s", string(data))
+		} else {
+			// Fall back to directory listing
+			cmd := exec.Command("ls", "-la")
+			cmd.Dir = cwd
+			output, err := cmd.Output()
+			if err != nil {
+				return nil, fmt.Errorf("failed to list directory: %w", err)
+			}
+			context = fmt.Sprintf("# Directory listing:\n\n%s", string(output))
+		}
+	}
+
+	// Build the prompt
+	prompt := fmt.Sprintf(`Analyze this project and extract the project name and a short description (1-2 sentences).
+
+%s
+
+Respond with ONLY valid JSON in this exact format, no other text:
+{"name": "project-name", "description": "Short description of what this project does."}
+
+If you cannot determine a clear name, use an empty string for name.
+If you cannot determine a description, use an empty string for description.`, context)
+
+	// Call Claude CLI
+	cmd := exec.Command("claude",
+		"--model", "claude-sonnet-4-5-latest",
+		"--output-format", "text",
+		"--max-turns", "1",
+		"-p", prompt,
+	)
+	cmd.Dir = cwd
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("claude command failed: %w (stderr: %s)", err, stderr.String())
+	}
+
+	// Parse JSON response
+	response := strings.TrimSpace(stdout.String())
+
+	// Try to extract JSON from the response (Claude might add extra text)
+	jsonStart := strings.Index(response, "{")
+	jsonEnd := strings.LastIndex(response, "}")
+	if jsonStart == -1 || jsonEnd == -1 || jsonEnd < jsonStart {
+		return nil, fmt.Errorf("no valid JSON found in response: %s", response)
+	}
+	jsonStr := response[jsonStart : jsonEnd+1]
+
+	var info ProjectInfo
+	if err := json.Unmarshal([]byte(jsonStr), &info); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w (response: %s)", err, response)
+	}
+
+	return &info, nil
 }
 
 // createSpecsIndex creates a starter INDEX.md file for specs.
