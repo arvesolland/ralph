@@ -34,7 +34,7 @@ func Defaults() *Config {
 		},
 		Completion: CompletionConfig{
 			Mode:              "pr",
-			VerificationModel: "claude-sonnet-4-5-latest",
+			VerificationModel: "claude-opus-4-5-latest",
 		},
 	}
 }
