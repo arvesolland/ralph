@@ -61,6 +61,9 @@ type IterationLoop struct {
 	// iterationTimeout is the timeout for each iteration
 	iterationTimeout time.Duration
 
+	// onBeforeIteration is called before each iteration (for syncing files)
+	onBeforeIteration func()
+
 	// onIteration is called after each iteration (for testing/hooks)
 	onIteration func(iteration int, result *Result)
 
@@ -80,10 +83,11 @@ type LoopConfig struct {
 	Git              git.Git
 	PromptBuilder    *prompt.Builder
 	WorktreePath     string
-	IterationTimeout time.Duration
-	OnIteration      func(iteration int, result *Result)
-	OnBlocker        func(blocker *Blocker)
-	OnAfterCommit    func()
+	IterationTimeout  time.Duration
+	OnBeforeIteration func()
+	OnIteration       func(iteration int, result *Result)
+	OnBlocker         func(blocker *Blocker)
+	OnAfterCommit     func()
 }
 
 // NewIterationLoop creates a new iteration loop with the given configuration.
@@ -94,17 +98,18 @@ func NewIterationLoop(cfg LoopConfig) *IterationLoop {
 	}
 
 	return &IterationLoop{
-		plan:             cfg.Plan,
-		ctx:              cfg.Context,
-		config:           cfg.Config,
-		runner:           cfg.Runner,
-		git:              cfg.Git,
-		promptBuilder:    cfg.PromptBuilder,
-		worktreePath:     cfg.WorktreePath,
-		iterationTimeout: timeout,
-		onIteration:      cfg.OnIteration,
-		onBlocker:        cfg.OnBlocker,
-		onAfterCommit:    cfg.OnAfterCommit,
+		plan:              cfg.Plan,
+		ctx:               cfg.Context,
+		config:            cfg.Config,
+		runner:            cfg.Runner,
+		git:               cfg.Git,
+		promptBuilder:     cfg.PromptBuilder,
+		worktreePath:      cfg.WorktreePath,
+		iterationTimeout:  timeout,
+		onBeforeIteration: cfg.OnBeforeIteration,
+		onIteration:       cfg.OnIteration,
+		onBlocker:         cfg.OnBlocker,
+		onAfterCommit:     cfg.OnAfterCommit,
 	}
 }
 
@@ -123,6 +128,11 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 		}
 
 		log.Info("Starting iteration %d/%d", l.ctx.Iteration, l.ctx.MaxIterations)
+
+		// Call before-iteration hook (for syncing feedback files)
+		if l.onBeforeIteration != nil {
+			l.onBeforeIteration()
+		}
 
 		// Run single iteration
 		iterResult, err := l.runIteration(ctx)

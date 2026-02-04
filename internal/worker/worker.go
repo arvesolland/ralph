@@ -397,6 +397,13 @@ func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
 		Git:           wtGit,
 		PromptBuilder: w.promptBuilder,
 		WorktreePath:  wt.Path,
+		OnBeforeIteration: func() {
+			// Sync feedback file from main workspace to worktree before each iteration
+			// This picks up any Slack replies that were written to the main workspace
+			if err := worktree.SyncFeedbackToWorktree(p, wt.Path, w.mainWorktreePath); err != nil {
+				log.Warn("Failed to sync feedback to worktree: %v", err)
+			}
+		},
 		OnIteration: func(iteration int, result *runner.Result) {
 			// Update the parent message with progress (preferred)
 			w.updateProgress(p, iteration, notify.PhaseRunning, "")

@@ -227,3 +227,33 @@ func parseEnvFileList(list string) []string {
 
 	return result
 }
+
+// SyncFeedbackToWorktree copies only the feedback file from main worktree to execution worktree.
+// This is called before each iteration to pick up any Slack replies that were written to main.
+// Missing source file is silently skipped (not an error).
+func SyncFeedbackToWorktree(p *plan.Plan, worktreePath string, mainWorktreePath string) error {
+	feedbackPath := plan.FeedbackPath(p)
+
+	var feedbackDstPath string
+	if p.IsBundle() {
+		bundleDst := filepath.Join(worktreePath, "plans", "current", p.Name)
+		feedbackDstPath = filepath.Join(bundleDst, "feedback.md")
+	} else {
+		feedbackRelPath, err := filepath.Rel(mainWorktreePath, feedbackPath)
+		if err != nil {
+			feedbackRelPath = filepath.Join("plans", "current", filepath.Base(feedbackPath))
+		}
+		feedbackDstPath = filepath.Join(worktreePath, feedbackRelPath)
+	}
+
+	if err := copyFile(feedbackPath, feedbackDstPath); err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("copying feedback file: %w", err)
+		}
+		// File doesn't exist - not an error
+		return nil
+	}
+
+	log.Debug("Synced feedback file: %s -> %s", feedbackPath, feedbackDstPath)
+	return nil
+}
