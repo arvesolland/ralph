@@ -70,8 +70,18 @@ func TestWorkerCmd_FlagsRegistered(t *testing.T) {
 	if maxFlag == nil {
 		t.Error("expected --max flag to be registered")
 	} else {
-		if maxFlag.DefValue != "30" {
-			t.Errorf("expected --max default '30', got '%s'", maxFlag.DefValue)
+		if maxFlag.DefValue != "100" {
+			t.Errorf("expected --max default '100', got '%s'", maxFlag.DefValue)
+		}
+	}
+
+	// Check --push flag
+	pushFlag := cmd.Flags().Lookup("push")
+	if pushFlag == nil {
+		t.Error("expected --push flag to be registered")
+	} else {
+		if pushFlag.DefValue != "false" {
+			t.Errorf("expected --push default 'false', got '%s'", pushFlag.DefValue)
 		}
 	}
 }

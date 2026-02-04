@@ -31,6 +31,7 @@ var (
 	workerMaxIter      int
 	workerSync         bool
 	workerSyncInterval time.Duration
+	workerPush         bool
 )
 
 var workerCmd = &cobra.Command{
@@ -72,6 +73,7 @@ func init() {
 	workerCmd.Flags().IntVar(&workerMaxIter, "max", worker.DefaultMaxIterations, "maximum iterations per plan")
 	workerCmd.Flags().BoolVar(&workerSync, "sync", false, "pull from remote before each queue check")
 	workerCmd.Flags().DurationVar(&workerSyncInterval, "sync-interval", 0, "minimum time between syncs (e.g., 60s)")
+	workerCmd.Flags().BoolVar(&workerPush, "push", false, "push to remote after each iteration (prevents work loss on spot instances)")
 }
 
 func runWorker(cmd *cobra.Command, args []string) error {
@@ -173,8 +175,9 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		PollInterval:     workerInterval,
 		MaxIterations:    workerMaxIter,
 		CompletionMode:   completionMode,
-		SyncEnabled:      syncEnabled,
-		SyncInterval:     syncInterval,
+		SyncEnabled:        syncEnabled,
+		SyncInterval:       syncInterval,
+		PushAfterIteration: workerPush,
 		OnPlanStart: func(p *plan.Plan) {
 			log.Success("=== Starting plan: %s ===", p.Name)
 			log.Info("Branch: %s", p.Branch)
@@ -242,6 +245,9 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		} else {
 			log.Info("Sync enabled (every check)")
 		}
+	}
+	if workerPush {
+		log.Info("Push after iteration: enabled")
 	}
 
 	if workerOnce {

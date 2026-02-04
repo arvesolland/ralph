@@ -66,6 +66,9 @@ type IterationLoop struct {
 
 	// onBlocker is called when a blocker is detected
 	onBlocker func(blocker *Blocker)
+
+	// onAfterCommit is called after a successful commit (for pushing to remote)
+	onAfterCommit func()
 }
 
 // LoopConfig holds configuration for creating an IterationLoop.
@@ -80,6 +83,7 @@ type LoopConfig struct {
 	IterationTimeout time.Duration
 	OnIteration      func(iteration int, result *Result)
 	OnBlocker        func(blocker *Blocker)
+	OnAfterCommit    func()
 }
 
 // NewIterationLoop creates a new iteration loop with the given configuration.
@@ -100,6 +104,7 @@ func NewIterationLoop(cfg LoopConfig) *IterationLoop {
 		iterationTimeout: timeout,
 		onIteration:      cfg.OnIteration,
 		onBlocker:        cfg.OnBlocker,
+		onAfterCommit:    cfg.OnAfterCommit,
 	}
 }
 
@@ -316,6 +321,12 @@ func (l *IterationLoop) commitChanges() error {
 	}
 
 	log.Debug("Committed iteration %d changes", l.ctx.Iteration)
+
+	// Call after-commit callback (for pushing to remote)
+	if l.onAfterCommit != nil {
+		l.onAfterCommit()
+	}
+
 	return nil
 }
 

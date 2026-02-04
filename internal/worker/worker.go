@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -36,7 +37,7 @@ var (
 const DefaultPollInterval = 30 * time.Second
 
 // DefaultMaxIterations is the default maximum number of iterations per plan.
-const DefaultMaxIterations = 30
+const DefaultMaxIterations = 100
 
 // Worker processes plans from the queue.
 type Worker struct {
@@ -90,6 +91,9 @@ type Worker struct {
 
 	// lastSyncTime tracks when we last synced
 	lastSyncTime time.Time
+
+	// pushAfterIteration enables pushing to remote after each iteration
+	pushAfterIteration bool
 
 	// onPlanStart is called when a plan starts processing
 	onPlanStart func(p *plan.Plan)
@@ -148,6 +152,9 @@ type WorkerConfig struct {
 	// SyncInterval is the minimum time between syncs (0 = sync every time)
 	SyncInterval time.Duration
 
+	// PushAfterIteration enables pushing to remote after each iteration
+	PushAfterIteration bool
+
 	// Callbacks
 	OnPlanStart    func(p *plan.Plan)
 	OnPlanComplete func(p *plan.Plan, result *runner.LoopResult)
@@ -191,9 +198,10 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		pollInterval:     pollInterval,
 		maxIterations:    maxIterations,
 		completionMode:   completionMode,
-		syncEnabled:      cfg.SyncEnabled,
-		syncInterval:     cfg.SyncInterval,
-		onPlanStart:      cfg.OnPlanStart,
+		syncEnabled:        cfg.SyncEnabled,
+		syncInterval:       cfg.SyncInterval,
+		pushAfterIteration: cfg.PushAfterIteration,
+		onPlanStart:        cfg.OnPlanStart,
 		onPlanComplete:   cfg.OnPlanComplete,
 		onPlanError:      cfg.OnPlanError,
 		onBlocker:        cfg.OnBlocker,
@@ -408,6 +416,18 @@ func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
 				w.onBlocker(p, blocker)
 			}
 		},
+		OnAfterCommit: func() {
+			// Push to remote after each commit if enabled
+			if w.pushAfterIteration {
+				log.Debug("Pushing to remote after iteration...")
+				if err := wtGit.Push(); err != nil {
+					log.Warn("Failed to push to remote: %v", err)
+					// Non-fatal, continue
+				} else {
+					log.Debug("Pushed to remote successfully")
+				}
+			}
+		},
 	})
 
 	// Run the iteration loop
@@ -426,6 +446,25 @@ func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
 		if errors.Is(result.Error, context.Canceled) {
 			log.Info("Plan processing interrupted")
 			return ErrInterrupted
+		}
+
+		// Check if max iterations reached - archive the plan so it doesn't retry forever
+		if strings.Contains(result.Error.Error(), "max iterations") {
+			log.Warn("Max iterations reached, archiving plan as incomplete")
+			w.notifyError(p, result.Error)
+
+			// Archive the plan (move to complete/) so it stops being retried
+			if archiveErr := w.queue.Complete(p); archiveErr != nil {
+				log.Error("Failed to archive incomplete plan: %v", archiveErr)
+			}
+
+			// Clean up worktree
+			if err := w.worktreeManager.Remove(p, false); err != nil {
+				log.Warn("Failed to remove worktree: %v", err)
+			}
+
+			// Return nil so worker continues to next plan instead of retrying
+			return nil
 		}
 
 		w.notifyError(p, result.Error)
