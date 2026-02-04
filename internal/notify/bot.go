@@ -123,12 +123,17 @@ func (b *SocketModeBot) Start(ctx context.Context) error {
 
 	// Start the Socket Mode connection
 	go func() {
-		if err := b.client.Run(); err != nil {
-			log.Error("Socket Mode connection error: %v", err)
-			b.mu.Lock()
-			b.running = false
-			b.mu.Unlock()
+		log.Debug("Starting Socket Mode client.Run()")
+		err := b.client.Run()
+		// Run() only returns when the connection is permanently closed
+		if err != nil {
+			log.Error("Socket Mode client.Run() returned with error: %v", err)
+		} else {
+			log.Warn("Socket Mode client.Run() returned without error - connection closed")
 		}
+		b.mu.Lock()
+		b.running = false
+		b.mu.Unlock()
 	}()
 
 	return nil
@@ -189,19 +194,40 @@ func (b *SocketModeBot) processEvent(evt socketmode.Event) {
 	case socketmode.EventTypeConnected:
 		log.Info("Connected to Slack Socket Mode (listening for replies in channel %s)", b.channelID)
 
+	case socketmode.EventTypeHello:
+		// Hello is sent by Slack after connection - this is normal and expected
+		log.Debug("Received hello from Slack Socket Mode - connection established")
+
 	case socketmode.EventTypeConnectionError:
 		log.Warn("Socket Mode connection error, will attempt to reconnect")
 
+	case socketmode.EventTypeIncomingError:
+		log.Warn("Socket Mode incoming error: %v", evt.Data)
+
 	case socketmode.EventTypeDisconnect:
-		log.Debug("Disconnected from Socket Mode")
+		log.Warn("Disconnected from Socket Mode - will attempt to reconnect")
 
 	case socketmode.EventTypeEventsAPI:
 		log.Debug("Received Events API event")
 		b.handleEventsAPIEvent(evt)
 
+	case socketmode.EventTypeInteractive:
+		// Interactive components (buttons, etc) - acknowledge but don't process
+		log.Debug("Received interactive event (not processed)")
+		if evt.Request != nil {
+			b.client.Ack(*evt.Request)
+		}
+
+	case socketmode.EventTypeSlashCommand:
+		// Slash commands - acknowledge but don't process
+		log.Debug("Received slash command (not processed)")
+		if evt.Request != nil {
+			b.client.Ack(*evt.Request)
+		}
+
 	default:
-		log.Debug("Received unknown Socket Mode event type: %s", evt.Type)
-		// Acknowledge unknown events
+		log.Debug("Received unhandled Socket Mode event type: %s", evt.Type)
+		// Acknowledge unknown events to prevent Slack from retrying
 		if evt.Request != nil {
 			b.client.Ack(*evt.Request)
 		}
