@@ -543,6 +543,169 @@ exit 1
 	}
 }
 
+func TestWorker_RunOnce_RecoversPlanFromPending(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	// This test simulates a plan in pending/ that already has a PR
+	// This happens with worktree isolation: plan stays in pending/ on main branch
+	// even after PR is created from the worktree
+
+	// Create temp directory with git repo
+	tmpDir := t.TempDir()
+
+	// Initialize git repo
+	g := git.NewGit(tmpDir)
+	if err := runGitInit(tmpDir); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	// Create queue structure
+	queueDir := filepath.Join(tmpDir, "plans")
+	os.MkdirAll(filepath.Join(queueDir, "pending"), 0755)
+	os.MkdirAll(filepath.Join(queueDir, "current"), 0755)
+	os.MkdirAll(filepath.Join(queueDir, "complete"), 0755)
+
+	// Create a test plan in PENDING (not current!) - simulates worktree isolation
+	planContent := `# Test Plan
+
+**Status:** complete
+
+## Tasks
+
+- [x] Task 1
+`
+	planPath := filepath.Join(queueDir, "pending", "test-pending-recovery.md")
+	if err := os.WriteFile(planPath, []byte(planContent), 0644); err != nil {
+		t.Fatalf("Failed to create plan: %v", err)
+	}
+
+	// Initial commit
+	if err := g.Add("plans/pending/test-pending-recovery.md"); err != nil {
+		t.Fatalf("Failed to add plan: %v", err)
+	}
+	if err := g.Commit("Initial commit"); err != nil {
+		t.Fatalf("Failed to commit: %v", err)
+	}
+
+	// Create a feature branch (simulates what happened in a previous worktree run)
+	if err := g.CreateBranch("feat/test-pending-recovery"); err != nil {
+		t.Fatalf("Failed to create branch: %v", err)
+	}
+
+	// Mock gh CLI to return a PR URL for this branch
+	binDir := filepath.Join(tmpDir, "bin")
+	os.MkdirAll(binDir, 0755)
+
+	ghScript := filepath.Join(binDir, "gh")
+	ghContent := `#!/bin/bash
+if [ "$1" = "pr" ] && [ "$2" = "list" ] && [ "$4" = "feat/test-pending-recovery" ]; then
+  echo "https://github.com/test/test/pull/456"
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(ghScript, []byte(ghContent), 0755); err != nil {
+		t.Fatalf("Failed to create gh mock: %v", err)
+	}
+
+	// Update PATH to include our bin directory
+	oldPath := os.Getenv("PATH")
+	os.Setenv("PATH", binDir+":"+oldPath)
+	defer os.Setenv("PATH", oldPath)
+
+	// Create worker manager
+	worktreesDir := filepath.Join(tmpDir, ".ralph", "worktrees")
+	os.MkdirAll(worktreesDir, 0755)
+
+	manager, err := worktree.NewManager(g, worktreesDir)
+	if err != nil {
+		t.Fatalf("Failed to create manager: %v", err)
+	}
+
+	queue := plan.NewQueue(queueDir)
+
+	// Verify NO current plan (it's in pending)
+	currentPlan, err := queue.Current()
+	if err != nil {
+		t.Fatalf("Current() error = %v", err)
+	}
+	if currentPlan != nil {
+		t.Fatal("Expected no current plan")
+	}
+
+	// Verify pending plan exists
+	pending, err := queue.Pending()
+	if err != nil {
+		t.Fatalf("Pending() error = %v", err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("Expected 1 pending plan, got %d", len(pending))
+	}
+
+	// Create a mock runner (shouldn't be called since we detect existing PR)
+	mockRunner := &MockRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			t.Error("Runner should not be called when PR already exists")
+			return nil, nil
+		},
+	}
+
+	cfg := config.Defaults()
+	cfg.Git.BaseBranch = "main"
+
+	builder := prompt.NewBuilder(cfg, tmpDir, "")
+
+	var planStartCalled bool
+	w := NewWorker(WorkerConfig{
+		Queue:            queue,
+		Config:           cfg,
+		ConfigDir:        filepath.Join(tmpDir, ".ralph"),
+		WorktreeManager:  manager,
+		Git:              g,
+		MainWorktreePath: tmpDir,
+		Runner:           mockRunner,
+		PromptBuilder:    builder,
+		MaxIterations:    3,
+		CompletionMode:   "pr",
+		OnPlanStart: func(p *plan.Plan) {
+			planStartCalled = true
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = w.RunOnce(ctx)
+	if err != nil {
+		t.Fatalf("RunOnce() error = %v", err)
+	}
+
+	// Verify plan was NOT started (recovered instead)
+	if planStartCalled {
+		t.Error("OnPlanStart should not be called when PR already exists")
+	}
+
+	// Verify no plan in current/ (was activated then immediately completed)
+	currentPlan, err = queue.Current()
+	if err != nil {
+		t.Fatalf("Current() error = %v", err)
+	}
+	if currentPlan != nil {
+		t.Error("Expected no current plan after recovery")
+	}
+
+	// Verify plan is in complete/
+	completed, err := os.ReadDir(filepath.Join(queueDir, "complete"))
+	if err != nil {
+		t.Fatalf("Failed to read complete dir: %v", err)
+	}
+	if len(completed) == 0 {
+		t.Error("Expected plan to be moved to complete/")
+	}
+}
+
 func TestConstants(t *testing.T) {
 	if DefaultPollInterval != 30*time.Second {
 		t.Errorf("DefaultPollInterval = %v, want %v", DefaultPollInterval, 30*time.Second)

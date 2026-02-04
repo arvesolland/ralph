@@ -313,25 +313,6 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	var p *plan.Plan
 
 	if currentPlan != nil {
-		// Check if plan was already completed (PR exists) but didn't get archived
-		// This can happen if instance was terminated after PR creation but before completion
-		if w.completionMode == "pr" {
-			if prExists, prURL := w.checkExistingPR(currentPlan); prExists {
-				log.Warn("Found existing PR for current plan (likely interrupted during completion)")
-				log.Info("Recovering by completing plan: %s", currentPlan.Name)
-				log.Info("PR: %s", prURL)
-
-				// Complete the plan (archive and cleanup)
-				if err := w.recoverCompletedPlan(currentPlan, prURL); err != nil {
-					log.Error("Failed to recover plan: %v", err)
-					// Continue anyway - plan will be reprocessed
-				} else {
-					// Successfully recovered, move to next plan
-					return nil
-				}
-			}
-		}
-
 		// Resume the current plan
 		log.Info("Resuming current plan: %s", currentPlan.Name)
 		p = currentPlan
@@ -353,6 +334,28 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		log.Info("Activating plan: %s", p.Name)
 		if err := w.queue.Activate(p); err != nil {
 			return fmt.Errorf("activating plan: %w", err)
+		}
+	}
+
+	// Check if plan was already completed (PR exists) but didn't get archived
+	// This can happen if:
+	// 1. Instance was terminated after PR creation but before completion
+	// 2. Plan is in pending/ but already has a PR from a previous run (worktree isolation)
+	if w.completionMode == "pr" {
+		if prExists, prURL := w.checkExistingPR(p); prExists {
+			log.Warn("Found existing PR for plan '%s' (likely interrupted during completion)", p.Name)
+			log.Info("PR: %s", prURL)
+			log.Info("Recovering by completing plan...")
+
+			// Complete the plan (archive and cleanup)
+			if err := w.recoverCompletedPlan(p, prURL); err != nil {
+				log.Error("Failed to recover plan: %v", err)
+				// Continue anyway - plan will be reprocessed
+			} else {
+				// Successfully recovered, move to next plan
+				log.Success("Plan '%s' recovered and archived", p.Name)
+				return nil
+			}
 		}
 	}
 
