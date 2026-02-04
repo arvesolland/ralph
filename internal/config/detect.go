@@ -57,6 +57,11 @@ func Detect(dir string) (*DetectedConfig, error) {
 		return cfg, nil
 	}
 
+	// Check for Gradle project (Java/Kotlin)
+	if cfg, err := detectGradle(dir); err == nil && cfg != nil {
+		return cfg, nil
+	}
+
 	// No project detected, return empty config
 	return detected, nil
 }
@@ -263,6 +268,45 @@ func detectRuby(dir string) (*DetectedConfig, error) {
 	// Check for RuboCop
 	if fileExists(filepath.Join(dir, ".rubocop.yml")) {
 		cfg.Commands.Lint = "bundle exec rubocop"
+	}
+
+	return cfg, nil
+}
+
+// detectGradle checks for Gradle projects (Java/Kotlin).
+func detectGradle(dir string) (*DetectedConfig, error) {
+	// Check for Gradle build files
+	hasGradle := fileExists(filepath.Join(dir, "build.gradle")) ||
+		fileExists(filepath.Join(dir, "build.gradle.kts")) ||
+		fileExists(filepath.Join(dir, "settings.gradle")) ||
+		fileExists(filepath.Join(dir, "settings.gradle.kts"))
+
+	if !hasGradle {
+		return nil, nil
+	}
+
+	// Determine if it's Kotlin or Java based on build file extension
+	language := "java"
+	if fileExists(filepath.Join(dir, "build.gradle.kts")) {
+		language = "kotlin"
+	}
+
+	cfg := &DetectedConfig{
+		Language: language,
+		Commands: CommandsConfig{
+			Test:  "./gradlew test",
+			Build: "./gradlew build",
+		},
+	}
+
+	// Check for Android project
+	if fileExists(filepath.Join(dir, "app", "build.gradle")) ||
+		fileExists(filepath.Join(dir, "app", "build.gradle.kts")) {
+		cfg.Framework = "android"
+		cfg.Commands.Lint = "./gradlew lint"
+	} else {
+		// Standard Gradle lint check
+		cfg.Commands.Lint = "./gradlew check"
 	}
 
 	return cfg, nil
