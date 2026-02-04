@@ -187,7 +187,7 @@ func (b *SocketModeBot) processEvent(evt socketmode.Event) {
 		log.Debug("Connecting to Slack Socket Mode...")
 
 	case socketmode.EventTypeConnected:
-		log.Info("Connected to Slack Socket Mode")
+		log.Info("Connected to Slack Socket Mode (listening for replies in channel %s)", b.channelID)
 
 	case socketmode.EventTypeConnectionError:
 		log.Warn("Socket Mode connection error, will attempt to reconnect")
@@ -196,9 +196,11 @@ func (b *SocketModeBot) processEvent(evt socketmode.Event) {
 		log.Debug("Disconnected from Socket Mode")
 
 	case socketmode.EventTypeEventsAPI:
+		log.Debug("Received Events API event")
 		b.handleEventsAPIEvent(evt)
 
 	default:
+		log.Debug("Received unknown Socket Mode event type: %s", evt.Type)
 		// Acknowledge unknown events
 		if evt.Request != nil {
 			b.client.Ack(*evt.Request)
@@ -241,25 +243,31 @@ func (b *SocketModeBot) handleCallbackEvent(evt slackevents.EventsAPIEvent) {
 // handleMessageEvent processes message events.
 // Only processes thread replies in tracked threads.
 func (b *SocketModeBot) handleMessageEvent(ev *slackevents.MessageEvent) {
+	log.Debug("Socket Mode received message: channel=%s thread=%s user=%s bot=%s subtype=%s",
+		ev.Channel, ev.ThreadTimeStamp, ev.User, ev.BotID, ev.SubType)
+
 	// Ignore messages from bots (including self)
 	if ev.BotID != "" || ev.SubType == "bot_message" {
+		log.Debug("Ignoring bot message")
 		return
 	}
 
 	// Only process messages in the configured channel
 	if ev.Channel != b.channelID {
+		log.Debug("Ignoring message from different channel: got %s, want %s", ev.Channel, b.channelID)
 		return
 	}
 
 	// Only process thread replies (messages with ThreadTimeStamp that differs from TimeStamp)
 	if ev.ThreadTimeStamp == "" || ev.ThreadTimeStamp == ev.TimeStamp {
+		log.Debug("Ignoring non-thread message")
 		return
 	}
 
 	// Look up the plan from the thread timestamp
 	planName := b.findPlanByThread(ev.ThreadTimeStamp)
 	if planName == "" {
-		log.Debug("No plan found for thread: %s", ev.ThreadTimeStamp)
+		log.Debug("No plan found for thread: %s (tracked threads: %d)", ev.ThreadTimeStamp, len(b.threadTracker.List()))
 		return
 	}
 
