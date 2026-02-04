@@ -92,6 +92,13 @@ repo/                          # Main worktree (always on base branch)
 - `--merge`: Merge directly to base branch, archive, delete branch + worktree
 - Config: `completion.mode: pr|merge` in `.ralph/config.yaml`
 
+**Automatic Recovery:**
+If a spot instance is terminated after PR creation but before plan archival, the worker automatically detects and recovers on restart:
+- On startup, checks if current plan has existing PR (via `gh pr list`)
+- If PR exists, auto-completes the plan (archives to `complete/`, cleans up worktree)
+- Prevents duplicate processing of already-completed plans
+- No manual intervention required
+
 **Commands:**
 ```bash
 ralph cleanup     # Remove orphaned worktrees

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -312,6 +313,25 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	var p *plan.Plan
 
 	if currentPlan != nil {
+		// Check if plan was already completed (PR exists) but didn't get archived
+		// This can happen if instance was terminated after PR creation but before completion
+		if w.completionMode == "pr" {
+			if prExists, prURL := w.checkExistingPR(currentPlan); prExists {
+				log.Warn("Found existing PR for current plan (likely interrupted during completion)")
+				log.Info("Recovering by completing plan: %s", currentPlan.Name)
+				log.Info("PR: %s", prURL)
+
+				// Complete the plan (archive and cleanup)
+				if err := w.recoverCompletedPlan(currentPlan, prURL); err != nil {
+					log.Error("Failed to recover plan: %v", err)
+					// Continue anyway - plan will be reprocessed
+				} else {
+					// Successfully recovered, move to next plan
+					return nil
+				}
+			}
+		}
+
 		// Resume the current plan
 		log.Info("Resuming current plan: %s", currentPlan.Name)
 		p = currentPlan
@@ -796,4 +816,51 @@ func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notif
 
 	// No Slack configured
 	return &notify.NoopNotifier{}
+}
+
+// checkExistingPR checks if a PR already exists for the plan's branch.
+// Returns (true, prURL) if PR exists, (false, "") otherwise.
+func (w *Worker) checkExistingPR(p *plan.Plan) (bool, string) {
+	// Use gh CLI to check for PR
+	cmd := exec.Command("gh", "pr", "list", "--head", p.Branch, "--state", "all", "--json", "url", "--jq", ".[0].url")
+	cmd.Dir = w.mainWorktreePath
+
+	output, err := cmd.Output()
+	if err != nil {
+		// Command failed - gh might not be available or repo not configured
+		log.Debug("Failed to check for existing PR: %v", err)
+		return false, ""
+	}
+
+	prURL := strings.TrimSpace(string(output))
+	if prURL == "" || prURL == "null" {
+		return false, ""
+	}
+
+	return true, prURL
+}
+
+// recoverCompletedPlan handles recovery of a plan that was completed but not archived.
+// This happens when instance is terminated between PR creation and plan archival.
+func (w *Worker) recoverCompletedPlan(p *plan.Plan, prURL string) error {
+	// Send completion notification
+	w.sendCompleteNotification(p, prURL)
+
+	// Archive the plan (move to complete/)
+	if err := w.queue.Complete(p); err != nil {
+		return fmt.Errorf("archiving plan: %w", err)
+	}
+
+	// Clean up worktree if it exists
+	if w.worktreeManager.Exists(p) {
+		log.Info("Cleaning up worktree...")
+		// Don't delete branch - PR still references it
+		if err := w.worktreeManager.Remove(p, false); err != nil {
+			log.Warn("Failed to remove worktree: %v", err)
+			// Non-fatal
+		}
+	}
+
+	log.Success("Plan recovery complete: %s", p.Name)
+	return nil
 }
