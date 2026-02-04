@@ -351,6 +351,27 @@ func TestParseBlockerFields(t *testing.T) {
 			wantAct:  "Do something",
 			wantRes:  "",
 		},
+		{
+			name:     "multi-line action",
+			content:  "Description: Need input\nAction: Choose one approach:\n1. Option A\n2. Option B\n3. Option C\nResume: Will proceed with chosen option",
+			wantDesc: "Need input",
+			wantAct:  "Choose one approach:\n1. Option A\n2. Option B\n3. Option C",
+			wantRes:  "Will proceed with chosen option",
+		},
+		{
+			name:     "multi-line resume",
+			content:  "Description: Blocked\nAction: Do this\nResume: Will do multiple things:\n- First thing\n- Second thing",
+			wantDesc: "Blocked",
+			wantAct:  "Do this",
+			wantRes:  "Will do multiple things:\n- First thing\n- Second thing",
+		},
+		{
+			name:     "multi-line all fields",
+			content:  "Description: Complex blocker\nwith multiple lines\nAction: Steps to resolve:\n1. Step one\n2. Step two\nResume: After resolution:\n- Continue task\n- Verify result",
+			wantDesc: "Complex blocker\nwith multiple lines",
+			wantAct:  "Steps to resolve:\n1. Step one\n2. Step two",
+			wantRes:  "After resolution:\n- Continue task\n- Verify result",
+		},
 	}
 
 	for _, tt := range tests {

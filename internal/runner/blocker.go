@@ -11,10 +11,13 @@ import (
 var blockerTagRegex = regexp.MustCompile(`(?s)<blocker>(.*?)</blocker>`)
 
 // fieldRegexes for parsing structured fields within blocker content.
+// Using (?s) for single-line mode where . matches newlines for multi-line capture.
 var (
 	descriptionRegex = regexp.MustCompile(`(?im)^(?:Description:\s*)?(.+?)(?:\n(?:Action:|Resume:)|$)`)
-	actionRegex      = regexp.MustCompile(`(?im)^Action:\s*(.+?)(?:\nResume:|$)`)
-	resumeRegex      = regexp.MustCompile(`(?im)^Resume:\s*(.+)$`)
+	// actionRegex captures multi-line content: everything after "Action:" until "Resume:" or end
+	actionRegex = regexp.MustCompile(`(?ims)^Action:\s*(.*?)(?:\nResume:|\z)`)
+	// resumeRegex captures everything after "Resume:" to the end
+	resumeRegex = regexp.MustCompile(`(?ims)^Resume:\s*(.*)$`)
 )
 
 // ExtractBlocker extracts blocker information from Claude output.

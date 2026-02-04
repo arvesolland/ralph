@@ -304,6 +304,9 @@ func (b *SocketModeBot) handleMessageEvent(ev *slackevents.MessageEvent) {
 	}
 
 	log.Info("Received thread reply for plan %s from user %s", planName, ev.User)
+
+	// Add emoji reaction to acknowledge receipt
+	b.addReaction(ev.Channel, ev.TimeStamp, "eyes")
 }
 
 // findPlanByThread looks up the plan name from a thread timestamp.
@@ -320,6 +323,22 @@ func (b *SocketModeBot) findPlanByThread(threadTS string) string {
 	}
 
 	return ""
+}
+
+// addReaction adds an emoji reaction to a message.
+// Used to acknowledge feedback receipt.
+func (b *SocketModeBot) addReaction(channel, timestamp, emoji string) {
+	if b.api == nil {
+		return
+	}
+
+	msgRef := slack.NewRefToMessage(channel, timestamp)
+	if err := b.api.AddReaction(emoji, msgRef); err != nil {
+		log.Debug("Failed to add reaction: %v", err)
+		// Non-fatal, don't return error
+	} else {
+		log.Debug("Added %s reaction to acknowledge feedback", emoji)
+	}
 }
 
 // writeFeedback writes a thread reply to the plan's feedback file.
