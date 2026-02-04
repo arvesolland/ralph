@@ -25,6 +25,11 @@ a plan was interrupted and you want to start over.
 If a worktree exists for the plan, it will be removed (unless --keep-worktree
 is specified).
 
+Use --hard to fully reset the plan:
+  - Delete the feature branch
+  - Reset progress.md and feedback.md to their initial templates
+  - Preserves the original plan.md file
+
 By default, prompts for confirmation before resetting.`,
 	RunE: runReset,
 }
@@ -32,12 +37,14 @@ By default, prompts for confirmation before resetting.`,
 var (
 	resetForce        bool
 	resetKeepWorktree bool
+	resetHard         bool
 )
 
 func init() {
 	rootCmd.AddCommand(resetCmd)
 	resetCmd.Flags().BoolVarP(&resetForce, "force", "f", false, "Skip confirmation prompt")
 	resetCmd.Flags().BoolVar(&resetKeepWorktree, "keep-worktree", false, "Don't remove the worktree")
+	resetCmd.Flags().BoolVar(&resetHard, "hard", false, "Delete feature branch and reset progress/feedback files")
 }
 
 func runReset(cmd *cobra.Command, args []string) error {
@@ -64,7 +71,11 @@ func runReset(cmd *cobra.Command, args []string) error {
 
 	// Confirm unless --force
 	if !resetForce {
-		fmt.Printf("Reset plan '%s' back to pending?\n", current.Name)
+		if resetHard {
+			fmt.Printf("Hard reset plan '%s' back to pending?\n", current.Name)
+		} else {
+			fmt.Printf("Reset plan '%s' back to pending?\n", current.Name)
+		}
 		fmt.Printf("Branch: %s\n", current.Branch)
 
 		// Check if worktree exists
@@ -75,6 +86,13 @@ func runReset(cmd *cobra.Command, args []string) error {
 				fmt.Println("Worktree will be kept")
 			} else {
 				fmt.Printf("Worktree at %s will be removed\n", manager.Path(current))
+			}
+		}
+
+		if resetHard {
+			fmt.Printf("Branch '%s' will be deleted\n", current.Branch)
+			if current.IsBundle() {
+				fmt.Println("progress.md and feedback.md will be reset")
 			}
 		}
 
@@ -98,8 +116,8 @@ func runReset(cmd *cobra.Command, args []string) error {
 		manager, err := worktree.NewManager(g, worktreesDir)
 		if err == nil && manager.Exists(current) {
 			log.Info("Removing worktree...")
-			// Don't delete branch - user might want to continue later
-			if err := manager.Remove(current, false); err != nil {
+			// Delete branch only if --hard is set
+			if err := manager.Remove(current, resetHard); err != nil {
 				log.Warn("Failed to remove worktree: %v", err)
 				// Continue anyway - the reset itself is more important
 			} else {
@@ -108,12 +126,36 @@ func runReset(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Reset the plan
+	// Delete branch if --hard and worktree was kept (branch wasn't deleted above)
+	if resetHard && resetKeepWorktree {
+		log.Info("Deleting branch '%s'...", current.Branch)
+		if err := g.DeleteBranch(current.Branch, true); err != nil {
+			log.Warn("Failed to delete branch: %v", err)
+		} else {
+			log.Success("Branch deleted")
+		}
+	}
+
+	// Reset progress.md and feedback.md if --hard and plan is a bundle
+	if resetHard && current.IsBundle() {
+		log.Info("Resetting progress.md and feedback.md...")
+		if err := plan.ResetBundleState(current.BundleDir, current.Name); err != nil {
+			log.Warn("Failed to reset state files: %v", err)
+		} else {
+			log.Success("State files reset")
+		}
+	}
+
+	// Reset the plan (move to pending)
 	if err := queue.Reset(current); err != nil {
 		return fmt.Errorf("resetting plan: %w", err)
 	}
 
-	log.Success("Plan '%s' reset to pending", current.Name)
+	if resetHard {
+		log.Success("Plan '%s' hard reset to pending", current.Name)
+	} else {
+		log.Success("Plan '%s' reset to pending", current.Name)
+	}
 
 	// Store repo root for reference (unused but avoids warning)
 	_ = repoRoot

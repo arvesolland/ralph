@@ -272,6 +272,18 @@ func migratePlanFile(planPath string) error {
 	return nil
 }
 
+// ResetBundleState resets progress.md and feedback.md to their initial templates.
+// This is used when doing a hard reset - the plan.md is preserved but execution state is cleared.
+func ResetBundleState(bundleDir, name string) error {
+	if err := scaffoldProgress(bundleDir, name); err != nil {
+		return fmt.Errorf("failed to reset progress.md: %w", err)
+	}
+	if err := scaffoldFeedback(bundleDir, name); err != nil {
+		return fmt.Errorf("failed to reset feedback.md: %w", err)
+	}
+	return nil
+}
+
 // sanitizeBundleName converts a plan name to a valid directory name.
 // Similar to sanitizeBranchName but preserves case.
 func sanitizeBundleName(name string) string {

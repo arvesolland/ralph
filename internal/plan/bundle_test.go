@@ -409,3 +409,52 @@ func TestMigrateToBundles(t *testing.T) {
 		}
 	})
 }
+
+func TestResetBundleState(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create initial files with custom content (simulating execution state)
+	progressContent := "# Progress: test-plan\n\n### Iteration 1\nDid some work\n"
+	feedbackContent := "# Feedback: test-plan\n\n## Pending\n- [2024-01-01] Fix this bug\n\n## Processed\n"
+	os.WriteFile(filepath.Join(tmpDir, "progress.md"), []byte(progressContent), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "feedback.md"), []byte(feedbackContent), 0644)
+
+	// Reset the state
+	err := ResetBundleState(tmpDir, "test-plan")
+	if err != nil {
+		t.Fatalf("ResetBundleState failed: %v", err)
+	}
+
+	// Verify progress.md was reset to template
+	newProgress, err := os.ReadFile(filepath.Join(tmpDir, "progress.md"))
+	if err != nil {
+		t.Fatalf("failed to read progress.md: %v", err)
+	}
+	if strings.Contains(string(newProgress), "Iteration 1") {
+		t.Error("progress.md still contains old iteration content")
+	}
+	if !strings.Contains(string(newProgress), "# Progress: test-plan") {
+		t.Error("progress.md missing expected header")
+	}
+	if !strings.Contains(string(newProgress), "### Iteration N") {
+		t.Error("progress.md missing format template")
+	}
+
+	// Verify feedback.md was reset to template
+	newFeedback, err := os.ReadFile(filepath.Join(tmpDir, "feedback.md"))
+	if err != nil {
+		t.Fatalf("failed to read feedback.md: %v", err)
+	}
+	if strings.Contains(string(newFeedback), "Fix this bug") {
+		t.Error("feedback.md still contains old feedback content")
+	}
+	if !strings.Contains(string(newFeedback), "# Feedback: test-plan") {
+		t.Error("feedback.md missing expected header")
+	}
+	if !strings.Contains(string(newFeedback), "## Pending") {
+		t.Error("feedback.md missing Pending section")
+	}
+	if !strings.Contains(string(newFeedback), "## Processed") {
+		t.Error("feedback.md missing Processed section")
+	}
+}

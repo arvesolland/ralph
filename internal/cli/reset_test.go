@@ -50,6 +50,16 @@ func TestResetCmd_FlagsRegistered(t *testing.T) {
 			t.Errorf("expected --keep-worktree default to be false, got %q", keepFlag.DefValue)
 		}
 	}
+
+	// Check --hard flag
+	hardFlag := cmd.Flags().Lookup("hard")
+	if hardFlag == nil {
+		t.Error("expected --hard flag to be registered")
+	} else {
+		if hardFlag.DefValue != "false" {
+			t.Errorf("expected --hard default to be false, got %q", hardFlag.DefValue)
+		}
+	}
 }
 
 func TestResetCmd_RequiresGitRepo(t *testing.T) {
@@ -350,5 +360,148 @@ func TestResetCmd_KeepWorktree(t *testing.T) {
 	// Verify plan moved to pending
 	if _, err := os.Stat(filepath.Join(pendingDir, "test-plan.md")); os.IsNotExist(err) {
 		t.Error("expected plan to be in pending/")
+	}
+}
+
+func TestResetCmd_HardReset(t *testing.T) {
+	// Create temp directory with git repo
+	tmpDir, err := os.MkdirTemp("", "reset-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Initialize git repo with initial commit
+	gitInit := exec.Command("git", "init", "-b", "main")
+	gitInit.Dir = tmpDir
+	if err := gitInit.Run(); err != nil {
+		t.Fatalf("failed to init git: %v", err)
+	}
+
+	// Create initial commit
+	readmeFile := filepath.Join(tmpDir, "README.md")
+	os.WriteFile(readmeFile, []byte("# Test"), 0644)
+
+	gitAdd := exec.Command("git", "add", ".")
+	gitAdd.Dir = tmpDir
+	gitAdd.Run()
+
+	gitCommit := exec.Command("git", "-c", "user.email=test@test.com", "-c", "user.name=Test", "commit", "-m", "initial")
+	gitCommit.Dir = tmpDir
+	if err := gitCommit.Run(); err != nil {
+		t.Fatalf("failed to create initial commit: %v", err)
+	}
+
+	// Create plans directory structure
+	pendingDir := filepath.Join(tmpDir, "plans", "pending")
+	currentDir := filepath.Join(tmpDir, "plans", "current")
+	completeDir := filepath.Join(tmpDir, "plans", "complete")
+	worktreesDir := filepath.Join(tmpDir, ".ralph", "worktrees")
+	os.MkdirAll(pendingDir, 0755)
+	os.MkdirAll(currentDir, 0755)
+	os.MkdirAll(completeDir, 0755)
+	os.MkdirAll(worktreesDir, 0755)
+
+	// Create a plan bundle in current with custom progress/feedback
+	bundleDir := filepath.Join(currentDir, "test-plan")
+	os.MkdirAll(bundleDir, 0755)
+
+	planContent := `# Plan: test-plan
+**Status:** open
+
+## Tasks
+- [x] Task 1
+- [ ] Task 2
+`
+	progressContent := `# Progress: test-plan
+
+### Iteration 1
+Did some work on task 1.
+`
+	feedbackContent := `# Feedback: test-plan
+
+## Pending
+- [2024-01-01] Need help with task 2
+
+## Processed
+`
+	os.WriteFile(filepath.Join(bundleDir, "plan.md"), []byte(planContent), 0644)
+	os.WriteFile(filepath.Join(bundleDir, "progress.md"), []byte(progressContent), 0644)
+	os.WriteFile(filepath.Join(bundleDir, "feedback.md"), []byte(feedbackContent), 0644)
+
+	// Create a worktree and branch for this plan
+	worktreePath := filepath.Join(worktreesDir, "test-plan")
+	gitWorktree := exec.Command("git", "worktree", "add", "-b", "feat/test-plan", worktreePath)
+	gitWorktree.Dir = tmpDir
+	if err := gitWorktree.Run(); err != nil {
+		t.Fatalf("failed to create worktree: %v", err)
+	}
+
+	// Verify branch exists
+	gitBranch := exec.Command("git", "branch", "--list", "feat/test-plan")
+	gitBranch.Dir = tmpDir
+	branchOut, _ := gitBranch.Output()
+	if !strings.Contains(string(branchOut), "feat/test-plan") {
+		t.Fatal("branch should exist before reset")
+	}
+
+	// Change to temp directory
+	oldWd, _ := os.Getwd()
+	defer os.Chdir(oldWd)
+	os.Chdir(tmpDir)
+
+	// Run hard reset
+	resetForce = true
+	resetKeepWorktree = false
+	resetHard = true
+	defer func() { resetForce = false; resetKeepWorktree = false; resetHard = false }()
+
+	err = runReset(resetCmd, []string{})
+
+	if err != nil {
+		t.Fatalf("reset failed: %v", err)
+	}
+
+	// Verify worktree removed
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Error("expected worktree to be removed")
+	}
+
+	// Verify branch deleted
+	gitBranch = exec.Command("git", "branch", "--list", "feat/test-plan")
+	gitBranch.Dir = tmpDir
+	branchOut, _ = gitBranch.Output()
+	if strings.Contains(string(branchOut), "feat/test-plan") {
+		t.Error("expected branch to be deleted with --hard")
+	}
+
+	// Verify plan bundle moved to pending
+	newBundleDir := filepath.Join(pendingDir, "test-plan")
+	if _, err := os.Stat(newBundleDir); os.IsNotExist(err) {
+		t.Error("expected plan bundle to be in pending/")
+	}
+
+	// Verify plan.md is preserved (not reset)
+	planData, _ := os.ReadFile(filepath.Join(newBundleDir, "plan.md"))
+	if !strings.Contains(string(planData), "Task 1") {
+		t.Error("expected plan.md to be preserved")
+	}
+
+	// Verify progress.md was reset (no longer contains iteration content)
+	progressData, _ := os.ReadFile(filepath.Join(newBundleDir, "progress.md"))
+	if strings.Contains(string(progressData), "Iteration 1") {
+		t.Error("expected progress.md to be reset (should not contain 'Iteration 1')")
+	}
+	if !strings.Contains(string(progressData), "# Progress: test-plan") {
+		t.Error("expected progress.md to have proper header")
+	}
+
+	// Verify feedback.md was reset (no longer contains pending items)
+	feedbackData, _ := os.ReadFile(filepath.Join(newBundleDir, "feedback.md"))
+	if strings.Contains(string(feedbackData), "Need help") {
+		t.Error("expected feedback.md to be reset (should not contain old feedback)")
+	}
+	if !strings.Contains(string(feedbackData), "# Feedback: test-plan") {
+		t.Error("expected feedback.md to have proper header")
 	}
 }
