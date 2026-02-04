@@ -634,6 +634,12 @@ func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Wo
 			log.Error("Failed to merge: %v", err)
 			log.Warn("Plan completed but merge failed. Branch: %s", p.Branch)
 		}
+	case "branch":
+		// Push branch only, no PR or merge
+		if err := CompleteBranch(p, wtGit); err != nil {
+			log.Error("Failed to push branch: %v", err)
+			log.Warn("Plan completed but branch not pushed. Branch: %s", p.Branch)
+		}
 	default:
 		log.Debug("Unknown completion mode: %s, skipping", w.completionMode)
 	}

@@ -94,6 +94,18 @@ func CompletePR(cfg PRCreationConfig) (string, error) {
 	return prURL, nil
 }
 
+// CompleteBranch handles branch mode completion:
+// Push branch to origin only, without creating a PR.
+// This is useful when you want to manually create a PR later or review the branch first.
+func CompleteBranch(p *plan.Plan, g git.Git) error {
+	log.Info("Pushing branch %s to origin...", p.Branch)
+	if err := pushBranch(g, p.Branch); err != nil {
+		return fmt.Errorf("%w: %v", ErrPushFailed, err)
+	}
+	log.Success("Branch %s pushed to origin (no PR created)", p.Branch)
+	return nil
+}
+
 // createPRWithClaude uses Claude Code CLI to create a PR with a good description.
 func createPRWithClaude(cfg PRCreationConfig) (string, error) {
 	// Build the prompt

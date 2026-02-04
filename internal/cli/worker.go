@@ -27,6 +27,7 @@ var (
 	workerOnce         bool
 	workerPRMode       bool
 	workerMergeMode    bool
+	workerBranchMode   bool
 	workerInterval     time.Duration
 	workerMaxIter      int
 	workerSync         bool
@@ -43,7 +44,7 @@ The worker will:
 1. Take the first plan from pending/ and move it to current/
 2. Create a git worktree for the plan's branch
 3. Run the iteration loop until completion or max iterations
-4. On completion: create PR (default) or merge directly
+4. On completion: create PR (default), merge directly, or push branch only
 5. Move the plan to complete/ and clean up the worktree
 6. Repeat for the next pending plan
 
@@ -58,6 +59,7 @@ Example:
   ralph worker                    # continuous mode
   ralph worker --once             # single plan mode
   ralph worker --merge            # merge directly instead of creating PR
+  ralph worker --branch           # push to branch only, no PR
   ralph worker --sync             # pull from remote before each check
   ralph worker --sync --once      # pull once, process one plan, exit`,
 	RunE: runWorker,
@@ -69,6 +71,7 @@ func init() {
 	workerCmd.Flags().BoolVar(&workerOnce, "once", false, "process one plan and exit")
 	workerCmd.Flags().BoolVar(&workerPRMode, "pr", false, "use PR mode for completion (default)")
 	workerCmd.Flags().BoolVar(&workerMergeMode, "merge", false, "use merge mode for completion")
+	workerCmd.Flags().BoolVar(&workerBranchMode, "branch", false, "push to branch only, no PR or merge")
 	workerCmd.Flags().DurationVar(&workerInterval, "interval", worker.DefaultPollInterval, "poll interval when queue is empty")
 	workerCmd.Flags().IntVar(&workerMaxIter, "max", worker.DefaultMaxIterations, "maximum iterations per plan")
 	workerCmd.Flags().BoolVar(&workerSync, "sync", false, "pull from remote before each queue check")
@@ -82,7 +85,10 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	if workerMergeMode {
 		completionMode = "merge"
 	}
-	// --pr is default, so --merge takes precedence if both are set
+	if workerBranchMode {
+		completionMode = "branch"
+	}
+	// --branch takes precedence, then --merge, then --pr (default)
 
 	// Load configuration
 	cfg, err := config.LoadWithDefaults(GetConfigPath())
@@ -92,7 +98,7 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	}
 
 	// If completion mode not set via flags, use config
-	if !workerMergeMode && !workerPRMode && cfg.Completion.Mode != "" {
+	if !workerMergeMode && !workerPRMode && !workerBranchMode && cfg.Completion.Mode != "" {
 		completionMode = cfg.Completion.Mode
 	}
 
