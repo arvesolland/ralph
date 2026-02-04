@@ -13,6 +13,7 @@ import (
 
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/log"
+	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -57,6 +58,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	dirs := []string{
 		ralphDir,
 		filepath.Join(ralphDir, "worktrees"),
+		filepath.Join(ralphDir, "prompts"),
 		filepath.Join(cwd, "plans", "pending"),
 		filepath.Join(cwd, "plans", "current"),
 		filepath.Join(cwd, "plans", "complete"),
@@ -77,6 +79,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to create worktrees .gitignore: %w", err)
 		}
 		log.Debug("Created worktrees .gitignore")
+	}
+
+	// Copy default prompt to prompts directory if it doesn't exist
+	defaultPromptPath := filepath.Join(ralphDir, "prompts", "prompt.md")
+	if !fileExistsInit(defaultPromptPath) {
+		promptContent, err := prompt.GetEmbeddedPrompt("prompt.md")
+		if err != nil {
+			log.Warn("Failed to get default prompt: %v", err)
+		} else {
+			if err := os.WriteFile(defaultPromptPath, []byte(promptContent), 0644); err != nil {
+				return fmt.Errorf("failed to create default prompt: %w", err)
+			}
+			log.Debug("Created default prompt: %s", defaultPromptPath)
+		}
 	}
 
 	// Add .ralph/ to root .gitignore
@@ -180,6 +196,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println("Created structure:")
 	fmt.Println("  .ralph/")
 	fmt.Println("    config.yaml      - Project configuration")
+	fmt.Println("    prompts/         - Customizable agent prompts")
+	fmt.Println("      prompt.md      - Main agent instructions (edit to customize)")
 	fmt.Println("    worktrees/       - Execution worktrees (gitignored)")
 	fmt.Println("  plans/")
 	fmt.Println("    pending/         - Plans waiting to be executed")

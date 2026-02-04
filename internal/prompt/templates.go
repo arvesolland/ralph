@@ -37,3 +37,9 @@ func ListEmbeddedPrompts() ([]string, error) {
 	}
 	return names, nil
 }
+
+// GetEmbeddedPrompt returns the content of an embedded prompt by name.
+// This is useful for exporting default prompts during init.
+func GetEmbeddedPrompt(name string) (string, error) {
+	return loadEmbeddedPrompt(name)
+}
