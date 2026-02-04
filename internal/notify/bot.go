@@ -324,6 +324,8 @@ func (b *SocketModeBot) findPlanByThread(threadTS string) string {
 
 // writeFeedback writes a thread reply to the plan's feedback file.
 func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
+	log.Debug("writeFeedback: planName=%s userID=%s text=%q basePath=%s", planName, userID, text, b.planBasePath)
+
 	// Get user info for display name
 	userName := userID
 	if b.api != nil {
@@ -340,8 +342,10 @@ func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
 	bundleDir := filepath.Join(b.planBasePath, planName)
 	var p *plan.Plan
 
+	log.Debug("writeFeedback: checking bundle at %s", bundleDir)
 	if info, err := os.Stat(bundleDir); err == nil && info.IsDir() {
 		// Bundle: feedback goes in {bundleDir}/feedback.md
+		log.Debug("writeFeedback: found bundle directory")
 		p = &plan.Plan{
 			Name:      planName,
 			Path:      filepath.Join(bundleDir, "plan.md"),
@@ -349,6 +353,7 @@ func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
 		}
 	} else {
 		// Legacy flat file: feedback goes in {planBasePath}/{planName}.feedback.md
+		log.Debug("writeFeedback: bundle not found (err=%v), using legacy path", err)
 		p = &plan.Plan{
 			Name: planName,
 			Path: filepath.Join(b.planBasePath, planName+".md"),
@@ -357,7 +362,14 @@ func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
 
 	// Append to feedback file
 	source := fmt.Sprintf("Slack reply from %s", userName)
-	return plan.AppendFeedback(p, source, text)
+	log.Debug("writeFeedback: appending to feedback file for plan at %s", p.Path)
+	err := plan.AppendFeedback(p, source, text)
+	if err != nil {
+		log.Error("writeFeedback: AppendFeedback failed: %v", err)
+	} else {
+		log.Debug("writeFeedback: successfully wrote feedback")
+	}
+	return err
 }
 
 // LoadGlobalBotConfig loads bot configuration from the global location (~/.ralph/slack.env).
