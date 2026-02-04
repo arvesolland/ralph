@@ -741,6 +741,9 @@ func (w *Worker) SetupNotifications(ctx context.Context) func() {
 		w.bot = notify.StartBotIfConfigured(ctx, tracker, planBasePath, w.config.Slack.Channel)
 		if w.bot != nil {
 			log.Info("Socket Mode bot started for Slack replies")
+		} else {
+			log.Warn("Socket Mode bot not started - SLACK_APP_TOKEN may be missing")
+			log.Warn("Slack thread replies will not be captured to feedback files")
 		}
 	}
 

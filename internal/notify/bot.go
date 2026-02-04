@@ -433,7 +433,12 @@ func StartBotIfConfigured(ctx context.Context, threadTracker *ThreadTracker, pla
 	}
 
 	if cfg.BotToken == "" || cfg.AppToken == "" {
-		log.Debug("Bot tokens not configured, Socket Mode bot not started")
+		if cfg.BotToken == "" {
+			log.Debug("SLACK_BOT_TOKEN not set, Socket Mode bot not started")
+		}
+		if cfg.AppToken == "" {
+			log.Debug("SLACK_APP_TOKEN not set, Socket Mode bot not started")
+		}
 		return nil
 	}
 
