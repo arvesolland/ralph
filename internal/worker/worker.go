@@ -795,6 +795,7 @@ func (w *Worker) SetupNotifications(ctx context.Context) func() {
 // NewNotifier creates a Notifier based on the configuration.
 // Returns a SlackNotifier if bot_token is configured, falls back to WebhookNotifier,
 // and returns NoopNotifier if neither is configured.
+// When global_bot is true, loads bot credentials from ~/.ralph/slack.env.
 func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notifier {
 	if cfg == nil {
 		return &notify.NoopNotifier{}
@@ -803,10 +804,23 @@ func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notif
 	// Check for custom API URL (for testing)
 	apiURL := os.Getenv("SLACK_API_URL")
 
+	// Determine bot token - use global config if global_bot is true
+	botToken := cfg.Slack.BotToken
+	if cfg.Slack.GlobalBot && botToken == "" {
+		// Load from global config (~/.ralph/slack.env)
+		globalCfg, err := notify.LoadGlobalBotConfig()
+		if err != nil {
+			log.Debug("Failed to load global bot config: %v", err)
+		} else if globalCfg.BotToken != "" {
+			botToken = globalCfg.BotToken
+			log.Debug("Using global bot token from ~/.ralph/slack.env")
+		}
+	}
+
 	// Try Slack Bot API first
-	if cfg.Slack.BotToken != "" && cfg.Slack.Channel != "" {
+	if botToken != "" && cfg.Slack.Channel != "" {
 		return notify.NewSlackNotifier(notify.SlackNotifierConfig{
-			BotToken:      cfg.Slack.BotToken,
+			BotToken:      botToken,
 			Channel:       cfg.Slack.Channel,
 			ThreadTracker: tracker,
 			WebhookURL:    cfg.Slack.WebhookURL, // Fallback
