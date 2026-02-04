@@ -775,6 +775,7 @@ func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notif
 			ThreadTracker: tracker,
 			WebhookURL:    cfg.Slack.WebhookURL, // Fallback
 			APIURL:        apiURL,
+			RepoName:      cfg.Project.Name,
 		})
 	}
 

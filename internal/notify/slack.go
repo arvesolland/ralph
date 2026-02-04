@@ -16,6 +16,7 @@ type SlackNotifier struct {
 	client        *slack.Client
 	channel       string
 	threadTracker *ThreadTracker
+	repoName      string
 
 	// fallback is used when bot_token is not configured
 	fallback *WebhookNotifier
@@ -27,6 +28,7 @@ type SlackNotifierConfig struct {
 	Channel       string
 	WebhookURL    string
 	ThreadTracker *ThreadTracker
+	RepoName      string
 	// APIURL is an optional custom Slack API URL (for testing).
 	// If empty, the default Slack API URL is used.
 	APIURL string
@@ -46,6 +48,7 @@ func NewSlackNotifier(cfg SlackNotifierConfig) Notifier {
 			client:        slack.New(cfg.BotToken, opts...),
 			channel:       cfg.Channel,
 			threadTracker: cfg.ThreadTracker,
+			repoName:      cfg.RepoName,
 		}
 	}
 
@@ -95,7 +98,12 @@ func (s *SlackNotifier) Start(p *plan.Plan) error {
 
 // Complete sends a notification when a plan completes.
 func (s *SlackNotifier) Complete(p *plan.Plan, prURL string) error {
-	text := fmt.Sprintf(":white_check_mark: *Plan Complete*\n`%s`", p.Name)
+	var text string
+	if s.repoName != "" {
+		text = fmt.Sprintf(":white_check_mark: *Plan Complete*\n`%s` · `%s`", s.repoName, p.Name)
+	} else {
+		text = fmt.Sprintf(":white_check_mark: *Plan Complete*\n`%s`", p.Name)
+	}
 
 	fields := []*slack.TextBlockObject{
 		slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Branch:*\n`%s`", p.Branch), false, false),
@@ -141,9 +149,16 @@ func (s *SlackNotifier) Blocker(p *plan.Plan, blocker *runner.Blocker) error {
 		blockerText = blocker.Content
 	}
 
+	var headerText string
+	if s.repoName != "" {
+		headerText = fmt.Sprintf(":warning: *Human Input Required*\n`%s` · `%s`", s.repoName, p.Name)
+	} else {
+		headerText = fmt.Sprintf(":warning: *Human Input Required*\n`%s`", p.Name)
+	}
+
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(":warning: *Human Input Required*\n`%s`", p.Name), false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, headerText, false, false),
 			nil, nil,
 		),
 		slack.NewSectionBlock(
@@ -189,9 +204,16 @@ func (s *SlackNotifier) Error(p *plan.Plan, err error) error {
 		errMsg = errMsg[:500] + "..."
 	}
 
+	var headerText string
+	if s.repoName != "" {
+		headerText = fmt.Sprintf(":x: *Plan Error*\n`%s` · `%s`", s.repoName, p.Name)
+	} else {
+		headerText = fmt.Sprintf(":x: *Plan Error*\n`%s`", p.Name)
+	}
+
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(":x: *Plan Error*\n`%s`", p.Name), false, false),
+			slack.NewTextBlockObject(slack.MarkdownType, headerText, false, false),
 			nil, nil,
 		),
 		slack.NewSectionBlock(
@@ -302,7 +324,12 @@ func (s *SlackNotifier) buildProgressBlocks(p *plan.Plan, status *ProgressStatus
 	}
 
 	// Build header text
-	headerText := fmt.Sprintf("%s *Plan %s*\n`%s`", emoji, phaseText, p.Name)
+	var headerText string
+	if s.repoName != "" {
+		headerText = fmt.Sprintf("%s *Plan %s*\n`%s` · `%s`", emoji, phaseText, s.repoName, p.Name)
+	} else {
+		headerText = fmt.Sprintf("%s *Plan %s*\n`%s`", emoji, phaseText, p.Name)
+	}
 
 	// Build fields
 	fields := []*slack.TextBlockObject{
