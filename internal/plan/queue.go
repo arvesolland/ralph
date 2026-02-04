@@ -48,6 +48,9 @@ var (
 
 	// ErrPlanNotInCurrent is returned when trying to complete a plan that's not in current/.
 	ErrPlanNotInCurrent = errors.New("plan is not in current directory")
+
+	// ErrPlanNotInComplete is returned when trying to resume a plan that's not in complete/.
+	ErrPlanNotInComplete = errors.New("plan is not in complete directory")
 )
 
 // NewQueue creates a new Queue with the given base directory.
@@ -277,6 +280,59 @@ func (q *Queue) Reset(plan *Plan) error {
 	}
 
 	return nil
+}
+
+// Resume moves a plan from complete/ back to pending/.
+// For bundles: moves entire directory, stripping the date suffix from the name.
+// Returns ErrPlanNotInComplete if the plan is not in complete/.
+func (q *Queue) Resume(plan *Plan) error {
+	// Verify plan is in complete/
+	pDir := planDir(plan)
+	parentDir := resolvePath(filepath.Dir(pDir))
+	completeDir := resolvePath(q.completeDir())
+
+	if plan.IsBundle() {
+		if parentDir != completeDir {
+			return ErrPlanNotInComplete
+		}
+	} else {
+		resolvedPDir := resolvePath(pDir)
+		if resolvedPDir != completeDir {
+			return ErrPlanNotInComplete
+		}
+	}
+
+	if plan.IsBundle() {
+		// Move entire bundle directory back to pending
+		// Use the original plan name (without date suffix) for the pending directory
+		newBundleDir := filepath.Join(q.pendingDir(), plan.Name)
+
+		// Check if target already exists
+		if _, err := os.Stat(newBundleDir); err == nil {
+			return fmt.Errorf("plan '%s' already exists in pending", plan.Name)
+		}
+
+		if err := os.Rename(plan.BundleDir, newBundleDir); err != nil {
+			return fmt.Errorf("moving bundle to pending: %w", err)
+		}
+		// Update plan's paths
+		plan.BundleDir = newBundleDir
+		plan.Path = filepath.Join(newBundleDir, "plan.md")
+	} else {
+		// Move just the .md file (legacy flat file)
+		newPath := filepath.Join(q.pendingDir(), filepath.Base(plan.Path))
+		if err := os.Rename(plan.Path, newPath); err != nil {
+			return fmt.Errorf("moving plan to pending: %w", err)
+		}
+		plan.Path = newPath
+	}
+
+	return nil
+}
+
+// Completed returns all plans in the complete/ directory, sorted by name.
+func (q *Queue) Completed() ([]*Plan, error) {
+	return q.listPlans(q.completeDir())
 }
 
 // Status returns the current queue status with counts and plan names.

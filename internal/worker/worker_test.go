@@ -394,8 +394,8 @@ func TestConstants(t *testing.T) {
 		t.Errorf("DefaultPollInterval = %v, want %v", DefaultPollInterval, 30*time.Second)
 	}
 
-	if DefaultMaxIterations != 100 {
-		t.Errorf("DefaultMaxIterations = %d, want %d", DefaultMaxIterations, 100)
+	if DefaultMaxIterations != 200 {
+		t.Errorf("DefaultMaxIterations = %d, want %d", DefaultMaxIterations, 200)
 	}
 }
 

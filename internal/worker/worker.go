@@ -37,7 +37,7 @@ var (
 const DefaultPollInterval = 30 * time.Second
 
 // DefaultMaxIterations is the default maximum number of iterations per plan.
-const DefaultMaxIterations = 100
+const DefaultMaxIterations = 200
 
 // Worker processes plans from the queue.
 type Worker struct {
@@ -452,6 +452,13 @@ func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
 		if strings.Contains(result.Error.Error(), "max iterations") {
 			log.Warn("Max iterations reached, archiving plan as incomplete")
 			w.notifyError(p, result.Error)
+
+			// Write to progress file that plan was archived due to max iterations
+			archiveMsg := fmt.Sprintf("**Plan archived:** Max iterations (%d) reached without completion.\n\n"+
+				"To resume this plan, use: `ralph resume %s`\n", w.maxIterations, p.Name)
+			if progressErr := plan.AppendProgress(p, result.Iterations, archiveMsg); progressErr != nil {
+				log.Warn("Failed to write archive message to progress: %v", progressErr)
+			}
 
 			// Archive the plan (move to complete/) so it stops being retried
 			if archiveErr := w.queue.Complete(p); archiveErr != nil {

@@ -70,8 +70,8 @@ func TestWorkerCmd_FlagsRegistered(t *testing.T) {
 	if maxFlag == nil {
 		t.Error("expected --max flag to be registered")
 	} else {
-		if maxFlag.DefValue != "100" {
-			t.Errorf("expected --max default '100', got '%s'", maxFlag.DefValue)
+		if maxFlag.DefValue != "200" {
+			t.Errorf("expected --max default '200', got '%s'", maxFlag.DefValue)
 		}
 	}
 
