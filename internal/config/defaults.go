@@ -21,7 +21,7 @@ func Defaults() *Config {
 			Channel:         "",
 			BotToken:        "",
 			AppToken:        "",
-			GlobalBot:       false,
+			GlobalBot:       true,
 			NotifyStart:     true,
 			NotifyComplete:  true,
 			NotifyIteration: false,
