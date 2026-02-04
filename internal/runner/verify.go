@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/plan"
 )
 
@@ -19,11 +20,23 @@ func IsAPIKeyAvailable() bool {
 }
 
 // VerificationTimeout is the default timeout for verification requests.
-// Verification uses a shorter timeout since Haiku is fast.
-const VerificationTimeout = 60 * time.Second
+const VerificationTimeout = 120 * time.Second
 
-// DefaultVerificationModel is the default model used for verification (fast, cheap).
-const DefaultVerificationModel = "claude-3-5-haiku-latest"
+// DefaultVerificationModel is the default model used for verification.
+// Using Opus for better accuracy on complex plans.
+const DefaultVerificationModel = "claude-opus-4-5-20251101"
+
+// stopKeywords are phrases in human feedback that indicate forced completion.
+var stopKeywords = []string{
+	"stop",
+	"halt",
+	"abort",
+	"cancel",
+	"force complete",
+	"mark complete",
+	"done",
+	"finished",
+}
 
 // VerificationResult holds the result of plan completion verification.
 type VerificationResult struct {
@@ -59,6 +72,24 @@ Your response must start with either "YES" or "NO:". Be specific about what is i
 // yesNoRegex matches YES or NO: patterns at the start of the response.
 var yesNoRegex = regexp.MustCompile(`(?im)^(YES|NO)\s*:?\s*(.*)`)
 
+// CheckForceComplete checks if human feedback contains a stop/complete request.
+// Returns true if the plan should be force-completed based on human instruction.
+func CheckForceComplete(p *plan.Plan) bool {
+	feedback, err := plan.ReadFeedback(p)
+	if err != nil {
+		return false
+	}
+
+	feedbackLower := strings.ToLower(feedback)
+	for _, keyword := range stopKeywords {
+		if strings.Contains(feedbackLower, keyword) {
+			log.Info("Force complete triggered by human feedback containing '%s'", keyword)
+			return true
+		}
+	}
+	return false
+}
+
 // Verify checks if a plan is complete using a fast model for verification.
 // It first performs a quick programmatic check of checkboxes, then uses an LLM
 // for semantic verification.
@@ -67,15 +98,30 @@ var yesNoRegex = regexp.MustCompile(`(?im)^(YES|NO)\s*:?\s*(.*)`)
 // Returns (false, reason, nil) if not complete, with an explanation.
 // Returns (false, "", err) on execution errors.
 func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*VerificationResult, error) {
+	log.Debug("Starting verification for plan: %s", p.Name)
+
+	// STEP 0: Check for human force-complete request
+	if CheckForceComplete(p) {
+		log.Success("Plan force-completed by human request")
+		return &VerificationResult{
+			Verified:    true,
+			Reason:      "",
+			RawResponse: "force-complete: human requested stop",
+		}, nil
+	}
+
 	// STEP 1: Quick programmatic check of checkboxes
 	// This catches the common case where agent claims completion but didn't update checkboxes
+	log.Debug("Running programmatic checkbox check...")
 	if reason := checkCheckboxes(p); reason != "" {
+		log.Debug("Programmatic check failed: %s", reason)
 		return &VerificationResult{
 			Verified:    false,
 			Reason:      reason,
 			RawResponse: "",
 		}, nil
 	}
+	log.Debug("Programmatic check passed (all checkboxes checked)")
 
 	// STEP 2: LLM verification for semantic check
 	// Build the verification prompt with plan content
@@ -85,6 +131,7 @@ func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*Ve
 	if model == "" {
 		model = DefaultVerificationModel
 	}
+	log.Debug("Using verification model: %s", model)
 
 	// Set up options for verification model
 	opts := DefaultOptions()
@@ -92,7 +139,7 @@ func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*Ve
 	opts.Print = true          // Use --print mode for simple prompt/response
 	opts.OutputFormat = "text" // Use text format for verification (stream-json requires --verbose with --print)
 
-	// Use shorter timeout for verification if not already set
+	// Use timeout for verification if not already set
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, VerificationTimeout)
@@ -100,13 +147,24 @@ func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*Ve
 	}
 
 	// Run verification
+	log.Debug("Sending plan to %s for verification (%d bytes)...", model, len(prompt))
 	result, err := runner.Run(ctx, prompt, opts)
 	if err != nil {
+		log.Error("Verification model call failed: %v", err)
 		return nil, fmt.Errorf("verification failed: %w", err)
 	}
 
+	// Log the raw response for debugging
+	log.Debug("Verification model raw response: %s", truncate(result.TextContent, 500))
+
 	// Parse the response
 	verified, reason := parseVerificationResponse(result.TextContent)
+
+	if verified {
+		log.Debug("Verification model returned: YES (complete)")
+	} else {
+		log.Debug("Verification model returned: NO - %s", reason)
+	}
 
 	return &VerificationResult{
 		Verified:    verified,
@@ -122,6 +180,8 @@ func checkCheckboxes(p *plan.Plan) string {
 	uncheckedCount := strings.Count(p.Content, "[ ]")
 	checkedCount := strings.Count(p.Content, "[x]") + strings.Count(p.Content, "[X]")
 
+	log.Debug("Checkbox count: %d checked, %d unchecked", checkedCount, uncheckedCount)
+
 	if uncheckedCount > 0 {
 		return fmt.Sprintf("Plan has %d unchecked checkboxes ([ ]). "+
 			"You must update the plan file to check off all completed items ([x]) "+
@@ -132,6 +192,7 @@ func checkCheckboxes(p *plan.Plan) string {
 
 	// Also check using the parsed task structure
 	incomplete := findIncompleteTasks(p.Tasks, "")
+	log.Debug("Parsed task check: %d incomplete tasks", len(incomplete))
 	if len(incomplete) > 0 {
 		return fmt.Sprintf("Plan has %d incomplete tasks: %s. "+
 			"Update task status to complete and check all subtask boxes.",

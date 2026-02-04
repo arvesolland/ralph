@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -401,12 +402,12 @@ func TestCheckCheckboxes(t *testing.T) {
 
 func TestVerificationConstants(t *testing.T) {
 	// Verify the constants are set appropriately
-	if VerificationTimeout.Seconds() != 60 {
-		t.Errorf("expected 60s timeout, got %v", VerificationTimeout)
+	if VerificationTimeout.Seconds() != 120 {
+		t.Errorf("expected 120s timeout, got %v", VerificationTimeout)
 	}
 
-	if !strings.Contains(DefaultVerificationModel, "haiku") {
-		t.Errorf("expected haiku model, got %s", DefaultVerificationModel)
+	if !strings.Contains(DefaultVerificationModel, "opus") {
+		t.Errorf("expected opus model, got %s", DefaultVerificationModel)
 	}
 }
 
@@ -431,5 +432,70 @@ func TestFindIncompleteTasks(t *testing.T) {
 		if incomplete[i] != exp {
 			t.Errorf("incomplete[%d] = %q, want %q", i, incomplete[i], exp)
 		}
+	}
+}
+
+func TestCheckForceComplete(t *testing.T) {
+	// Create a temp directory for the test plan bundle
+	tmpDir := t.TempDir()
+	bundleDir := tmpDir
+
+	tests := []struct {
+		name            string
+		feedbackContent string
+		wantForce       bool
+	}{
+		{
+			name:            "stop keyword",
+			feedbackContent: "## Pending\n- [2024-01-01] Stop the process\n\n## Processed\n",
+			wantForce:       true,
+		},
+		{
+			name:            "halt keyword",
+			feedbackContent: "## Pending\n- [2024-01-01] Halt execution please\n\n## Processed\n",
+			wantForce:       true,
+		},
+		{
+			name:            "done keyword",
+			feedbackContent: "## Pending\n- [2024-01-01] We're done here\n\n## Processed\n",
+			wantForce:       true,
+		},
+		{
+			name:            "force complete",
+			feedbackContent: "## Pending\n- [2024-01-01] Force complete this plan\n\n## Processed\n",
+			wantForce:       true,
+		},
+		{
+			name:            "no keywords",
+			feedbackContent: "## Pending\n- [2024-01-01] Please continue working\n\n## Processed\n",
+			wantForce:       false,
+		},
+		{
+			name:            "empty feedback",
+			feedbackContent: "## Pending\n\n## Processed\n",
+			wantForce:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Write feedback file
+			feedbackPath := bundleDir + "/feedback.md"
+			if err := os.WriteFile(feedbackPath, []byte(tt.feedbackContent), 0644); err != nil {
+				t.Fatalf("failed to write feedback: %v", err)
+			}
+
+			// Create plan pointing to this bundle
+			p := &plan.Plan{
+				Name:      "test-plan",
+				BundleDir: bundleDir,
+				Path:      bundleDir + "/plan.md",
+			}
+
+			gotForce := CheckForceComplete(p)
+			if gotForce != tt.wantForce {
+				t.Errorf("CheckForceComplete() = %v, want %v", gotForce, tt.wantForce)
+			}
+		})
 	}
 }
