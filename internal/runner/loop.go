@@ -4,6 +4,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/arvesolland/ralph/internal/config"
@@ -243,8 +244,10 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 
 	log.Debug("Claude execution completed (duration: %v, complete: %v)", result.Duration, result.IsComplete)
 
-	// Reload the plan to get updated content
-	updatedPlan, err := plan.Load(l.plan.Path)
+	// Reload the plan to get updated content from the worktree (not main repo)
+	// The agent updates the plan file in the worktree, so we must read from there
+	worktreePlanPath := filepath.Join(l.worktreePath, l.ctx.PlanFile)
+	updatedPlan, err := plan.Load(worktreePlanPath)
 	if err != nil {
 		log.Warn("Failed to reload plan: %v", err)
 		// Continue with existing plan
