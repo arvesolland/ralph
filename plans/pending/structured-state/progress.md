@@ -390,3 +390,13 @@ All tests pass (all packages). Plan is now fully complete — all 12 tasks done.
 Claude execution completed in 4m27.078317s.
 Completion marker detected.
 
+
+---
+### Iteration 14: Fix false-positive unchecked checkbox verification failure
+**Completed:** Fixed 2 false-positive `[ ]` matches in plan.md that caused verification to reject the completion marker:
+- Line 12: Rewrote `[ ]/[x]` checkbox syntax reference in "What exists today" description
+- Line 339: Rewrote T10 subtask 5 description that referenced `- [ ] criterion text` parsing pattern
+Both were literal references to checkbox syntax in descriptive text, not actual task checkboxes.
+Moved verification feedback from `## Pending` to `## Processed` in feedback.md.
+**Next:** Plan complete — re-output completion marker.
+

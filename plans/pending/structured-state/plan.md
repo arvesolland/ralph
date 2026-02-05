@@ -9,7 +9,7 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 
 ### What exists today
 
-- Plans are markdown files with `[ ]`/`[x]` checkboxes parsed by `internal/plan/task.go`
+- Plans are markdown files with checkbox syntax parsed by `internal/plan/task.go`
 - Completion verified by counting unchecked boxes + Opus LLM verification (`internal/runner/verify.go`)
 - Context passed to agent is thin: `context.json` has paths, branch, iteration count only
 - Feedback is a flat `feedback.md` with unstructured markdown sections
@@ -336,7 +336,7 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 2. [x] Implement `InitStateFromPlan()` — parse plan.md headings, requires, criteria into PlanState
 3. [x] Parse `### T{n}: Title` headings into TaskState entries
 4. [x] Parse `**Requires:** T1, T2` into requires arrays
-5. [x] Parse `**Done when:** - [ ] criterion text` into Criteria slices
+5. [x] Parse `**Done when:**` checkbox criteria into Criteria slices
 6. [x] Set initial plan status to `active`, task statuses to `todo` (or `blocked` if deps)
 7. [x] Update `internal/plan/bundle.go` `CreateBundle()` — also scaffold empty state.yaml
 8. [x] Add auto-init logic: if state.yaml missing when runner starts, generate from plan.md
