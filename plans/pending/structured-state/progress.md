@@ -351,3 +351,7 @@ T11 is now **complete** — all 8 subtasks checked, all 8 "Done when" criteria v
 **Gotcha:** Plans with state.yaml but 0 tasks (e.g., simple markdown plans auto-inited without `### T{n}:` headings) need to fall through to LLM verification. The criteria gate condition is `l.lastState != nil && len(l.lastState.Tasks) > 0` — without the task count check, the worker test was failing because auto-generated empty state.yaml always blocked completion.
 **Next:** T12 (update prompt templates for structured state protocol) — depends on T7+T8 (both complete). This is the last task in the plan.
 
+
+## Iteration 12 (2026-02-06 08:39) - 82/88 (93%)
+Claude execution completed in 9m12.952266709s.
+
