@@ -186,3 +186,31 @@ All 97 state tests pass. Full test suite passes.
 ## Iteration 7 (2026-02-06 08:14) - 47/88 (53%)
 Claude execution completed in 3m35.847832458s.
 
+
+---
+### Iteration 8: T7 — Build context payload CLI command (subtasks 6-8, 10)
+**Completed:** Created `internal/cli/context.go` with:
+- `contextCmd` cobra command: `ralph context <plan-path>` with `--json` flag
+- `runContext()` — loads state.yaml from bundle, builds context payload, outputs JSON or human-readable
+- `resolveBundleDir()` — resolves plan path argument to bundle directory (handles directory, plan.md file, or flat file with clear error)
+- `outputContextJSON()` — pretty-printed JSON to stdout via `json.Encoder`
+- `outputContextHuman()` — human-readable summary with plan info, progress, selection, blocked/available tasks, unresolved feedback, and task details with criteria counts
+- Command registered via `init()` with `rootCmd.AddCommand(contextCmd)`
+
+Created `internal/cli/context_test.go` with 8 tests:
+- `TestRunContext_JSON` — JSON output with full payload verification (plan ID, title, tasks, summary, selection)
+- `TestRunContext_Human` — human-readable output with key section checks
+- `TestRunContext_NoStateYaml` — clear error for missing state.yaml
+- `TestRunContext_NonexistentPath` — error for nonexistent path
+- `TestRunContext_PlanFilePath` — passing plan.md file path resolves to bundle
+- `TestResolveBundleDir_Directory` — directory path returns absolute path
+- `TestResolveBundleDir_PlanFile` — plan.md resolves to parent bundle dir
+- `TestResolveBundleDir_FlatFile` — flat file returns "not a bundle" error
+
+All tests pass (105 state tests + 8 new CLI context tests). Full test suite passes.
+
+T7 is now **complete** — all subtasks checked, all "Done when" criteria verified.
+
+**Gotcha:** `BuildContext` signature takes `*PlanState` only (not `*runner.Context` as plan suggested) — runner context info can be added when wiring T11. Also, `plan.Load()` treats `plan.md` as a flat file when you pass the file path directly (not the directory), so `resolveBundleDir` handles this by checking `filepath.Base == "plan.md"` and using the parent directory.
+**Next:** T8 (task CLI subcommands) — depends on T5+T6 (both complete). T9 (worktree sync) depends on T2 (complete). T10 (scaffold state.yaml from plan.md) depends on T2+T5 (both complete). All three are unblocked.
+

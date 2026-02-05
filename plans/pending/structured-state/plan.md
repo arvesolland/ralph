@@ -237,17 +237,17 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > The golden command — everything the agent needs in one JSON payload
 
 **Requires:** T4, T5, T6
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
 - [x] `ContextPayload` struct defined with plan, tasks, feedback, selection, summary fields
-- [ ] `BuildContext(state *PlanState, ctx *runner.Context) *ContextPayload` assembles full payload
-- [ ] `ralph context <plan-path> --json` outputs valid JSON to stdout
-- [ ] `ralph context <plan-path>` outputs human-readable summary to stdout
+- [x] `BuildContext(state *PlanState, ctx *runner.Context) *ContextPayload` assembles full payload
+- [x] `ralph context <plan-path> --json` outputs valid JSON to stdout
+- [x] `ralph context <plan-path>` outputs human-readable summary to stdout
 - [x] Payload includes: plan metadata, all tasks with criteria, unresolved feedback, selection (suggested + available + blocked), summary stats
 - [x] Output is deterministic: tasks sorted by ID, feedback sorted by created_at
-- [ ] Plans without state.yaml get a useful error or empty payload
-- [ ] `go test ./internal/state/...` and `go test ./internal/cli/...` pass
+- [x] Plans without state.yaml get a useful error or empty payload
+- [x] `go test ./internal/state/...` and `go test ./internal/cli/...` pass
 
 **Subtasks:**
 1. [x] Create `internal/state/context.go` with `ContextPayload` struct
@@ -255,11 +255,11 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 3. [x] Implement `BuildContext()` — assembles payload from state + runner context
 4. [x] Implement `Summary` computation: total, by_status counts, done_ratio
 5. [x] Ensure deterministic ordering in all slices
-6. [ ] Create `internal/cli/context.go` with cobra command
-7. [ ] Implement `--json` flag for machine output and default human-readable output
-8. [ ] Register command in `init()`
+6. [x] Create `internal/cli/context.go` with cobra command
+7. [x] Implement `--json` flag for machine output and default human-readable output
+8. [x] Register command in `init()`
 9. [x] Create `internal/state/context_test.go` — test payload assembly, ordering, nil state handling
-10. [ ] Create `internal/cli/context_test.go` — test CLI output
+10. [x] Create `internal/cli/context_test.go` — test CLI output
 
 ---
 
