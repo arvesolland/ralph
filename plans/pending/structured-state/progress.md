@@ -47,3 +47,26 @@ Claude execution completed.
 ## Iteration 2 (2026-02-06 08:01) - 14/88 (15%)
 Claude execution completed in 2m1.450936833s.
 
+
+---
+### Iteration 3: T3 — Implement state validation rules
+**Completed:** Created `internal/state/validate.go` with five validation functions:
+- `ValidatePlanTransition(from, to PlanStatus) error` — validates plan status transitions using an allow-list map (draft→ready→active→complete, active↔blocked)
+- `ValidateTaskTransition(from, to TaskStatus) error` — validates task status transitions (todo→claimed→doing→done, doing↔blocked, any→skipped; done/skipped are terminal)
+- `ValidateDependencies(tasks []TaskState) error` — checks for missing dependency IDs and uses DFS with coloring to detect cycles (direct, indirect, self-referencing)
+- `ValidateCompletion(task *TaskState) error` — criteria gate: all criteria must be done before task can complete; tasks without criteria always pass
+- `ValidateFeedbackScope(scope string, tasks []TaskState) error` — validates scope is "plan" or "task:Tn" where Tn exists
+
+Created `internal/state/validate_test.go` with 16 test functions covering:
+- Valid and invalid plan transitions (5 valid, 9 invalid)
+- Invalid plan statuses (bogus source/target)
+- Valid and invalid task transitions (9 valid, 13 invalid)
+- Invalid task statuses
+- Dependency validation: valid deps, no deps, missing ID, direct cycle, indirect cycle, self-cycle
+- Completion: all criteria met, criterion not met (1-indexed), no criteria
+- Feedback scope: plan, valid task, unknown task, invalid formats (empty, "global", "task:", "PLAN", "task")
+
+All 30 state tests pass. Full test suite passes.
+
+**Next:** T4 (task selection algorithm) — depends on T1 + T3 (both complete). T5 and T6 depend on T2 + T3 (both complete).
+

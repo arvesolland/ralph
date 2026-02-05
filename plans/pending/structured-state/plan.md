@@ -129,25 +129,25 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > Enforce valid transitions and data integrity — prevents bad state from agent mistakes
 
 **Requires:** T1
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] Plan status transitions validated (draft→ready→active→complete, active↔blocked)
-- [ ] Task status transitions validated (todo→claimed→doing→done, doing↔blocked, any→skipped)
-- [ ] Dependency validation: no missing task IDs, no cycles
-- [ ] Criteria gate: task cannot become `done` unless all criteria are checked
-- [ ] Feedback scope validation: must be "plan" or "task:Tn" where Tn exists
-- [ ] Errors are descriptive strings (not codes — keep it simple for v1)
-- [ ] `go test ./internal/state/...` passes
+- [x] Plan status transitions validated (draft→ready→active→complete, active↔blocked)
+- [x] Task status transitions validated (todo→claimed→doing→done, doing↔blocked, any→skipped)
+- [x] Dependency validation: no missing task IDs, no cycles
+- [x] Criteria gate: task cannot become `done` unless all criteria are checked
+- [x] Feedback scope validation: must be "plan" or "task:Tn" where Tn exists
+- [x] Errors are descriptive strings (not codes — keep it simple for v1)
+- [x] `go test ./internal/state/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/state/validate.go`
-2. [ ] Implement `ValidatePlanTransition(from, to PlanStatus) error`
-3. [ ] Implement `ValidateTaskTransition(from, to TaskStatus) error`
-4. [ ] Implement `ValidateDependencies(tasks []TaskState) error` — check for missing IDs and cycles
-5. [ ] Implement `ValidateCompletion(task *TaskState) error` — check all criteria done
-6. [ ] Implement `ValidateFeedbackScope(scope string, tasks []TaskState) error`
-7. [ ] Create `internal/state/validate_test.go` — test all valid and invalid transitions, cycle detection, criteria gate
+1. [x] Create `internal/state/validate.go`
+2. [x] Implement `ValidatePlanTransition(from, to PlanStatus) error`
+3. [x] Implement `ValidateTaskTransition(from, to TaskStatus) error`
+4. [x] Implement `ValidateDependencies(tasks []TaskState) error` — check for missing IDs and cycles
+5. [x] Implement `ValidateCompletion(task *TaskState) error` — check all criteria done
+6. [x] Implement `ValidateFeedbackScope(scope string, tasks []TaskState) error`
+7. [x] Create `internal/state/validate_test.go` — test all valid and invalid transitions, cycle detection, criteria gate
 
 ---
 
