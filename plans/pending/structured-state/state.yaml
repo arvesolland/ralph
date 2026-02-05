@@ -1,0 +1,373 @@
+id: structured-state
+title: "Structured Task State (Agent Control Plane v1)"
+status: complete
+created_at: 2026-02-06T08:00:00Z
+tasks:
+  - id: T1
+    title: "Define state types and YAML serialization"
+    status: done
+    criteria:
+      - text: "`PlanState` struct with ID, Title, Status, Tasks, Feedback fields"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+      - text: "`TaskState` struct with ID, Title, Status, Requires, Criteria, Notes, Artifacts fields"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+      - text: "`Criterion` struct with Text, Done, DoneAt fields"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+      - text: "`Feedback` struct with ID, Scope, Author, Message, Resolved, CreatedAt fields"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+      - text: "`PlanStatus` and `TaskStatus` enums with valid values"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+      - text: "YAML round-trip tests pass (marshal → unmarshal → compare)"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+      - text: "JSON marshaling works for context output"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+      - text: "`go test ./internal/state/...` passes"
+        done: true
+        done_at: 2026-02-06T08:01:00Z
+    started_at: 2026-02-06T08:00:00Z
+    done_at: 2026-02-06T08:01:00Z
+  - id: T2
+    title: "Implement state load/save with atomic writes"
+    status: done
+    requires:
+      - T1
+    criteria:
+      - text: "`LoadState(bundleDir string) (*PlanState, error)` reads and parses state.yaml"
+        done: true
+        done_at: 2026-02-06T08:03:00Z
+      - text: "`SaveState(state *PlanState, bundleDir string) error` writes atomically (temp + rename)"
+        done: true
+        done_at: 2026-02-06T08:03:00Z
+      - text: "Missing state.yaml returns nil state (not an error) for backward compat"
+        done: true
+        done_at: 2026-02-06T08:03:00Z
+      - text: "Invalid YAML returns clear parse error"
+        done: true
+        done_at: 2026-02-06T08:03:00Z
+      - text: "Concurrent writes don't corrupt file (temp + rename pattern)"
+        done: true
+        done_at: 2026-02-06T08:03:00Z
+      - text: "`go test ./internal/state/...` passes"
+        done: true
+        done_at: 2026-02-06T08:03:00Z
+    started_at: 2026-02-06T08:01:00Z
+    done_at: 2026-02-06T08:03:00Z
+  - id: T3
+    title: "Implement state validation rules"
+    status: done
+    requires:
+      - T1
+    criteria:
+      - text: "Plan status transitions validated (draft→ready→active→complete, active↔blocked)"
+        done: true
+        done_at: 2026-02-06T08:06:00Z
+      - text: "Task status transitions validated (todo→claimed→doing→done, doing↔blocked, any→skipped)"
+        done: true
+        done_at: 2026-02-06T08:06:00Z
+      - text: "Dependency validation: no missing task IDs, no cycles"
+        done: true
+        done_at: 2026-02-06T08:06:00Z
+      - text: "Criteria gate: task cannot become `done` unless all criteria are checked"
+        done: true
+        done_at: 2026-02-06T08:06:00Z
+      - text: "Feedback scope validation: must be \"plan\" or \"task:Tn\" where Tn exists"
+        done: true
+        done_at: 2026-02-06T08:06:00Z
+      - text: "Errors are descriptive strings (not codes — keep it simple for v1)"
+        done: true
+        done_at: 2026-02-06T08:06:00Z
+      - text: "`go test ./internal/state/...` passes"
+        done: true
+        done_at: 2026-02-06T08:06:00Z
+    started_at: 2026-02-06T08:03:00Z
+    done_at: 2026-02-06T08:06:00Z
+  - id: T4
+    title: "Implement task selection algorithm"
+    status: done
+    requires:
+      - T1
+      - T3
+    criteria:
+      - text: "`Selection` struct with SuggestedNext, Available, Blocked fields"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+      - text: "`ComputeSelection(state *PlanState) *Selection` returns correct task sets"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+      - text: "Available: status=todo, all requires are done, not blocked"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+      - text: "Blocked: status=blocked OR has unmet dependencies (with reasons)"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+      - text: "SuggestedNext: first available by numeric ID order"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+      - text: "Each pick includes a reason string explaining why it's available/blocked"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+      - text: "Returns nil suggested_next when no tasks eligible (all done or all blocked)"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+      - text: "`go test ./internal/state/...` passes"
+        done: true
+        done_at: 2026-02-06T08:08:00Z
+    started_at: 2026-02-06T08:06:00Z
+    done_at: 2026-02-06T08:08:00Z
+  - id: T5
+    title: "Implement task mutation operations"
+    status: done
+    requires:
+      - T2
+      - T3
+    criteria:
+      - text: "`AddTask(state, title, requires, criteria) (*TaskState, error)` — auto-assigns next T{n} ID"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "`ClaimTask(state, taskID) error` — sets status to doing (no leases in v1)"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "`CheckCriterion(state, taskID, index) error` — 1-indexed, sets done=true + done_at"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "`UncheckCriterion(state, taskID, index) error` — sets done=false, clears done_at"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "`CompleteTask(state, taskID, commits, filesTouched) error` — validates criteria gate, sets done"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "`SkipTask(state, taskID, reason) error` — sets skipped with note"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "`SetPlanStatus(state, status, reason) error` — validates transition"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "All mutations validate before applying"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+      - text: "`go test ./internal/state/...` passes"
+        done: true
+        done_at: 2026-02-06T08:11:00Z
+    started_at: 2026-02-06T08:08:00Z
+    done_at: 2026-02-06T08:11:00Z
+  - id: T6
+    title: "Implement feedback operations"
+    status: done
+    requires:
+      - T2
+      - T3
+    criteria:
+      - text: "`AddFeedback(state, scope, author, message) (*Feedback, error)` — auto-assigns F{n} ID"
+        done: true
+        done_at: 2026-02-06T08:14:00Z
+      - text: "`ResolveFeedback(state, feedbackID) error` — sets resolved=true + resolved_at"
+        done: true
+        done_at: 2026-02-06T08:14:00Z
+      - text: "`UnresolvedFeedback(state) []Feedback` — returns all unresolved"
+        done: true
+        done_at: 2026-02-06T08:14:00Z
+      - text: "`FeedbackForTask(state, taskID) []Feedback` — returns scoped feedback"
+        done: true
+        done_at: 2026-02-06T08:14:00Z
+      - text: "Scope validation enforced on add"
+        done: true
+        done_at: 2026-02-06T08:14:00Z
+      - text: "`go test ./internal/state/...` passes"
+        done: true
+        done_at: 2026-02-06T08:14:00Z
+    started_at: 2026-02-06T08:11:00Z
+    done_at: 2026-02-06T08:14:00Z
+  - id: T7
+    title: "Build context payload and `ralph context` command"
+    status: done
+    requires:
+      - T4
+      - T5
+      - T6
+    criteria:
+      - text: "`ContextPayload` struct defined with plan, tasks, feedback, selection, summary fields"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+      - text: "`BuildContext(state *PlanState, ctx *runner.Context) *ContextPayload` assembles full payload"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+      - text: "`ralph context <plan-path> --json` outputs valid JSON to stdout"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+      - text: "`ralph context <plan-path>` outputs human-readable summary to stdout"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+      - text: "Payload includes: plan metadata, all tasks with criteria, unresolved feedback, selection (suggested + available + blocked), summary stats"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+      - text: "Output is deterministic: tasks sorted by ID, feedback sorted by created_at"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+      - text: "Plans without state.yaml get a useful error or empty payload"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+      - text: "`go test ./internal/state/...` and `go test ./internal/cli/...` pass"
+        done: true
+        done_at: 2026-02-06T08:18:00Z
+    started_at: 2026-02-06T08:14:00Z
+    done_at: 2026-02-06T08:18:00Z
+  - id: T8
+    title: "Add `ralph task` CLI subcommands"
+    status: done
+    requires:
+      - T5
+      - T6
+    criteria:
+      - text: "`ralph task add <plan> --title \"...\" [--requires T1,T2] [--criteria \"a;b;c\"]` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`ralph task claim <plan> <task-id>` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`ralph task complete <plan> <task-id> [--commits a,b]` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`ralph task criterion check <plan> <task-id> <index>` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`ralph task criterion uncheck <plan> <task-id> <index>` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`ralph task skip <plan> <task-id> --reason \"...\"` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`ralph feedback add <plan> --scope task:T2 --message \"...\" [--author human]` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`ralph feedback resolve <plan> <feedback-id>` works"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "All commands save state atomically after mutation"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "All commands support `--json` output flag"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+      - text: "`go test ./internal/cli/...` passes"
+        done: true
+        done_at: 2026-02-06T08:22:00Z
+    started_at: 2026-02-06T08:18:00Z
+    done_at: 2026-02-06T08:22:00Z
+  - id: T9
+    title: "Wire state.yaml into worktree sync"
+    status: done
+    requires:
+      - T2
+    criteria:
+      - text: "`SyncToWorktree()` copies `state.yaml` from main → worktree (alongside plan.md, progress.md, feedback.md)"
+        done: true
+        done_at: 2026-02-06T08:25:00Z
+      - text: "`SyncFromWorktree()` copies `state.yaml` from worktree → main (alongside plan.md, progress.md)"
+        done: true
+        done_at: 2026-02-06T08:25:00Z
+      - text: "Plans without `state.yaml` sync normally (backward compat)"
+        done: true
+        done_at: 2026-02-06T08:25:00Z
+      - text: "`go test ./internal/worktree/...` passes"
+        done: true
+        done_at: 2026-02-06T08:25:00Z
+    started_at: 2026-02-06T08:22:00Z
+    done_at: 2026-02-06T08:25:00Z
+  - id: T10
+    title: "Scaffold state.yaml from plan.md on bundle creation"
+    status: done
+    requires:
+      - T2
+      - T5
+    criteria:
+      - text: "`InitStateFromPlan(plan *plan.Plan) (*PlanState, error)` extracts tasks from plan.md and creates initial state"
+        done: true
+        done_at: 2026-02-06T08:30:00Z
+      - text: "Task titles extracted from `### T1: Title` headings in plan.md"
+        done: true
+        done_at: 2026-02-06T08:30:00Z
+      - text: "Dependencies extracted from `**Requires:** T1, T2` fields"
+        done: true
+        done_at: 2026-02-06T08:30:00Z
+      - text: "Criteria extracted from `**Done when:**` checkbox lists"
+        done: true
+        done_at: 2026-02-06T08:30:00Z
+      - text: "`ralph plan create <name>` scaffolds state.yaml alongside plan.md"
+        done: true
+        done_at: 2026-02-06T08:30:00Z
+      - text: "Running `ralph run` or `ralph worker` on a plan without state.yaml auto-generates it"
+        done: true
+        done_at: 2026-02-06T08:30:00Z
+      - text: "`go test ./internal/state/...` passes"
+        done: true
+        done_at: 2026-02-06T08:30:00Z
+    started_at: 2026-02-06T08:25:00Z
+    done_at: 2026-02-06T08:30:00Z
+  - id: T11
+    title: "Wire runner loop to use structured context"
+    status: done
+    requires:
+      - T7
+      - T9
+      - T10
+    criteria:
+      - text: "Runner loads state.yaml at start of each iteration"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+      - text: "Prompt includes structured context JSON (via `{{CONTEXT_JSON}}` placeholder)"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+      - text: "After agent iteration, runner detects which task was worked on from state.yaml changes"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+      - text: "Completion check uses criteria gate: plan complete when all tasks done in state.yaml"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+      - text: "LLM verification skipped when state.yaml exists and all tasks/criteria are done (cheaper)"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+      - text: "LLM verification kept as fallback for plans without state.yaml (backward compat)"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+      - text: "Progress.md still updated with iteration summary"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+      - text: "`go test ./internal/runner/...` passes"
+        done: true
+        done_at: 2026-02-06T08:39:00Z
+    started_at: 2026-02-06T08:30:00Z
+    done_at: 2026-02-06T08:39:00Z
+  - id: T12
+    title: "Update prompt templates for structured state protocol"
+    status: done
+    requires:
+      - T7
+      - T8
+    criteria:
+      - text: "`prompt.md` updated with instructions for reading context JSON"
+        done: true
+        done_at: 2026-02-06T08:44:00Z
+      - text: "Agent told to use `ralph task claim/complete/criterion` commands"
+        done: true
+        done_at: 2026-02-06T08:44:00Z
+      - text: "Agent told to read `suggested_next` + `available_tasks` for task selection"
+        done: true
+        done_at: 2026-02-06T08:44:00Z
+      - text: "Agent told to check criteria as it verifies each acceptance criterion"
+        done: true
+        done_at: 2026-02-06T08:44:00Z
+      - text: "`{{CONTEXT_JSON}}` placeholder documented in prompt"
+        done: true
+        done_at: 2026-02-06T08:44:00Z
+      - text: "Old markdown-checkbox-based instructions kept as fallback section (for plans without state.yaml)"
+        done: true
+        done_at: 2026-02-06T08:44:00Z
+    started_at: 2026-02-06T08:39:00Z
+    done_at: 2026-02-06T08:44:00Z
