@@ -214,3 +214,7 @@ T7 is now **complete** — all subtasks checked, all "Done when" criteria verifi
 **Gotcha:** `BuildContext` signature takes `*PlanState` only (not `*runner.Context` as plan suggested) — runner context info can be added when wiring T11. Also, `plan.Load()` treats `plan.md` as a flat file when you pass the file path directly (not the directory), so `resolveBundleDir` handles this by checking `filepath.Base == "plan.md"` and using the parent directory.
 **Next:** T8 (task CLI subcommands) — depends on T5+T6 (both complete). T9 (worktree sync) depends on T2 (complete). T10 (scaffold state.yaml from plan.md) depends on T2+T5 (both complete). All three are unblocked.
 
+
+## Iteration 8 (2026-02-06 08:18) - 52/88 (59%)
+Claude execution completed in 3m19.210389208s.
+
