@@ -13,6 +13,7 @@ import (
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
+	"github.com/arvesolland/ralph/internal/state"
 )
 
 // MockRunner implements Runner for testing.
@@ -433,6 +434,235 @@ func TestNewIterationLoop_CustomTimeout(t *testing.T) {
 
 	if loop.iterationTimeout != customTimeout {
 		t.Errorf("Expected custom timeout %v, got %v", customTimeout, loop.iterationTimeout)
+	}
+}
+
+func TestIterationLoop_CriteriaGatedCompletion(t *testing.T) {
+	// Set up a plan bundle with state.yaml where all tasks are done.
+	// Completion should succeed via criteria gate WITHOUT LLM verification.
+	tempDir := t.TempDir()
+	bundlePath := filepath.Join(tempDir, "plans", "current", "test-plan")
+	os.MkdirAll(bundlePath, 0755)
+
+	planPath := filepath.Join(bundlePath, "plan.md")
+	planContent := `# Plan: Test
+**Status:** active
+## Tasks
+### T1: Do something
+**Status:** complete
+**Done when:**
+- [x] Something is done
+`
+	os.WriteFile(planPath, []byte(planContent), 0644)
+
+	// Create state.yaml with all tasks done
+	now := time.Now()
+	st := &state.PlanState{
+		ID:     "test-plan",
+		Title:  "Test",
+		Status: state.PlanStatusActive,
+		Tasks: []state.TaskState{
+			{
+				ID:     "T1",
+				Title:  "Do something",
+				Status: state.TaskStatusDone,
+				Criteria: []state.Criterion{
+					{Text: "Something is done", Done: true, DoneAt: &now},
+				},
+			},
+		},
+	}
+	if err := state.SaveState(st, bundlePath); err != nil {
+		t.Fatalf("Failed to save state: %v", err)
+	}
+
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	p, err := plan.Load(bundlePath)
+	if err != nil {
+		t.Fatalf("Failed to load plan: %v", err)
+	}
+
+	ctx := NewContext(p, "main", 10, tempDir)
+
+	// Mock runner: only one call needed (the iteration that claims complete).
+	// NO verification call should happen (criteria gate handles it).
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		Plan:             p,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	if !result.Completed {
+		t.Errorf("Expected criteria-gated completion to succeed, error: %v", result.Error)
+	}
+	if result.Iterations != 1 {
+		t.Errorf("Expected 1 iteration, got %d", result.Iterations)
+	}
+	// Only 1 runner call (the iteration itself) — no verification LLM call
+	if len(mockRunner.RecordedOpts) != 1 {
+		t.Errorf("Expected 1 runner call (no LLM verification), got %d", len(mockRunner.RecordedOpts))
+	}
+}
+
+func TestIterationLoop_CriteriaGatedCompletion_NotAllDone(t *testing.T) {
+	// Set up a plan bundle with state.yaml where NOT all tasks are done.
+	// Agent claims complete but criteria gate should reject it.
+	tempDir := t.TempDir()
+	bundlePath := filepath.Join(tempDir, "plans", "current", "test-plan")
+	os.MkdirAll(bundlePath, 0755)
+
+	planPath := filepath.Join(bundlePath, "plan.md")
+	planContent := `# Plan: Test
+**Status:** active
+## Tasks
+### T1: Do something
+**Status:** complete
+**Done when:**
+- [x] First thing
+### T2: Do another thing
+**Status:** open
+**Done when:**
+- [ ] Second thing
+`
+	os.WriteFile(planPath, []byte(planContent), 0644)
+
+	// Create state.yaml with T1 done, T2 still todo
+	now := time.Now()
+	st := &state.PlanState{
+		ID:     "test-plan",
+		Title:  "Test",
+		Status: state.PlanStatusActive,
+		Tasks: []state.TaskState{
+			{
+				ID:     "T1",
+				Title:  "Do something",
+				Status: state.TaskStatusDone,
+				Criteria: []state.Criterion{
+					{Text: "First thing", Done: true, DoneAt: &now},
+				},
+			},
+			{
+				ID:     "T2",
+				Title:  "Do another thing",
+				Status: state.TaskStatusTodo,
+				Criteria: []state.Criterion{
+					{Text: "Second thing", Done: false},
+				},
+			},
+		},
+	}
+	if err := state.SaveState(st, bundlePath); err != nil {
+		t.Fatalf("Failed to save state: %v", err)
+	}
+
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	p, err := plan.Load(bundlePath)
+	if err != nil {
+		t.Fatalf("Failed to load plan: %v", err)
+	}
+
+	ctx := NewContext(p, "main", 2, tempDir)
+
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
+			{TextContent: "Still working..."},
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		Plan:             p,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	// Should NOT complete — T2 is still todo
+	if result.Completed {
+		t.Error("Expected criteria-gated verification to reject incomplete plan")
+	}
+	// Should hit max iterations
+	if result.Error == nil || !strings.Contains(result.Error.Error(), "max iterations") {
+		t.Errorf("Expected max iterations error, got: %v", result.Error)
+	}
+	// No LLM verification calls (only iteration calls)
+	if len(mockRunner.RecordedOpts) != 2 {
+		t.Errorf("Expected 2 runner calls (iterations only, no LLM verify), got %d", len(mockRunner.RecordedOpts))
+	}
+}
+
+func TestIterationLoop_FallbackLLMVerification(t *testing.T) {
+	// Plan WITHOUT state.yaml should fall back to LLM verification (existing behavior).
+	tempDir := t.TempDir()
+	planDir := filepath.Join(tempDir, "plans", "current")
+	os.MkdirAll(planDir, 0755)
+
+	// Flat file plan (not a bundle) — no state.yaml
+	planPath := filepath.Join(planDir, "test-plan.md")
+	planContent := `# Plan: Test
+**Status:** complete
+## Tasks
+- [x] Task 1
+`
+	os.WriteFile(planPath, []byte(planContent), 0644)
+
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	p, err := plan.Load(planPath)
+	if err != nil {
+		t.Fatalf("Failed to load plan: %v", err)
+	}
+
+	ctx := NewContext(p, "main", 10, tempDir)
+
+	// Iteration + LLM verification call
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
+			{TextContent: "YES"}, // LLM verification response
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		Plan:             p,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	if !result.Completed {
+		t.Errorf("Expected LLM verification to pass, error: %v", result.Error)
+	}
+	// Should have 2 runner calls: 1 iteration + 1 LLM verification
+	if len(mockRunner.RecordedOpts) != 2 {
+		t.Errorf("Expected 2 runner calls (iteration + LLM verify), got %d", len(mockRunner.RecordedOpts))
 	}
 }
 

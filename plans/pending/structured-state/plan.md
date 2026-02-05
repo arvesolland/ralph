@@ -348,27 +348,27 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > The integration point — runner uses state.yaml instead of markdown parsing for task management
 
 **Requires:** T7, T9, T10
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] Runner loads state.yaml at start of each iteration
-- [ ] Prompt includes structured context JSON (via `{{CONTEXT_JSON}}` placeholder)
-- [ ] After agent iteration, runner detects which task was worked on from state.yaml changes
-- [ ] Completion check uses criteria gate: plan complete when all tasks done in state.yaml
-- [ ] LLM verification skipped when state.yaml exists and all tasks/criteria are done (cheaper)
-- [ ] LLM verification kept as fallback for plans without state.yaml (backward compat)
-- [ ] Progress.md still updated with iteration summary
-- [ ] `go test ./internal/runner/...` passes
+- [x] Runner loads state.yaml at start of each iteration
+- [x] Prompt includes structured context JSON (via `{{CONTEXT_JSON}}` placeholder)
+- [x] After agent iteration, runner detects which task was worked on from state.yaml changes
+- [x] Completion check uses criteria gate: plan complete when all tasks done in state.yaml
+- [x] LLM verification skipped when state.yaml exists and all tasks/criteria are done (cheaper)
+- [x] LLM verification kept as fallback for plans without state.yaml (backward compat)
+- [x] Progress.md still updated with iteration summary
+- [x] `go test ./internal/runner/...` passes
 
 **Subtasks:**
-1. [ ] Update `internal/runner/loop.go` `runIteration()` — load state.yaml, build context payload
-2. [ ] Update `internal/runner/loop.go` `buildPrompt()` — add `CONTEXT_JSON` override from context payload
-3. [ ] Update `internal/prompt/builder.go` — support `{{CONTEXT_JSON}}` placeholder
-4. [ ] Update completion detection in `Run()` — if state.yaml exists, check all tasks done instead of checkbox counting
-5. [ ] Update verification path — skip LLM verify if criteria-gated completion passes
-6. [ ] Keep existing verify.go as fallback for plans without state.yaml
-7. [ ] After iteration: reload state.yaml (agent may have updated it via CLI commands)
-8. [ ] Update `internal/runner/loop_test.go` — test criteria-gated completion path
+1. [x] Update `internal/runner/loop.go` `runIteration()` — load state.yaml, build context payload
+2. [x] Update `internal/runner/loop.go` `buildPrompt()` — add `CONTEXT_JSON` override from context payload
+3. [x] Update `internal/prompt/builder.go` — support `{{CONTEXT_JSON}}` placeholder
+4. [x] Update completion detection in `Run()` — if state.yaml exists, check all tasks done instead of checkbox counting
+5. [x] Update verification path — skip LLM verify if criteria-gated completion passes
+6. [x] Keep existing verify.go as fallback for plans without state.yaml
+7. [x] After iteration: reload state.yaml (agent may have updated it via CLI commands)
+8. [x] Update `internal/runner/loop_test.go` — test criteria-gated completion path
 
 ---
 

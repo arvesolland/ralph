@@ -325,3 +325,29 @@ All 106 state tests pass. Full test suite passes.
 ## Iteration 11 (2026-02-06 08:30) - 74/88 (84%)
 Claude execution completed in 4m47.825772417s.
 
+
+---
+### Iteration 12: T11 — Wire runner loop to use structured context (all 8 subtasks)
+**Completed:** Updated `internal/runner/loop.go` with full structured state integration:
+
+1. **State loading** (subtask 1): `runIteration()` now loads state.yaml from bundle dir at the start of each iteration via `resolveBundleDir()` helper. State stored in `l.lastState` field on `IterationLoop`.
+2. **Context injection** (subtask 2): `buildPrompt()` now accepts `*state.PlanState`, builds `ContextPayload` via `state.BuildContext()`, marshals to JSON, and injects as `CONTEXT_JSON` override.
+3. **Placeholder support** (subtask 3): `prompt.Builder` already supports arbitrary placeholders via overrides map — `{{CONTEXT_JSON}}` works with no builder changes needed.
+4. **Criteria-gated completion** (subtask 4): `Run()` completion check now branches: if `lastState` has tasks, uses `isStateComplete()` (all tasks done/skipped); if not, falls back to LLM verification.
+5. **Skip LLM verify** (subtask 5): When criteria gate passes, returns immediately without calling LLM verification — cheaper and more reliable.
+6. **LLM fallback** (subtask 6): Plans without state.yaml (or with 0 tasks in state.yaml) still use existing `Verify()` function with LLM — full backward compat.
+7. **State reload** (subtask 7): After Claude execution, state.yaml is reloaded in case agent updated it via `ralph task`/`ralph feedback` CLI commands.
+8. **Tests** (subtask 8): Added 3 new tests:
+   - `TestIterationLoop_CriteriaGatedCompletion` — bundle with all tasks done → completes without LLM call
+   - `TestIterationLoop_CriteriaGatedCompletion_NotAllDone` — bundle with incomplete tasks → rejects, writes feedback
+   - `TestIterationLoop_FallbackLLMVerification` — flat file plan → falls back to LLM verification
+
+Also added helper methods: `resolveBundleDir()`, `isStateComplete()`, `stateIncompleteReason()`. Refactored `autoInitState()` to use `resolveBundleDir()` for DRY.
+
+All runner tests pass (10 tests). Full test suite passes (all packages).
+
+T11 is now **complete** — all 8 subtasks checked, all 8 "Done when" criteria verified.
+
+**Gotcha:** Plans with state.yaml but 0 tasks (e.g., simple markdown plans auto-inited without `### T{n}:` headings) need to fall through to LLM verification. The criteria gate condition is `l.lastState != nil && len(l.lastState.Tasks) > 0` — without the task count check, the worker test was failing because auto-generated empty state.yaml always blocked completion.
+**Next:** T12 (update prompt templates for structured state protocol) — depends on T7+T8 (both complete). This is the last task in the plan.
+

@@ -3,6 +3,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -74,6 +75,10 @@ type IterationLoop struct {
 
 	// onAfterCommit is called after a successful commit (for pushing to remote)
 	onAfterCommit func()
+
+	// lastState is the most recently loaded state.yaml (nil if plan has no structured state).
+	// Updated at the start and end of each iteration.
+	lastState *state.PlanState
 }
 
 // LoopConfig holds configuration for creating an IterationLoop.
@@ -168,23 +173,37 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 		if iterResult.IsComplete {
 			log.Info("Completion marker detected, verifying...")
 
-			// Verify completion with configured model
-			verifyCtx, cancel := context.WithTimeout(ctx, VerificationTimeout)
-			verifyResult, verifyErr := Verify(verifyCtx, l.plan, l.runner, l.config.Completion.VerificationModel)
-			cancel()
-
-			if verifyErr != nil {
-				log.Warn("Verification failed: %v", verifyErr)
-				// Continue anyway - let next iteration try again
-			} else if verifyResult.Verified {
-				log.Success("Plan verified complete!")
-				result.Completed = true
-				return result
-			} else {
-				log.Warn("Verification failed: %s", verifyResult.Reason)
-				// Write feedback for next iteration
-				if err := l.writeFeedback(verifyResult.Reason); err != nil {
+			if l.lastState != nil && len(l.lastState.Tasks) > 0 {
+				// Criteria-gated verification: check if all tasks are done in state.yaml
+				if l.isStateComplete() {
+					log.Success("Plan verified complete (all tasks done in state.yaml)")
+					result.Completed = true
+					return result
+				}
+				// State exists but not all tasks done — write feedback
+				reason := l.stateIncompleteReason()
+				log.Warn("Criteria-gated verification failed: %s", reason)
+				if err := l.writeFeedback(reason); err != nil {
 					log.Error("Failed to write verification feedback: %v", err)
+				}
+			} else {
+				// Fallback: LLM verification for plans without state.yaml
+				verifyCtx, cancel := context.WithTimeout(ctx, VerificationTimeout)
+				verifyResult, verifyErr := Verify(verifyCtx, l.plan, l.runner, l.config.Completion.VerificationModel)
+				cancel()
+
+				if verifyErr != nil {
+					log.Warn("Verification failed: %v", verifyErr)
+					// Continue anyway - let next iteration try again
+				} else if verifyResult.Verified {
+					log.Success("Plan verified complete!")
+					result.Completed = true
+					return result
+				} else {
+					log.Warn("Verification failed: %s", verifyResult.Reason)
+					if err := l.writeFeedback(verifyResult.Reason); err != nil {
+						log.Error("Failed to write verification feedback: %v", err)
+					}
 				}
 			}
 		}
@@ -220,8 +239,20 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 	log.Debug("Building prompt for iteration %d", l.ctx.Iteration)
 
-	// Build the prompt
-	prompt, err := l.buildPrompt()
+	// Load state.yaml if plan is a bundle (for structured context injection)
+	bundleDir := l.resolveBundleDir()
+	if bundleDir != "" {
+		st, loadErr := state.LoadState(bundleDir)
+		if loadErr != nil {
+			log.Warn("Failed to load state.yaml: %v", loadErr)
+		} else if st != nil {
+			l.lastState = st
+			log.Debug("Loaded state.yaml with %d tasks", len(st.Tasks))
+		}
+	}
+
+	// Build the prompt (includes structured context JSON if state.yaml exists)
+	prompt, err := l.buildPrompt(l.lastState)
 	if err != nil {
 		return nil, fmt.Errorf("building prompt: %w", err)
 	}
@@ -265,6 +296,17 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 		l.plan = updatedPlan
 	}
 
+	// Reload state.yaml — agent may have updated it via ralph task/feedback CLI commands
+	if bundleDir != "" {
+		reloadedState, reloadErr := state.LoadState(bundleDir)
+		if reloadErr != nil {
+			log.Warn("Failed to reload state.yaml: %v", reloadErr)
+		} else if reloadedState != nil {
+			l.lastState = reloadedState
+			log.Debug("Reloaded state.yaml after iteration")
+		}
+	}
+
 	// Append to progress file
 	if err := l.appendProgress(result); err != nil {
 		log.Error("Failed to append progress: %v", err)
@@ -281,7 +323,8 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 }
 
 // buildPrompt builds the prompt for Claude using the template builder.
-func (l *IterationLoop) buildPrompt() (string, error) {
+// If planState is non-nil, structured context JSON is injected via the {{CONTEXT_JSON}} placeholder.
+func (l *IterationLoop) buildPrompt(planState *state.PlanState) (string, error) {
 	// Compute PlanDir for prompt - fallback to parent of PlanFile for old contexts
 	planDir := l.ctx.PlanDir
 	if planDir == "" {
@@ -298,6 +341,17 @@ func (l *IterationLoop) buildPrompt() (string, error) {
 		"BASE_BRANCH":    l.ctx.BaseBranch,
 		"PLAN_FILE":      l.ctx.PlanFile,
 		"PLAN_DIR":       planDir,
+	}
+
+	// If structured state exists, build and inject context JSON
+	if planState != nil {
+		payload := state.BuildContext(planState)
+		contextJSON, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			log.Warn("Failed to marshal context payload: %v", err)
+		} else {
+			overrides["CONTEXT_JSON"] = string(contextJSON)
+		}
 	}
 
 	// Build the main prompt
@@ -362,19 +416,26 @@ func (l *IterationLoop) commitChanges() error {
 	return nil
 }
 
+// resolveBundleDir returns the absolute bundle directory path inside the worktree,
+// or empty string if the plan is not a bundle.
+func (l *IterationLoop) resolveBundleDir() string {
+	if !l.plan.IsBundle() {
+		return ""
+	}
+	planDir := l.ctx.PlanDir
+	if planDir == "" {
+		return ""
+	}
+	return filepath.Join(l.worktreePath, planDir)
+}
+
 // autoInitState generates state.yaml from plan.md if the plan is a bundle
 // and state.yaml doesn't exist yet.
 func (l *IterationLoop) autoInitState() {
-	if !l.plan.IsBundle() {
+	bundleDir := l.resolveBundleDir()
+	if bundleDir == "" {
 		return
 	}
-
-	// Resolve the bundle directory inside the worktree
-	planDir := l.ctx.PlanDir
-	if planDir == "" {
-		return
-	}
-	bundleDir := filepath.Join(l.worktreePath, planDir)
 
 	// Check if state.yaml already exists
 	existing, err := state.LoadState(bundleDir)
@@ -400,6 +461,38 @@ func (l *IterationLoop) autoInitState() {
 	}
 
 	log.Info("Auto-generated state.yaml with %d tasks", len(st.Tasks))
+}
+
+// isStateComplete returns true if the plan's state.yaml indicates all tasks are done or skipped.
+func (l *IterationLoop) isStateComplete() bool {
+	if l.lastState == nil || len(l.lastState.Tasks) == 0 {
+		return false
+	}
+	for _, t := range l.lastState.Tasks {
+		if t.Status != state.TaskStatusDone && t.Status != state.TaskStatusSkipped {
+			return false
+		}
+	}
+	return true
+}
+
+// stateIncompleteReason builds a human-readable reason explaining which tasks are not yet done.
+func (l *IterationLoop) stateIncompleteReason() string {
+	if l.lastState == nil {
+		return "no state.yaml loaded"
+	}
+	var incomplete []string
+	for _, t := range l.lastState.Tasks {
+		if t.Status != state.TaskStatusDone && t.Status != state.TaskStatusSkipped {
+			incomplete = append(incomplete, fmt.Sprintf("%s (%s)", t.ID, t.Status))
+		}
+	}
+	if len(incomplete) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Tasks not complete in state.yaml: %s. "+
+		"Use `ralph task complete` after verifying all criteria, then output the completion marker.",
+		fmt.Sprintf("%v", incomplete))
 }
 
 // writeFeedback writes verification failure reason to the feedback file.
