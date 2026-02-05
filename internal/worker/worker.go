@@ -566,27 +566,21 @@ func (w *Worker) loadOrCreateContext(p *plan.Plan, worktreePath string) (*runner
 		return nil, fmt.Errorf("loading context: %w", err)
 	}
 
-	// Create new context
+	// Create new context with paths relative to worktree
 	baseBranch := w.config.Git.BaseBranch
 	if baseBranch == "" {
 		baseBranch = "main"
 	}
 
-	// Compute plan file path relative to worktree
-	planRelPath, _ := filepath.Rel(w.mainWorktreePath, p.Path)
-	if planRelPath == "" {
-		planRelPath = filepath.Join("plans", "current", filepath.Base(p.Path))
-	}
-
-	execCtx = runner.NewContext(p, baseBranch, w.maxIterations)
-	execCtx.PlanFile = planRelPath
+	// NewContext computes relative paths from worktreePath
+	execCtx = runner.NewContext(p, baseBranch, w.maxIterations, worktreePath)
 
 	// Save the new context
 	if err := runner.SaveContext(execCtx, ctxPath); err != nil {
 		return nil, fmt.Errorf("saving context: %w", err)
 	}
 
-	log.Debug("Created new execution context")
+	log.Debug("Created new execution context (planDir: %s)", execCtx.PlanDir)
 	return execCtx, nil
 }
 

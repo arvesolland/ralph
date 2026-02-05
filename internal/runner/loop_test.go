@@ -78,8 +78,8 @@ func TestIterationLoop_Run_MaxIterations(t *testing.T) {
 		t.Fatalf("Failed to load plan: %v", err)
 	}
 
-	// Create context with max 2 iterations
-	ctx := NewContext(p, "main", 2)
+	// Create context with max 2 iterations (paths relative to tempDir)
+	ctx := NewContext(p, "main", 2, tempDir)
 
 	// Mock runner that never completes
 	mockRunner := &MockRunner{
@@ -141,7 +141,7 @@ func TestIterationLoop_Run_CompletesSuccessfully(t *testing.T) {
 		t.Fatalf("Failed to load plan: %v", err)
 	}
 
-	ctx := NewContext(p, "main", 10)
+	ctx := NewContext(p, "main", 10, tempDir)
 
 	// Mock runner that completes on iteration 3
 	// First two iterations: normal work
@@ -197,7 +197,7 @@ func TestIterationLoop_Run_HandlesBlocker(t *testing.T) {
 		t.Fatalf("Failed to load plan: %v", err)
 	}
 
-	ctx := NewContext(p, "main", 2)
+	ctx := NewContext(p, "main", 2, tempDir)
 
 	blocker := &Blocker{
 		Description: "Need API key",
@@ -265,7 +265,7 @@ func TestIterationLoop_Run_ContextCancellation(t *testing.T) {
 		t.Fatalf("Failed to load plan: %v", err)
 	}
 
-	ctx := NewContext(p, "main", 100)
+	ctx := NewContext(p, "main", 100, tempDir)
 
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
@@ -315,7 +315,7 @@ func TestIterationLoop_Run_OnIterationCallback(t *testing.T) {
 		t.Fatalf("Failed to load plan: %v", err)
 	}
 
-	ctx := NewContext(p, "main", 3)
+	ctx := NewContext(p, "main", 3, tempDir)
 
 	var iterations []int
 	var results []*Result
@@ -375,7 +375,7 @@ func TestIterationLoop_Run_VerificationFails(t *testing.T) {
 		t.Fatalf("Failed to load plan: %v", err)
 	}
 
-	ctx := NewContext(p, "main", 3)
+	ctx := NewContext(p, "main", 3, tempDir)
 
 	// Mock runner: first iteration claims complete, verification fails, continues
 	mockRunner := &MockRunner{

@@ -244,17 +244,18 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 
 	log.Debug("Claude execution completed (duration: %v, complete: %v)", result.Duration, result.IsComplete)
 
-	// Reload the plan to get updated content from the worktree (not main repo)
-	// The agent updates the plan file in the worktree, so we must read from there
-	worktreePlanPath := filepath.Join(l.worktreePath, l.ctx.PlanFile)
-	// For bundles, PlanFile is "plans/current/foo/plan.md" - we need to load the
-	// bundle directory so that BundleDir is set correctly for progress/feedback paths
-	if filepath.Base(worktreePlanPath) == "plan.md" {
-		worktreePlanPath = filepath.Dir(worktreePlanPath)
+	// Reload the plan to get updated content from the working directory
+	// The agent updates the plan file, so we must read it to get current task state
+	// Use PlanDir from context - it's the loadable path for plan.Load()
+	// Fallback to PlanFile for backward compatibility with old context.json files
+	planLoadPath := l.ctx.PlanDir
+	if planLoadPath == "" {
+		planLoadPath = l.ctx.PlanFile
 	}
-	updatedPlan, err := plan.Load(worktreePlanPath)
+	planLoadPath = filepath.Join(l.worktreePath, planLoadPath)
+	updatedPlan, err := plan.Load(planLoadPath)
 	if err != nil {
-		log.Warn("Failed to reload plan: %v", err)
+		log.Warn("Failed to reload plan from %s: %v", planLoadPath, err)
 		// Continue with existing plan
 	} else {
 		l.plan = updatedPlan
@@ -277,6 +278,14 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 
 // buildPrompt builds the prompt for Claude using the template builder.
 func (l *IterationLoop) buildPrompt() (string, error) {
+	// Compute PlanDir for prompt - fallback to parent of PlanFile for old contexts
+	planDir := l.ctx.PlanDir
+	if planDir == "" {
+		// Backward compatibility: derive from PlanFile
+		// For bundles, this would be wrong, but old contexts should only exist for flat files
+		planDir = filepath.Dir(l.ctx.PlanFile)
+	}
+
 	// Build context overrides for placeholders
 	overrides := map[string]string{
 		"ITERATION":      fmt.Sprintf("%d", l.ctx.Iteration),
@@ -284,6 +293,7 @@ func (l *IterationLoop) buildPrompt() (string, error) {
 		"FEATURE_BRANCH": l.ctx.FeatureBranch,
 		"BASE_BRANCH":    l.ctx.BaseBranch,
 		"PLAN_FILE":      l.ctx.PlanFile,
+		"PLAN_DIR":       planDir,
 	}
 
 	// Build the main prompt

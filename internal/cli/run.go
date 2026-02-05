@@ -124,9 +124,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting current branch: %w", err)
 	}
 
-	// Create execution context
-	execCtx := runner.NewContext(p, cfg.Git.BaseBranch, maxIterations)
-	execCtx.FeatureBranch = currentBranch
+	// Create execution context with paths relative to working directory
+	execCtx := runner.NewContext(p, cfg.Git.BaseBranch, maxIterations, worktreePath)
+	execCtx.FeatureBranch = currentBranch // Override with actual current branch
 
 	// Initialize prompt builder
 	configDir := filepath.Dir(GetConfigPath())

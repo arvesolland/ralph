@@ -9,17 +9,20 @@ import (
 )
 
 func TestNewContext(t *testing.T) {
-	p := &plan.Plan{
-		Path:   "/plans/current/test-plan.md",
-		Name:   "test-plan",
-		Branch: "feat/test-plan",
-	}
+	t.Run("with bundle and relative paths", func(t *testing.T) {
+		p := &plan.Plan{
+			Path:      "/repo/plans/current/test-plan/plan.md",
+			Name:      "test-plan",
+			Branch:    "feat/test-plan",
+			BundleDir: "/repo/plans/current/test-plan",
+		}
+		ctx := NewContext(p, "main", 0, "/repo")
 
-	t.Run("with default max iterations", func(t *testing.T) {
-		ctx := NewContext(p, "main", 0)
-
-		if ctx.PlanFile != p.Path {
-			t.Errorf("PlanFile = %q, want %q", ctx.PlanFile, p.Path)
+		if ctx.PlanFile != "plans/current/test-plan/plan.md" {
+			t.Errorf("PlanFile = %q, want %q", ctx.PlanFile, "plans/current/test-plan/plan.md")
+		}
+		if ctx.PlanDir != "plans/current/test-plan" {
+			t.Errorf("PlanDir = %q, want %q", ctx.PlanDir, "plans/current/test-plan")
 		}
 		if ctx.FeatureBranch != p.Branch {
 			t.Errorf("FeatureBranch = %q, want %q", ctx.FeatureBranch, p.Branch)
@@ -35,8 +38,48 @@ func TestNewContext(t *testing.T) {
 		}
 	})
 
+	t.Run("with flat file and relative paths", func(t *testing.T) {
+		p := &plan.Plan{
+			Path:   "/repo/plans/current/test-plan.md",
+			Name:   "test-plan",
+			Branch: "feat/test-plan",
+			// No BundleDir = flat file
+		}
+		ctx := NewContext(p, "main", 0, "/repo")
+
+		if ctx.PlanFile != "plans/current/test-plan.md" {
+			t.Errorf("PlanFile = %q, want %q", ctx.PlanFile, "plans/current/test-plan.md")
+		}
+		// For flat files, PlanDir is the file path (same as PlanFile) so plan.Load() works
+		if ctx.PlanDir != "plans/current/test-plan.md" {
+			t.Errorf("PlanDir = %q, want %q", ctx.PlanDir, "plans/current/test-plan.md")
+		}
+	})
+
+	t.Run("with empty workDir uses absolute paths", func(t *testing.T) {
+		p := &plan.Plan{
+			Path:      "/repo/plans/current/test-plan/plan.md",
+			Name:      "test-plan",
+			Branch:    "feat/test-plan",
+			BundleDir: "/repo/plans/current/test-plan",
+		}
+		ctx := NewContext(p, "main", 0, "")
+
+		// When workDir is empty, paths should remain absolute
+		if ctx.PlanFile != "/repo/plans/current/test-plan/plan.md" {
+			t.Errorf("PlanFile = %q, want %q", ctx.PlanFile, "/repo/plans/current/test-plan/plan.md")
+		}
+		if ctx.PlanDir != "/repo/plans/current/test-plan" {
+			t.Errorf("PlanDir = %q, want %q", ctx.PlanDir, "/repo/plans/current/test-plan")
+		}
+	})
+
 	t.Run("with custom max iterations", func(t *testing.T) {
-		ctx := NewContext(p, "develop", 50)
+		p := &plan.Plan{
+			Path:      "/repo/plans/current/test-plan/plan.md",
+			BundleDir: "/repo/plans/current/test-plan",
+		}
+		ctx := NewContext(p, "develop", 50, "/repo")
 
 		if ctx.BaseBranch != "develop" {
 			t.Errorf("BaseBranch = %q, want %q", ctx.BaseBranch, "develop")
@@ -47,7 +90,11 @@ func TestNewContext(t *testing.T) {
 	})
 
 	t.Run("with negative max iterations defaults", func(t *testing.T) {
-		ctx := NewContext(p, "main", -5)
+		p := &plan.Plan{
+			Path:      "/repo/plans/current/test-plan/plan.md",
+			BundleDir: "/repo/plans/current/test-plan",
+		}
+		ctx := NewContext(p, "main", -5, "/repo")
 
 		if ctx.MaxIterations != DefaultMaxIterations {
 			t.Errorf("MaxIterations = %d, want %d", ctx.MaxIterations, DefaultMaxIterations)
@@ -57,7 +104,8 @@ func TestNewContext(t *testing.T) {
 
 func TestContext_Increment(t *testing.T) {
 	ctx := &Context{
-		PlanFile:      "/plans/current/test.md",
+		PlanFile:      "plans/current/test-plan/plan.md",
+		PlanDir:       "plans/current/test-plan",
 		FeatureBranch: "feat/test",
 		BaseBranch:    "main",
 		Iteration:     5,
@@ -79,6 +127,9 @@ func TestContext_Increment(t *testing.T) {
 	// Other fields should be copied
 	if next.PlanFile != ctx.PlanFile {
 		t.Errorf("next PlanFile = %q, want %q", next.PlanFile, ctx.PlanFile)
+	}
+	if next.PlanDir != ctx.PlanDir {
+		t.Errorf("next PlanDir = %q, want %q", next.PlanDir, ctx.PlanDir)
 	}
 	if next.MaxIterations != ctx.MaxIterations {
 		t.Errorf("next MaxIterations = %d, want %d", next.MaxIterations, ctx.MaxIterations)
@@ -114,9 +165,10 @@ func TestLoadContext_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctxPath := filepath.Join(tmpDir, "context.json")
 
-	// Write a valid context file
+	// Write a valid context file with planDir
 	content := `{
-  "planFile": "/plans/current/test-plan.md",
+  "planFile": "plans/current/test-plan/plan.md",
+  "planDir": "plans/current/test-plan",
   "featureBranch": "feat/test-plan",
   "baseBranch": "main",
   "iteration": 5,
@@ -131,8 +183,11 @@ func TestLoadContext_Success(t *testing.T) {
 		t.Fatalf("LoadContext() error = %v", err)
 	}
 
-	if ctx.PlanFile != "/plans/current/test-plan.md" {
-		t.Errorf("PlanFile = %q, want %q", ctx.PlanFile, "/plans/current/test-plan.md")
+	if ctx.PlanFile != "plans/current/test-plan/plan.md" {
+		t.Errorf("PlanFile = %q, want %q", ctx.PlanFile, "plans/current/test-plan/plan.md")
+	}
+	if ctx.PlanDir != "plans/current/test-plan" {
+		t.Errorf("PlanDir = %q, want %q", ctx.PlanDir, "plans/current/test-plan")
 	}
 	if ctx.FeatureBranch != "feat/test-plan" {
 		t.Errorf("FeatureBranch = %q, want %q", ctx.FeatureBranch, "feat/test-plan")
@@ -145,6 +200,40 @@ func TestLoadContext_Success(t *testing.T) {
 	}
 	if ctx.MaxIterations != 30 {
 		t.Errorf("MaxIterations = %d, want %d", ctx.MaxIterations, 30)
+	}
+}
+
+func TestLoadContext_BackwardCompatibility(t *testing.T) {
+	// Test loading old context.json files that don't have planDir field
+	tmpDir := t.TempDir()
+	ctxPath := filepath.Join(tmpDir, "context.json")
+
+	// Write an old-format context file WITHOUT planDir
+	content := `{
+  "planFile": "plans/current/test-plan/plan.md",
+  "featureBranch": "feat/test-plan",
+  "baseBranch": "main",
+  "iteration": 5,
+  "maxIterations": 30
+}`
+	if err := os.WriteFile(ctxPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	ctx, err := LoadContext(ctxPath)
+	if err != nil {
+		t.Fatalf("LoadContext() error = %v", err)
+	}
+
+	// Should load successfully with PlanDir as empty string
+	if ctx.PlanFile != "plans/current/test-plan/plan.md" {
+		t.Errorf("PlanFile = %q, want %q", ctx.PlanFile, "plans/current/test-plan/plan.md")
+	}
+	if ctx.PlanDir != "" {
+		t.Errorf("PlanDir = %q, want empty string for old context files", ctx.PlanDir)
+	}
+	if ctx.Iteration != 5 {
+		t.Errorf("Iteration = %d, want %d", ctx.Iteration, 5)
 	}
 }
 
@@ -274,7 +363,8 @@ func TestJSONSerialization(t *testing.T) {
 
 	// Test that all fields serialize correctly to expected JSON keys
 	ctx := &Context{
-		PlanFile:      "/path/to/plan.md",
+		PlanFile:      "plans/current/test-plan/plan.md",
+		PlanDir:       "plans/current/test-plan",
 		FeatureBranch: "feat/test",
 		BaseBranch:    "main",
 		Iteration:     3,
@@ -294,6 +384,7 @@ func TestJSONSerialization(t *testing.T) {
 	content := string(data)
 	expectedFields := []string{
 		`"planFile"`,
+		`"planDir"`,
 		`"featureBranch"`,
 		`"baseBranch"`,
 		`"iteration"`,
@@ -325,7 +416,8 @@ func TestRoundTrip(t *testing.T) {
 	ctxPath := filepath.Join(tmpDir, "context.json")
 
 	original := &Context{
-		PlanFile:      "/plans/current/complex-plan.md",
+		PlanFile:      "plans/current/complex-plan/plan.md",
+		PlanDir:       "plans/current/complex-plan",
 		FeatureBranch: "feat/complex-plan",
 		BaseBranch:    "main",
 		Iteration:     15,
@@ -344,6 +436,9 @@ func TestRoundTrip(t *testing.T) {
 	// Verify all fields round-trip correctly
 	if loaded.PlanFile != original.PlanFile {
 		t.Errorf("PlanFile mismatch: got %q, want %q", loaded.PlanFile, original.PlanFile)
+	}
+	if loaded.PlanDir != original.PlanDir {
+		t.Errorf("PlanDir mismatch: got %q, want %q", loaded.PlanDir, original.PlanDir)
 	}
 	if loaded.FeatureBranch != original.FeatureBranch {
 		t.Errorf("FeatureBranch mismatch: got %q, want %q", loaded.FeatureBranch, original.FeatureBranch)
