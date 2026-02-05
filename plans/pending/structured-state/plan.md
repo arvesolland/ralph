@@ -105,23 +105,23 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > Safe persistence of state.yaml — foundation for all mutations
 
 **Requires:** T1
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `LoadState(bundleDir string) (*PlanState, error)` reads and parses state.yaml
-- [ ] `SaveState(state *PlanState, bundleDir string) error` writes atomically (temp + rename)
-- [ ] Missing state.yaml returns nil state (not an error) for backward compat
-- [ ] Invalid YAML returns clear parse error
-- [ ] Concurrent writes don't corrupt file (temp + rename pattern)
-- [ ] `go test ./internal/state/...` passes
+- [x] `LoadState(bundleDir string) (*PlanState, error)` reads and parses state.yaml
+- [x] `SaveState(state *PlanState, bundleDir string) error` writes atomically (temp + rename)
+- [x] Missing state.yaml returns nil state (not an error) for backward compat
+- [x] Invalid YAML returns clear parse error
+- [x] Concurrent writes don't corrupt file (temp + rename pattern)
+- [x] `go test ./internal/state/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/state/store.go`
-2. [ ] Implement `LoadState()` — read `{bundleDir}/state.yaml`, unmarshal, validate
-3. [ ] Implement `SaveState()` — marshal, write to `.tmp`, rename (reuse pattern from `context.go`)
-4. [ ] Implement `StatePath(bundleDir string) string` helper
-5. [ ] Handle missing file case: return `nil, nil` (plan has no structured state yet)
-6. [ ] Create `internal/state/store_test.go` — test load, save, missing file, invalid yaml, atomic write
+1. [x] Create `internal/state/store.go`
+2. [x] Implement `LoadState()` — read `{bundleDir}/state.yaml`, unmarshal, validate
+3. [x] Implement `SaveState()` — marshal, write to `.tmp`, rename (reuse pattern from `context.go`)
+4. [x] Implement `StatePath(bundleDir string) string` helper
+5. [x] Handle missing file case: return `nil, nil` (plan has no structured state yet)
+6. [x] Create `internal/state/store_test.go` — test load, save, missing file, invalid yaml, atomic write
 
 ---
 
