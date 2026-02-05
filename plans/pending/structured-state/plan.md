@@ -301,18 +301,18 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > State must travel with the plan bundle between main worktree and execution worktree
 
 **Requires:** T2
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `SyncToWorktree()` copies `state.yaml` from main → worktree (alongside plan.md, progress.md, feedback.md)
-- [ ] `SyncFromWorktree()` copies `state.yaml` from worktree → main (alongside plan.md, progress.md)
-- [ ] Plans without `state.yaml` sync normally (backward compat)
-- [ ] `go test ./internal/worktree/...` passes
+- [x] `SyncToWorktree()` copies `state.yaml` from main → worktree (alongside plan.md, progress.md, feedback.md)
+- [x] `SyncFromWorktree()` copies `state.yaml` from worktree → main (alongside plan.md, progress.md)
+- [x] Plans without `state.yaml` sync normally (backward compat)
+- [x] `go test ./internal/worktree/...` passes
 
 **Subtasks:**
-1. [ ] Update `internal/worktree/sync.go` `SyncToWorktree()` — add state.yaml to file list
-2. [ ] Update `internal/worktree/sync.go` `SyncFromWorktree()` — add state.yaml to file list
-3. [ ] Update tests in `internal/worktree/sync_test.go` — verify state.yaml included in sync
+1. [x] Update `internal/worktree/sync.go` `SyncToWorktree()` — add state.yaml to file list
+2. [x] Update `internal/worktree/sync.go` `SyncFromWorktree()` — add state.yaml to file list
+3. [x] Update tests in `internal/worktree/sync_test.go` — verify state.yaml included in sync
 
 ---
 

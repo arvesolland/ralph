@@ -261,3 +261,23 @@ T8 is now **complete** — all 11 subtasks checked, all "Done when" criteria ver
 ## Iteration 9 (2026-02-06 08:22) - 63/88 (71%)
 Claude execution completed in 4m10.583795167s.
 
+
+---
+### Iteration 10: T9 — Wire state.yaml into worktree sync
+**Completed:** Updated `internal/worktree/sync.go` to include `state.yaml` in bundle sync:
+- `SyncToWorktree()`: Added `state.yaml` to file list for bundles — copies from `{bundleDir}/state.yaml` to `{worktree}/plans/current/{name}/state.yaml`. Uses same optional-file pattern (silently skips if missing). Only applies to bundles (legacy flat files don't use state.yaml).
+- `SyncFromWorktree()`: Added `state.yaml` to sync-back list — copies from worktree back to main alongside plan.md and progress.md. Same optional-file pattern.
+- Added import of `internal/state` package for `state.StatePath()` and `state.StateFilename` constants.
+
+Updated `internal/worktree/sync_test.go` with 4 test changes:
+- `TestSyncToWorktree_Bundle`: Now creates state.yaml in source bundle and verifies it's copied to worktree
+- `TestSyncFromWorktree_Bundle`: Now creates state.yaml in worktree bundle and verifies it's copied back to main
+- `TestSyncToWorktree_Bundle_NoStateYaml` (new): Verifies bundles without state.yaml sync normally (backward compat)
+- `TestSyncFromWorktree_Bundle_NoStateYaml` (new): Verifies sync-back works when worktree bundle has no state.yaml
+
+All worktree tests pass (53 tests). Full test suite passes.
+
+T9 is now **complete** — all 3 subtasks checked, all 4 "Done when" criteria verified.
+
+**Next:** T10 (scaffold state.yaml from plan.md) — depends on T2+T5 (both complete). T12 (prompt templates) — depends on T7+T8 (both complete). T11 depends on T7+T9+T10 (T9 now complete, T10 still needed). All three (T10, T12) are unblocked.
+

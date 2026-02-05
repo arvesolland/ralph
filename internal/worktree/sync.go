@@ -11,6 +11,7 @@ import (
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/plan"
+	"github.com/arvesolland/ralph/internal/state"
 )
 
 // SyncToWorktree copies plan, progress, and feedback files from the main worktree
@@ -23,12 +24,13 @@ import (
 func SyncToWorktree(p *plan.Plan, worktreePath string, cfg *config.Config, mainWorktreePath string) error {
 	log.Debug("Syncing files to worktree: %s", worktreePath)
 
-	// Files to sync: plan file, progress file, feedback file
+	// Files to sync: plan file, progress file, feedback file, state.yaml (bundles only)
 	planPath := p.Path
 	progressPath := plan.ProgressPath(p)
 	feedbackPath := plan.FeedbackPath(p)
 
 	var planDstPath, progressDstPath, feedbackDstPath string
+	var stateSrcPath, stateDstPath string
 
 	if p.IsBundle() {
 		// Bundle: use p.Name to build destination paths
@@ -37,6 +39,8 @@ func SyncToWorktree(p *plan.Plan, worktreePath string, cfg *config.Config, mainW
 		planDstPath = filepath.Join(bundleDst, "plan.md")
 		progressDstPath = filepath.Join(bundleDst, "progress.md")
 		feedbackDstPath = filepath.Join(bundleDst, "feedback.md")
+		stateSrcPath = state.StatePath(p.BundleDir)
+		stateDstPath = filepath.Join(bundleDst, state.StateFilename)
 	} else {
 		// Legacy flat file: use filepath.Rel() to preserve path structure
 		planRelPath, err := filepath.Rel(mainWorktreePath, planPath)
@@ -88,6 +92,18 @@ func SyncToWorktree(p *plan.Plan, worktreePath string, cfg *config.Config, mainW
 		log.Debug("Copied feedback file: %s -> %s", feedbackPath, feedbackDstPath)
 	}
 
+	// Copy state.yaml (optional, bundles only)
+	if stateSrcPath != "" {
+		if err := copyFile(stateSrcPath, stateDstPath); err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("copying state file: %w", err)
+			}
+			log.Debug("State file not found, skipping: %s", stateSrcPath)
+		} else {
+			log.Debug("Copied state file: %s -> %s", stateSrcPath, stateDstPath)
+		}
+	}
+
 	// Copy .env files based on config
 	if cfg != nil && cfg.Worktree.CopyEnvFiles != "" {
 		envFiles := parseEnvFileList(cfg.Worktree.CopyEnvFiles)
@@ -119,11 +135,12 @@ func SyncToWorktree(p *plan.Plan, worktreePath string, cfg *config.Config, mainW
 func SyncFromWorktree(p *plan.Plan, worktreePath string, mainWorktreePath string) error {
 	log.Debug("Syncing files from worktree: %s", worktreePath)
 
-	// Files to sync back: plan file, progress file (NOT feedback - that's human input)
+	// Files to sync back: plan file, progress file, state.yaml (NOT feedback - that's human input)
 	planPath := p.Path
 	progressPath := plan.ProgressPath(p)
 
 	var planSrcPath, progressSrcPath string
+	var stateSrcPath, stateDstPath string
 
 	if p.IsBundle() {
 		// Bundle: use p.Name to build source paths
@@ -131,6 +148,8 @@ func SyncFromWorktree(p *plan.Plan, worktreePath string, mainWorktreePath string
 		bundleSrc := filepath.Join(worktreePath, "plans", "current", p.Name)
 		planSrcPath = filepath.Join(bundleSrc, "plan.md")
 		progressSrcPath = filepath.Join(bundleSrc, "progress.md")
+		stateSrcPath = filepath.Join(bundleSrc, state.StateFilename)
+		stateDstPath = state.StatePath(p.BundleDir)
 	} else {
 		// Legacy flat file: use filepath.Rel() to locate files
 		planRelPath, err := filepath.Rel(mainWorktreePath, planPath)
@@ -164,6 +183,18 @@ func SyncFromWorktree(p *plan.Plan, worktreePath string, mainWorktreePath string
 		log.Debug("Progress file not found in worktree, skipping: %s", progressSrcPath)
 	} else {
 		log.Debug("Copied progress file back: %s -> %s", progressSrcPath, progressPath)
+	}
+
+	// Copy state.yaml back (optional, bundles only)
+	if stateSrcPath != "" {
+		if err := copyFile(stateSrcPath, stateDstPath); err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("copying state file back: %w", err)
+			}
+			log.Debug("State file not found in worktree, skipping: %s", stateSrcPath)
+		} else {
+			log.Debug("Copied state file back: %s -> %s", stateSrcPath, stateDstPath)
+		}
 	}
 
 	return nil

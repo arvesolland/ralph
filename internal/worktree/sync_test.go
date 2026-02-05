@@ -7,6 +7,7 @@ import (
 
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/plan"
+	"github.com/arvesolland/ralph/internal/state"
 )
 
 func TestSyncToWorktree(t *testing.T) {
@@ -443,6 +444,13 @@ func TestSyncToWorktree_Bundle(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Create state.yaml inside bundle
+	statePath := filepath.Join(bundleDir, state.StateFilename)
+	stateContent := "id: test-bundle\ntitle: Test Bundle\nstatus: active\n"
+	if err := os.WriteFile(statePath, []byte(stateContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	// Create plan struct as a bundle
 	p := &plan.Plan{
 		Path:      planPath,
@@ -478,6 +486,13 @@ func TestSyncToWorktree_Bundle(t *testing.T) {
 	} else if string(content) != feedbackContent {
 		t.Errorf("Feedback content mismatch: got %q, want %q", string(content), feedbackContent)
 	}
+
+	dstStatePath := filepath.Join(worktreeDir, "plans", "current", "test-bundle", state.StateFilename)
+	if content, err := os.ReadFile(dstStatePath); err != nil {
+		t.Errorf("State file not copied to bundle: %v", err)
+	} else if string(content) != stateContent {
+		t.Errorf("State content mismatch: got %q, want %q", string(content), stateContent)
+	}
 }
 
 func TestSyncFromWorktree_Bundle(t *testing.T) {
@@ -501,6 +516,13 @@ func TestSyncFromWorktree_Bundle(t *testing.T) {
 	progressContent := "# Progress\n\n## Iteration 1\nDid stuff\n"
 	progressPath := filepath.Join(worktreeBundleDir, "progress.md")
 	if err := os.WriteFile(progressPath, []byte(progressContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create updated state.yaml in worktree bundle
+	stateContent := "id: test-bundle\ntitle: Test Bundle\nstatus: active\n"
+	worktreeStatePath := filepath.Join(worktreeBundleDir, state.StateFilename)
+	if err := os.WriteFile(worktreeStatePath, []byte(stateContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -535,6 +557,96 @@ func TestSyncFromWorktree_Bundle(t *testing.T) {
 		t.Errorf("Progress file not copied back: %v", err)
 	} else if string(content) != progressContent {
 		t.Errorf("Progress content mismatch: got %q, want %q", string(content), progressContent)
+	}
+
+	// Verify state.yaml was copied back to bundle
+	mainStatePath := filepath.Join(mainBundleDir, state.StateFilename)
+	if content, err := os.ReadFile(mainStatePath); err != nil {
+		t.Errorf("State file not copied back: %v", err)
+	} else if string(content) != stateContent {
+		t.Errorf("State content mismatch: got %q, want %q", string(content), stateContent)
+	}
+}
+
+func TestSyncToWorktree_Bundle_NoStateYaml(t *testing.T) {
+	// Verify bundles without state.yaml sync normally (backward compat)
+	mainDir := t.TempDir()
+	worktreeDir := t.TempDir()
+
+	bundleDir := filepath.Join(mainDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	planPath := filepath.Join(bundleDir, "plan.md")
+	if err := os.WriteFile(planPath, []byte("# Plan\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &plan.Plan{
+		Path:      planPath,
+		Name:      "test-bundle",
+		BundleDir: bundleDir,
+	}
+
+	cfg := &config.Config{}
+	if err := SyncToWorktree(p, worktreeDir, cfg, mainDir); err != nil {
+		t.Fatalf("SyncToWorktree should not error for missing state.yaml: %v", err)
+	}
+
+	// Plan file should be copied
+	dstPlanPath := filepath.Join(worktreeDir, "plans", "current", "test-bundle", "plan.md")
+	if _, err := os.Stat(dstPlanPath); err != nil {
+		t.Errorf("Plan file should be copied: %v", err)
+	}
+
+	// state.yaml should not exist in worktree
+	dstStatePath := filepath.Join(worktreeDir, "plans", "current", "test-bundle", state.StateFilename)
+	if _, err := os.Stat(dstStatePath); !os.IsNotExist(err) {
+		t.Error("State file should not exist when source bundle has no state.yaml")
+	}
+}
+
+func TestSyncFromWorktree_Bundle_NoStateYaml(t *testing.T) {
+	// Verify syncing back works when worktree bundle has no state.yaml
+	mainDir := t.TempDir()
+	worktreeDir := t.TempDir()
+
+	worktreeBundleDir := filepath.Join(worktreeDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(worktreeBundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	planPath := filepath.Join(worktreeBundleDir, "plan.md")
+	if err := os.WriteFile(planPath, []byte("# Plan\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	mainBundleDir := filepath.Join(mainDir, "plans", "current", "test-bundle")
+	if err := os.MkdirAll(mainBundleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	mainPlanPath := filepath.Join(mainBundleDir, "plan.md")
+	p := &plan.Plan{
+		Path:      mainPlanPath,
+		Name:      "test-bundle",
+		BundleDir: mainBundleDir,
+	}
+
+	if err := SyncFromWorktree(p, worktreeDir, mainDir); err != nil {
+		t.Fatalf("SyncFromWorktree should not error for missing state.yaml: %v", err)
+	}
+
+	// Plan should be copied back
+	if _, err := os.Stat(mainPlanPath); err != nil {
+		t.Errorf("Plan file should be copied: %v", err)
+	}
+
+	// state.yaml should not exist in main
+	mainStatePath := filepath.Join(mainBundleDir, state.StateFilename)
+	if _, err := os.Stat(mainStatePath); !os.IsNotExist(err) {
+		t.Error("State file should not exist when worktree bundle has no state.yaml")
 	}
 }
 
