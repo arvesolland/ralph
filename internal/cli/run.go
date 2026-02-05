@@ -15,6 +15,7 @@ import (
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
+	"github.com/arvesolland/ralph/internal/notify"
 	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
@@ -124,14 +125,42 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting current branch: %w", err)
 	}
 
-	// Create execution context with paths relative to working directory
+	// Remove stale context.json if it exists (prevents agent confusion from leftover state)
+	ctxPath := runner.ContextPath(worktreePath)
+	if err := os.Remove(ctxPath); err != nil && !os.IsNotExist(err) {
+		log.Warn("Failed to remove stale context file: %v", err)
+	}
+
+	// Create fresh execution context with paths relative to working directory
 	execCtx := runner.NewContext(p, cfg.Git.BaseBranch, maxIterations, worktreePath)
 	execCtx.FeatureBranch = currentBranch // Override with actual current branch
+
+	// Save the fresh context so the agent can read it
+	if err := runner.SaveContext(execCtx, ctxPath); err != nil {
+		return fmt.Errorf("saving context: %w", err)
+	}
 
 	// Initialize prompt builder
 	configDir := filepath.Dir(GetConfigPath())
 	promptsDir := filepath.Join(configDir, "prompts")
 	promptBuilder := prompt.NewBuilder(cfg, configDir, promptsDir)
+
+	// Set up Slack notifications
+	var notifier notify.Notifier = &notify.NoopNotifier{}
+	trackerPath := notify.ThreadTrackerPath(configDir)
+	tracker, err := notify.NewThreadTracker(trackerPath)
+	if err != nil {
+		log.Warn("Failed to create thread tracker: %v", err)
+	} else {
+		notifier = notify.NewNotifier(cfg, tracker)
+	}
+
+	// Send start notification
+	if cfg.Slack.NotifyStart {
+		if err := notifier.Start(p); err != nil {
+			log.Debug("Failed to send start notification: %v", err)
+		}
+	}
 
 	// Create CLI runner
 	claudeRunner := runner.NewCLIRunner()
@@ -150,11 +179,35 @@ func runRun(cmd *cobra.Command, args []string) error {
 			if result.IsComplete {
 				log.Info("Completion marker detected")
 			}
+			// Update Slack progress
+			notifier.UpdateProgress(p, &notify.ProgressStatus{
+				Iteration:     iteration,
+				MaxIterations: maxIterations,
+				Phase:         notify.PhaseRunning,
+			})
+			// Send iteration notification if configured
+			if cfg.Slack.NotifyIteration {
+				if err := notifier.Iteration(p, iteration, maxIterations); err != nil {
+					log.Debug("Failed to send iteration notification: %v", err)
+				}
+			}
 		},
 		OnBlocker: func(blocker *runner.Blocker) {
 			log.Warn("Blocker detected: %s", blocker.Description)
 			if blocker.Action != "" {
 				log.Info("Action required: %s", blocker.Action)
+			}
+			// Send blocker notification
+			notifier.UpdateProgress(p, &notify.ProgressStatus{
+				Iteration:     execCtx.Iteration,
+				MaxIterations: maxIterations,
+				Phase:         notify.PhaseBlocked,
+				Message:       blocker.Description,
+			})
+			if cfg.Slack.NotifyBlocker {
+				if err := notifier.Blocker(p, blocker); err != nil {
+					log.Debug("Failed to send blocker notification: %v", err)
+				}
 			}
 		},
 	})
@@ -182,10 +235,30 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	if result.Completed {
 		log.Success("Plan completed successfully!")
+		// Send completion notification
+		notifier.UpdateProgress(p, &notify.ProgressStatus{
+			Iteration:     result.Iterations,
+			MaxIterations: maxIterations,
+			Phase:         notify.PhaseComplete,
+		})
+		if cfg.Slack.NotifyComplete {
+			notifier.Complete(p, "")
+		}
 		return nil
 	}
 
 	if result.Error != nil {
+		// Send error notification
+		if cfg.Slack.NotifyError {
+			notifier.Error(p, result.Error)
+		}
+		notifier.UpdateProgress(p, &notify.ProgressStatus{
+			Iteration:     result.Iterations,
+			MaxIterations: maxIterations,
+			Phase:         notify.PhaseError,
+			Message:       result.Error.Error(),
+		})
+
 		if errors.Is(result.Error, context.Canceled) {
 			log.Warn("Execution interrupted by user")
 			return nil // Exit 0 on user interruption

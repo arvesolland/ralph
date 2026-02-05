@@ -877,7 +877,7 @@ func TestNewNotifier_WithBotToken(t *testing.T) {
 	cfg.Slack.BotToken = "xoxb-test-token"
 	cfg.Slack.Channel = "C12345"
 
-	notifier := NewNotifier(cfg, nil)
+	notifier := notify.NewNotifier(cfg, nil)
 
 	// Should return SlackNotifier
 	if _, ok := notifier.(*notify.SlackNotifier); !ok {
@@ -889,7 +889,7 @@ func TestNewNotifier_WithWebhook(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Slack.WebhookURL = "https://hooks.slack.com/services/test"
 
-	notifier := NewNotifier(cfg, nil)
+	notifier := notify.NewNotifier(cfg, nil)
 
 	// Should return WebhookNotifier
 	if _, ok := notifier.(*notify.WebhookNotifier); !ok {
@@ -898,7 +898,7 @@ func TestNewNotifier_WithWebhook(t *testing.T) {
 }
 
 func TestNewNotifier_NoConfig(t *testing.T) {
-	notifier := NewNotifier(nil, nil)
+	notifier := notify.NewNotifier(nil, nil)
 
 	// Should return NoopNotifier
 	if _, ok := notifier.(*notify.NoopNotifier); !ok {
@@ -910,7 +910,7 @@ func TestNewNotifier_NoSlackConfig(t *testing.T) {
 	cfg := config.Defaults()
 	// No Slack config set
 
-	notifier := NewNotifier(cfg, nil)
+	notifier := notify.NewNotifier(cfg, nil)
 
 	// Should return NoopNotifier
 	if _, ok := notifier.(*notify.NoopNotifier); !ok {

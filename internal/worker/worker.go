@@ -763,7 +763,7 @@ func (w *Worker) SetupNotifications(ctx context.Context) func() {
 	w.threadTracker = tracker
 
 	// Create notifier based on configuration
-	w.notifier = NewNotifier(w.config, tracker)
+	w.notifier = notify.NewNotifier(w.config, tracker)
 
 	// Auto-start Socket Mode bot if configured
 	if w.config.Slack.Channel != "" {
@@ -786,54 +786,6 @@ func (w *Worker) SetupNotifications(ctx context.Context) func() {
 	}
 }
 
-// NewNotifier creates a Notifier based on the configuration.
-// Returns a SlackNotifier if bot_token is configured, falls back to WebhookNotifier,
-// and returns NoopNotifier if neither is configured.
-// When global_bot is true, loads bot credentials from ~/.ralph/slack.env.
-func NewNotifier(cfg *config.Config, tracker *notify.ThreadTracker) notify.Notifier {
-	if cfg == nil {
-		return &notify.NoopNotifier{}
-	}
-
-	// Check for custom API URL (for testing)
-	apiURL := os.Getenv("SLACK_API_URL")
-
-	// Determine bot token - use global config if global_bot is true
-	botToken := cfg.Slack.BotToken
-	if cfg.Slack.GlobalBot && botToken == "" {
-		// Load from global config (~/.ralph/slack.env)
-		globalCfg, err := notify.LoadGlobalBotConfig()
-		if err != nil {
-			log.Debug("Failed to load global bot config: %v", err)
-		} else if globalCfg.BotToken != "" {
-			botToken = globalCfg.BotToken
-			log.Debug("Using global bot token from ~/.ralph/slack.env")
-		}
-	}
-
-	// Try Slack Bot API first
-	if botToken != "" && cfg.Slack.Channel != "" {
-		return notify.NewSlackNotifier(notify.SlackNotifierConfig{
-			BotToken:      botToken,
-			Channel:       cfg.Slack.Channel,
-			ThreadTracker: tracker,
-			WebhookURL:    cfg.Slack.WebhookURL, // Fallback
-			APIURL:        apiURL,
-			RepoName:      cfg.Project.Name,
-		})
-	}
-
-	// Fall back to webhook
-	if cfg.Slack.WebhookURL != "" {
-		notifier := notify.NewWebhookNotifier(cfg.Slack.WebhookURL)
-		if notifier != nil {
-			return notifier
-		}
-	}
-
-	// No Slack configured
-	return &notify.NoopNotifier{}
-}
 
 // checkExistingPR checks if a PR already exists for the plan's branch.
 // Returns (true, prURL) if PR exists, (false, "") otherwise.
