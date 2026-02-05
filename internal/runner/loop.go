@@ -247,6 +247,11 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 	// Reload the plan to get updated content from the worktree (not main repo)
 	// The agent updates the plan file in the worktree, so we must read from there
 	worktreePlanPath := filepath.Join(l.worktreePath, l.ctx.PlanFile)
+	// For bundles, PlanFile is "plans/current/foo/plan.md" - we need to load the
+	// bundle directory so that BundleDir is set correctly for progress/feedback paths
+	if filepath.Base(worktreePlanPath) == "plan.md" {
+		worktreePlanPath = filepath.Dir(worktreePlanPath)
+	}
 	updatedPlan, err := plan.Load(worktreePlanPath)
 	if err != nil {
 		log.Warn("Failed to reload plan: %v", err)
