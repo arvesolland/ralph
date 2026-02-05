@@ -212,24 +212,24 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > Structured, scoped feedback replaces flat feedback.md for machine state
 
 **Requires:** T2, T3
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `AddFeedback(state, scope, author, message) (*Feedback, error)` — auto-assigns F{n} ID
-- [ ] `ResolveFeedback(state, feedbackID) error` — sets resolved=true + resolved_at
-- [ ] `UnresolvedFeedback(state) []Feedback` — returns all unresolved
-- [ ] `FeedbackForTask(state, taskID) []Feedback` — returns scoped feedback
-- [ ] Scope validation enforced on add
-- [ ] `go test ./internal/state/...` passes
+- [x] `AddFeedback(state, scope, author, message) (*Feedback, error)` — auto-assigns F{n} ID
+- [x] `ResolveFeedback(state, feedbackID) error` — sets resolved=true + resolved_at
+- [x] `UnresolvedFeedback(state) []Feedback` — returns all unresolved
+- [x] `FeedbackForTask(state, taskID) []Feedback` — returns scoped feedback
+- [x] Scope validation enforced on add
+- [x] `go test ./internal/state/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/state/feedback.go`
-2. [ ] Implement `nextFeedbackID(state)` — scans existing IDs, returns next F{n}
-3. [ ] Implement `AddFeedback()` — validate scope, create with timestamp
-4. [ ] Implement `ResolveFeedback()` — find by ID, set resolved
-5. [ ] Implement `UnresolvedFeedback()` — filter where resolved=false
-6. [ ] Implement `FeedbackForTask()` — filter by scope="task:Tn"
-7. [ ] Create `internal/state/feedback_test.go`
+1. [x] Create `internal/state/feedback.go`
+2. [x] Implement `nextFeedbackID(state)` — scans existing IDs, returns next F{n}
+3. [x] Implement `AddFeedback()` — validate scope, create with timestamp
+4. [x] Implement `ResolveFeedback()` — find by ID, set resolved
+5. [x] Implement `UnresolvedFeedback()` — filter where resolved=false
+6. [x] Implement `FeedbackForTask()` — filter by scope="task:Tn"
+7. [x] Create `internal/state/feedback_test.go`
 
 ---
 

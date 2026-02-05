@@ -128,3 +128,23 @@ Created `internal/state/mutations_test.go` with 30 tests covering all operations
 ## Iteration 5 (2026-02-06 08:08) - 38/88 (43%)
 Claude execution completed in 2m52.412655583s.
 
+
+---
+### Iteration 6: T6 — Implement feedback operations
+**Completed:** Created `internal/state/feedback.go` with four exported functions:
+- `AddFeedback(state, scope, author, message)` — validates scope via `ValidateFeedbackScope`, validates non-empty message, auto-assigns F{n} ID using existing `nextFeedbackNum()` from mutations.go, sets CreatedAt timestamp
+- `ResolveFeedback(state, feedbackID)` — finds feedback by ID, checks not already resolved, sets Resolved=true + ResolvedAt timestamp
+- `UnresolvedFeedback(state)` — filters and returns all feedback where Resolved=false
+- `FeedbackForTask(state, taskID)` — filters by scope="task:{taskID}"
+
+Created `internal/state/feedback_test.go` with 15 tests covering:
+- AddFeedback: plan scope, task scope, auto-increment IDs, invalid scope, empty message, empty scope
+- ResolveFeedback: happy path, not found, already resolved
+- UnresolvedFeedback: mixed resolved/unresolved, empty, all resolved
+- FeedbackForTask: multiple matches, no matches, no feedback at all
+
+All 88 state package tests pass (15 new + 73 existing). Full suite passes.
+
+**Gotcha:** `nextFeedbackNum()` was already implemented in mutations.go (iteration 5) — reused directly, no duplication needed.
+**Next:** T7 (context payload + `ralph context` command) — depends on T4 + T5 + T6 (all complete). T8 (task CLI) depends on T5 + T6 (both complete). T9 depends on T2 (complete).
+
