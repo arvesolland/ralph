@@ -7,9 +7,9 @@ Every iteration you MUST:
 2. **One task at a time** - Complete ONE subtask per iteration, then end
 3. **Pick next task** - Select first incomplete task where dependencies are met
 4. **Verify completion** - Test/validate before marking anything complete
-5. **Update plan** - Check off subtasks, update task status when ALL criteria verified
+5. **Update state** - Use `ralph task` commands (structured plans) or check off plan checkboxes (legacy plans)
 6. **Update progress log** - Log what you did (EVERY iteration, not optional)
-7. **Commit everything** - Code + plan + progress file in one atomic commit
+7. **Commit everything** - Code + state + progress file in one atomic commit
 
 ---
 
@@ -52,14 +52,30 @@ Read `.ralph/context.json` to get:
 
 **Ensure you are on the correct feature branch.** All commits go to `featureBranch`. Do not switch branches.
 
-### 4. Your Plan
+### 4. Structured Context (if available)
+
+If the plan bundle contains `state.yaml`, Ralph injects a `{{CONTEXT_JSON}}` block into this prompt with full structured state. This JSON payload contains:
+
+- **plan** — Plan ID, title, status
+- **tasks.items** — All tasks with status, criteria, dependencies, artifacts
+- **feedback** — Unresolved and all feedback entries
+- **selection.suggested_next** — The recommended next task to work on
+- **selection.available** — All tasks eligible for work (deps met, status=todo)
+- **selection.blocked** — Tasks that cannot start yet (with reasons)
+- **summary** — Progress stats (total, by_status, done_ratio)
+
+**If `{{CONTEXT_JSON}}` is present below, use it for task selection and status tracking.** It is the authoritative source of truth for task state. See the "Structured State Protocol" section below.
+
+If no `{{CONTEXT_JSON}}` block appears, this is a legacy plan — follow the "Legacy Plans" section instead.
+
+### 5. Your Plan
 Read the plan file specified in `context.json`. This contains:
 - Tasks to complete with dependencies
 - Acceptance criteria ("Done when")
 - Subtasks (implementation steps)
-- Current status of each task
+- Human-readable spec (the plan.md is always the source of truth for *what* to build)
 
-### 5. Progress File (CRITICAL)
+### 6. Progress File (CRITICAL)
 The progress file is your **primary input** for understanding what previous iterations accomplished. It's located in the same directory as the plan file:
 - For bundles: `progress.md` (same directory as `plan.md`)
 - For legacy flat files: `<plan-name>.progress.md` (same directory)
@@ -79,29 +95,156 @@ Iteration log - what was done, gotchas, and next steps.
 
 This is faster and more reliable than searching the codebase to understand current state.
 
-### 6. Feedback File (Human Input)
-Check for the feedback file in the same directory as the plan file:
+### 7. Feedback (Human Input)
+
+**For structured plans:** Check `{{CONTEXT_JSON}}` → `feedback.unresolved` for pending human input. After acting on feedback, resolve it with:
+```bash
+ralph feedback resolve <plan-path> <feedback-id>
+```
+
+**For legacy plans:** Check the feedback file in the same directory as the plan file:
 - For bundles: `feedback.md` (same directory as `plan.md`)
 - For legacy flat files: `<plan-name>.feedback.md` (same directory)
 
-This file contains human responses to blockers.
+---
 
-**If it exists, read it.** Look for the `## Pending` section:
-```markdown
-## Pending
-- [2024-01-30 14:32] Package is now public, you can verify the pull
-- [2024-01-30 15:00] Use OAuth instead of API keys for auth
+## Structured State Protocol
+
+**This section applies when `{{CONTEXT_JSON}}` is present.** Plans with `state.yaml` use structured task management via CLI commands instead of markdown checkboxes.
+
+### Context JSON Format
+
+The `{{CONTEXT_JSON}}` block contains a JSON object like this:
+
+```json
+{
+  "plan": {
+    "id": "my-feature",
+    "title": "My Feature Plan",
+    "status": "active",
+    "created_at": "2026-01-15T10:00:00Z"
+  },
+  "tasks": {
+    "items": [
+      {
+        "id": "T1",
+        "title": "Implement auth",
+        "status": "done",
+        "requires": [],
+        "criteria": [
+          {"text": "Login endpoint works", "done": true, "done_at": "..."},
+          {"text": "Tests pass", "done": true, "done_at": "..."}
+        ]
+      },
+      {
+        "id": "T2",
+        "title": "Add middleware",
+        "status": "todo",
+        "requires": ["T1"],
+        "criteria": [
+          {"text": "Middleware validates JWT", "done": false},
+          {"text": "Unit tests pass", "done": false}
+        ]
+      }
+    ]
+  },
+  "feedback": {
+    "unresolved": [],
+    "all": []
+  },
+  "selection": {
+    "suggested_next": {"task_id": "T2", "reason": "all dependencies met"},
+    "available": [{"task_id": "T2", "reason": "all dependencies met"}],
+    "blocked": []
+  },
+  "summary": {
+    "total": 2,
+    "by_status": {"done": 1, "todo": 1},
+    "done_ratio": 0.5
+  }
+}
 ```
 
-**Act on pending feedback:**
-1. Read and understand the human's input
-2. If it resolves a blocker, continue with the task
-3. Move processed items to `## Processed` section
-4. Log in progress file that you received and acted on feedback
+### Task Selection (Structured Plans)
+
+Use `selection.suggested_next` from the context JSON to pick your task. This is the first eligible task by ID order where:
+- Status is `todo`
+- All tasks in `requires` have status `done` or `skipped`
+
+You may also choose from `selection.available` if you have a good reason. `selection.blocked` shows tasks that can't start yet and why.
+
+### Task Lifecycle
+
+Use `ralph task` commands to manage task state. The lifecycle is:
+
+```
+todo → claimed → doing → done
+                  ↕
+               blocked
+```
+
+**1. Claim a task** before starting work:
+```bash
+ralph task claim <plan-path> <task-id>
+```
+This sets the task status to `doing` and records the start time.
+
+**2. Check criteria** as you verify each acceptance criterion:
+```bash
+ralph task criterion check <plan-path> <task-id> <criterion-index>
+```
+The index is 1-based (first criterion = 1). Only check a criterion when you have **verified** it (e.g., tests pass, endpoint works).
+
+To uncheck if you made a mistake:
+```bash
+ralph task criterion uncheck <plan-path> <task-id> <criterion-index>
+```
+
+**3. Complete a task** when ALL criteria are checked:
+```bash
+ralph task complete <plan-path> <task-id> --commits <sha1,sha2>
+```
+This validates that all criteria are done before allowing completion.
+
+**4. Skip a task** if it's no longer needed:
+```bash
+ralph task skip <plan-path> <task-id> --reason "superseded by T3"
+```
+
+### Adding Tasks and Feedback
+
+If you discover new work during implementation:
+```bash
+ralph task add <plan-path> --title "Handle edge case X" --requires T2 --criteria "edge case handled;tests pass"
+```
+
+To add feedback (e.g., noting a blocker for human review):
+```bash
+ralph feedback add <plan-path> --scope task:T2 --message "Need API key for integration" --author agent
+```
+
+To resolve feedback after it's been addressed:
+```bash
+ralph feedback resolve <plan-path> <feedback-id>
+```
+
+### Structured State Workflow
+
+1. Read `{{CONTEXT_JSON}}` to understand current state
+2. Pick task from `selection.suggested_next`
+3. **Claim** the task: `ralph task claim <plan> <task-id>`
+4. Implement the subtask(s)
+5. Validate (run tests)
+6. **Check criteria** as you verify each one: `ralph task criterion check <plan> <task-id> <index>`
+7. **Complete** the task when all criteria verified: `ralph task complete <plan> <task-id>`
+8. Update progress file
+9. Commit everything (code + progress file)
 
 ---
 
-## Task Selection
+## Task Selection (Legacy Plans)
+
+**This section applies when `{{CONTEXT_JSON}}` is NOT present (no state.yaml).**
 
 Plans may use different formats. Adapt to what you find, but the logic is:
 
@@ -142,9 +285,15 @@ Run validation commands:
 - Do not commit broken code
 - If you cannot fix it, document the blocker in the progress file
 
-### 4. Update the Plan
+### 4. Update State
+
+**Structured plans (state.yaml exists):**
+- Check criteria: `ralph task criterion check <plan> <task-id> <index>`
+- Complete task when all criteria pass: `ralph task complete <plan> <task-id>`
+
+**Legacy plans (no state.yaml):**
 - Check off completed subtask: `[ ]` → `[x]`
-- **A task is complete ONLY when ALL acceptance criteria are verified** (see below)
+- **A task is complete ONLY when ALL acceptance criteria are verified**
 - If you discovered new work: add to `## Discovered` section, don't interrupt current task
 
 ### 5. Update Progress File (EVERY ITERATION)
@@ -170,7 +319,7 @@ refactor(api): extract common middleware
 
 **IMPORTANT: Include ALL changed files in your commit:**
 - Code changes
-- Plan file (with updated checkboxes/status)
+- Plan file (with updated checkboxes/status) — for legacy plans
 - Progress file (always - even if just created with header)
 
 Commit after completing each subtask. Small, atomic commits. Example:
@@ -185,7 +334,7 @@ git add -A && git commit -m "feat(auth): implement token validation"
 **A task is NOT complete just because subtasks are checked off.**
 
 A task is complete ONLY when:
-1. ALL subtasks are checked `[x]`
+1. ALL subtasks are done
 2. ALL acceptance criteria ("Done when") are **verified and satisfied**
 
 **You must verify each acceptance criterion:**
@@ -194,9 +343,9 @@ A task is complete ONLY when:
 - If it says "file exists" → confirm the file exists
 - If it says "handles edge case Y" → verify that case is handled
 
-Only after ALL criteria are verified:
-- Update `**Status:** open` → `**Status:** complete`
-- Or for loose plans, ensure all related checkboxes are checked
+**Structured plans:** Check each criterion via `ralph task criterion check` as you verify it. Then `ralph task complete` to finalize. The system enforces that all criteria must be checked before completion.
+
+**Legacy plans:** After ALL criteria are verified, update `**Status:** open` → `**Status:** complete`.
 
 **Do not mark complete based on assumption. Verify.**
 
@@ -218,19 +367,21 @@ When in doubt, do one subtask and end.
 
 When ALL tasks in the plan are complete (all acceptance criteria verified):
 
-**BEFORE outputting the completion marker, you MUST:**
+**Structured plans:**
+1. Verify all tasks have status `done` or `skipped` in state.yaml
+2. All criteria for each task must be checked
+3. Commit all changes
+4. Output `<promise>COMPLETE</promise>`
+
+The orchestrator uses the criteria gate in state.yaml for verification — no need to update plan.md checkboxes for structured plans.
+
+**Legacy plans:**
 1. Update ALL checkboxes in the plan file: `[ ]` → `[x]` for every subtask and "Done when" item
 2. Update ALL task statuses: `**Status:** open` → `**Status:** complete`
 3. Commit these plan file changes
+4. Output `<promise>COMPLETE</promise>`
 
-**The verification system checks the plan file checkboxes.** If you output the completion marker but the plan file still has unchecked boxes, verification will fail and you'll have to try again.
-
-Only after updating the plan file, output:
-```
-<promise>COMPLETE</promise>
-```
-
-The orchestrator will verify that all checkboxes are checked before accepting completion.
+The verification system checks the plan file checkboxes for legacy plans. If you output the completion marker but the plan file still has unchecked boxes, verification will fail.
 
 If tasks remain incomplete, end your response normally after completing your subtask(s).
 
@@ -242,7 +393,7 @@ If tasks remain incomplete, end your response normally after completing your sub
 
 **Cannot complete subtask:**
 1. Document the blocker in the progress file
-2. Add remediation to `## Discovered` section
+2. Add remediation to `## Discovered` section (legacy) or `ralph task add` (structured)
 3. If blocked entirely, note this clearly and end response
 
 **Missing dependency/unclear requirement:**
@@ -281,8 +432,13 @@ Resume: Once public, I will verify anonymous pull works and complete T1.
 **Important:**
 - The orchestrator will send a Slack notification when it sees this marker
 - Continue working on other tasks if possible (don't stop the loop unnecessarily)
-- Check the feedback file each iteration for human responses
-- Once the blocker is resolved (via feedback file or by verifying the action was taken), continue normally
+- Check feedback each iteration (structured: `feedback.unresolved` in context JSON; legacy: feedback.md file)
+- Once the blocker is resolved, continue normally
+
+**Structured plans:** Also add structured feedback for tracking:
+```bash
+ralph feedback add <plan-path> --scope task:T2 --message "Need API key for integration" --author agent
+```
 
 ---
 
@@ -293,13 +449,12 @@ Resume: Once public, I will verify anonymous pull works and complete T1.
 3. ☐ Read context.json
 4. ☐ Read plan file
 5. ☐ Read/create progress file (create with header if doesn't exist)
-6. ☐ **Read feedback file** (if exists - check for human responses to blockers)
-7. ☐ Select next task/subtask
-8. ☐ Implement (or signal `<blocker>` if human action required)
-9. ☐ Validate (lint + test)
-10. ☐ Update plan checkboxes: `[ ]` → `[x]`
-11. ☐ **Verify acceptance criteria if task may be complete**
-12. ☐ Update task status: `**Status:** open` → `**Status:** complete`
-13. ☐ **Update progress file** (EVERY iteration - log what you did)
-14. ☐ **Commit ALL changes** (code + plan + progress file - always include progress file)
-15. ☐ **If ALL tasks complete:** Update ALL remaining checkboxes, commit, THEN output `<promise>COMPLETE</promise>`
+6. ☐ **Check feedback** (structured: `feedback.unresolved` in context JSON; legacy: feedback.md file)
+7. ☐ Select next task (structured: `selection.suggested_next`; legacy: first incomplete task)
+8. ☐ **Claim task** (structured: `ralph task claim`; legacy: n/a)
+9. ☐ Implement (or signal `<blocker>` if human action required)
+10. ☐ Validate (lint + test)
+11. ☐ **Update state** (structured: `ralph task criterion check` + `ralph task complete`; legacy: update checkboxes + status)
+12. ☐ **Update progress file** (EVERY iteration - log what you did)
+13. ☐ **Commit ALL changes** (code + progress file)
+14. ☐ **If ALL tasks complete:** Verify all done, commit, THEN output `<promise>COMPLETE</promise>`

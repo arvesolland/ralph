@@ -355,3 +355,33 @@ T11 is now **complete** — all 8 subtasks checked, all 8 "Done when" criteria v
 ## Iteration 12 (2026-02-06 08:39) - 82/88 (93%)
 Claude execution completed in 9m12.952266709s.
 
+
+---
+### Iteration 13: T12 — Update prompt templates for structured state protocol (all 6 subtasks)
+**Completed:** Updated both prompt template files for the structured state protocol:
+
+**`internal/prompt/prompts/prompt.md`** — Major restructure:
+- Added "Structured Context (if available)" subsection to Required Reading (section 4), explaining the `{{CONTEXT_JSON}}` payload fields
+- Added "Structured State Protocol" section with:
+  - Context JSON format with full example JSON showing plan, tasks, feedback, selection, summary
+  - Task Selection for structured plans (use `selection.suggested_next`)
+  - Task Lifecycle section: claim → work → criterion check → complete with all CLI commands
+  - Adding Tasks and Feedback section with `ralph task add`, `ralph feedback add/resolve` commands
+  - Structured State Workflow (9-step checklist)
+- Moved existing markdown-checkbox task selection under "Task Selection (Legacy Plans)" heading
+- Updated "Update the Plan" → "Update State" with dual paths (structured vs legacy)
+- Updated "Task Completion (CRITICAL)" with dual paths
+- Updated "Plan Completion" with dual paths (criteria gate vs checkbox verification)
+- Updated "Error Handling" with `ralph task add` for structured plans
+- Updated "Human Input Required" with structured feedback tracking
+- Updated "Summary: Execution Checklist" with structured/legacy annotations for each step
+- Updated "Feedback (Human Input)" subsection (section 7) with structured vs legacy paths
+
+**`internal/prompt/prompts/plan-spec.md`**:
+- Added "State Management" section at the top explaining that `state.yaml` is the source of truth for task status when present
+- Documented the split: `plan.md` = what to build (human spec), `state.yaml` = runtime state (machine control plane)
+- Noted that agents should NOT update `plan.md` checkboxes when `state.yaml` exists
+
+All tests pass (all packages). Plan is now fully complete — all 12 tasks done.
+
+**Next:** Plan complete.

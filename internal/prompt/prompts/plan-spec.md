@@ -2,6 +2,17 @@
 
 Plans are structured markdown files that define tasks for Ralph to implement.
 
+## State Management
+
+Plan bundles may contain a `state.yaml` file alongside `plan.md`. When present, `state.yaml` is the **source of truth for task status** — not the markdown checkboxes in `plan.md`.
+
+- `plan.md` defines *what* to build (tasks, criteria, context) — it is the human-readable spec
+- `state.yaml` tracks *runtime state* (task status, criteria checked, feedback) — it is the machine-owned control plane
+- Agents update `state.yaml` via `ralph task` and `ralph feedback` CLI commands
+- Agents should NOT update checkboxes in `plan.md` when `state.yaml` exists
+
+Plans without `state.yaml` work as before: the agent updates `plan.md` checkboxes directly.
+
 ## Structure
 
 ```markdown

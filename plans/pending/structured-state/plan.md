@@ -1,7 +1,7 @@
 # Plan: Structured Task State (Agent Control Plane v1)
 
 **Created:** 2026-02-06
-**Status:** pending
+**Status:** complete
 
 ## Context
 
@@ -376,23 +376,23 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > Tell the agent how to use the new structured state system
 
 **Requires:** T7, T8
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `prompt.md` updated with instructions for reading context JSON
-- [ ] Agent told to use `ralph task claim/complete/criterion` commands
-- [ ] Agent told to read `suggested_next` + `available_tasks` for task selection
-- [ ] Agent told to check criteria as it verifies each acceptance criterion
-- [ ] `{{CONTEXT_JSON}}` placeholder documented in prompt
-- [ ] Old markdown-checkbox-based instructions kept as fallback section (for plans without state.yaml)
+- [x] `prompt.md` updated with instructions for reading context JSON
+- [x] Agent told to use `ralph task claim/complete/criterion` commands
+- [x] Agent told to read `suggested_next` + `available_tasks` for task selection
+- [x] Agent told to check criteria as it verifies each acceptance criterion
+- [x] `{{CONTEXT_JSON}}` placeholder documented in prompt
+- [x] Old markdown-checkbox-based instructions kept as fallback section (for plans without state.yaml)
 
 **Subtasks:**
-1. [ ] Update `internal/prompt/prompts/prompt.md` — add structured state protocol section
-2. [ ] Add section explaining context JSON format with example
-3. [ ] Add section explaining task lifecycle: claim → work → criterion check → complete
-4. [ ] Add section explaining feedback reading + resolution
-5. [ ] Keep existing markdown-based instructions under "Legacy plans" heading
-6. [ ] Update `internal/prompt/prompts/plan-spec.md` — note that state.yaml is now the source of truth for task status
+1. [x] Update `internal/prompt/prompts/prompt.md` — add structured state protocol section
+2. [x] Add section explaining context JSON format with example
+3. [x] Add section explaining task lifecycle: claim → work → criterion check → complete
+4. [x] Add section explaining feedback reading + resolution
+5. [x] Keep existing markdown-based instructions under "Legacy plans" heading
+6. [x] Update `internal/prompt/prompts/plan-spec.md` — note that state.yaml is now the source of truth for task status
 
 ---
 
