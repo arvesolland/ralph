@@ -181,30 +181,30 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > The API agents use to update state — claim, check criteria, complete
 
 **Requires:** T2, T3
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `AddTask(state, title, requires, criteria) (*TaskState, error)` — auto-assigns next T{n} ID
-- [ ] `ClaimTask(state, taskID) error` — sets status to doing (no leases in v1)
-- [ ] `CheckCriterion(state, taskID, index) error` — 1-indexed, sets done=true + done_at
-- [ ] `UncheckCriterion(state, taskID, index) error` — sets done=false, clears done_at
-- [ ] `CompleteTask(state, taskID, commits, filesTouched) error` — validates criteria gate, sets done
-- [ ] `SkipTask(state, taskID, reason) error` — sets skipped with note
-- [ ] `SetPlanStatus(state, status, reason) error` — validates transition
-- [ ] All mutations validate before applying
-- [ ] `go test ./internal/state/...` passes
+- [x] `AddTask(state, title, requires, criteria) (*TaskState, error)` — auto-assigns next T{n} ID
+- [x] `ClaimTask(state, taskID) error` — sets status to doing (no leases in v1)
+- [x] `CheckCriterion(state, taskID, index) error` — 1-indexed, sets done=true + done_at
+- [x] `UncheckCriterion(state, taskID, index) error` — sets done=false, clears done_at
+- [x] `CompleteTask(state, taskID, commits, filesTouched) error` — validates criteria gate, sets done
+- [x] `SkipTask(state, taskID, reason) error` — sets skipped with note
+- [x] `SetPlanStatus(state, status, reason) error` — validates transition
+- [x] All mutations validate before applying
+- [x] `go test ./internal/state/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/state/mutations.go`
-2. [ ] Implement `nextTaskID(state)` — scans existing IDs, returns next T{n}
-3. [ ] Implement `findTask(state, taskID)` — returns pointer to task or error
-4. [ ] Implement `AddTask()` with auto-ID and criteria parsing
-5. [ ] Implement `ClaimTask()` — validate status=todo, deps met, then set doing
-6. [ ] Implement `CheckCriterion()` / `UncheckCriterion()` — 1-indexed, bounds check
-7. [ ] Implement `CompleteTask()` — validate all criteria checked, set done + done_at + artifacts
-8. [ ] Implement `SkipTask()` — set skipped + add reason to notes
-9. [ ] Implement `SetPlanStatus()` — validate transition
-10. [ ] Create `internal/state/mutations_test.go` — test each operation including error cases
+1. [x] Create `internal/state/mutations.go`
+2. [x] Implement `nextTaskID(state)` — scans existing IDs, returns next T{n}
+3. [x] Implement `findTask(state, taskID)` — returns pointer to task or error
+4. [x] Implement `AddTask()` with auto-ID and criteria parsing
+5. [x] Implement `ClaimTask()` — validate status=todo, deps met, then set doing
+6. [x] Implement `CheckCriterion()` / `UncheckCriterion()` — 1-indexed, bounds check
+7. [x] Implement `CompleteTask()` — validate all criteria checked, set done + done_at + artifacts
+8. [x] Implement `SkipTask()` — set skipped + add reason to notes
+9. [x] Implement `SetPlanStatus()` — validate transition
+10. [x] Create `internal/state/mutations_test.go` — test each operation including error cases
 
 ---
 

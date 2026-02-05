@@ -104,3 +104,23 @@ All 43 state package tests pass. Full test suite passes.
 ## Iteration 4 (2026-02-06 08:06) - 29/88 (32%)
 Claude execution completed in 2m22.418192958s.
 
+
+---
+### Iteration 5: T5 — Implement task mutation operations
+**Completed:** Created `internal/state/mutations.go` with all mutation functions:
+- `nextTaskID(state)` — scans existing task IDs, returns next `T{n}`
+- `findTask(state, taskID)` — returns pointer to task by ID or error
+- `AddTask(state, title, requires, criteria)` — creates task with auto-ID, validates dep IDs exist, builds criteria from strings
+- `ClaimTask(state, taskID)` — validates todo→claimed transition + deps met, sets status to doing with StartedAt
+- `CheckCriterion(state, taskID, index)` / `UncheckCriterion()` — 1-indexed, bounds-checked, sets/clears DoneAt
+- `CompleteTask(state, taskID, commits, filesTouched)` — validates criteria gate + status transition, sets done + DoneAt + artifacts
+- `SkipTask(state, taskID, reason)` — validates transition, appends reason to notes
+- `SetPlanStatus(state, status, reason)` — validates plan status transition
+- `parseRequires()` / `parseCriteria()` — string parsing helpers for CLI use
+- `nextFeedbackNum()` — scans feedback IDs, returns next F{n} number
+
+Created `internal/state/mutations_test.go` with 30 tests covering all operations + error cases.
+
+**Gotcha:** `ClaimTask` needs to validate `todo → claimed` (not `todo → doing` directly) since the task transition table doesn't allow skipping the `claimed` state. The function transitions through `claimed` internally and immediately sets `doing` since there are no leases in v1.
+**Next:** T6 (feedback operations) — depends on T2 + T3 (both complete). T7 depends on T4 + T5 + T6.
+
