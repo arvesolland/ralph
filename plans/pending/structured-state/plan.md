@@ -155,25 +155,25 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > Deterministic eligibility computation — the brain of the control plane
 
 **Requires:** T1, T3
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `Selection` struct with SuggestedNext, Available, Blocked fields
-- [ ] `ComputeSelection(state *PlanState) *Selection` returns correct task sets
-- [ ] Available: status=todo, all requires are done, not blocked
-- [ ] Blocked: status=blocked OR has unmet dependencies (with reasons)
-- [ ] SuggestedNext: first available by numeric ID order
-- [ ] Each pick includes a reason string explaining why it's available/blocked
-- [ ] Returns nil suggested_next when no tasks eligible (all done or all blocked)
-- [ ] `go test ./internal/state/...` passes
+- [x] `Selection` struct with SuggestedNext, Available, Blocked fields
+- [x] `ComputeSelection(state *PlanState) *Selection` returns correct task sets
+- [x] Available: status=todo, all requires are done, not blocked
+- [x] Blocked: status=blocked OR has unmet dependencies (with reasons)
+- [x] SuggestedNext: first available by numeric ID order
+- [x] Each pick includes a reason string explaining why it's available/blocked
+- [x] Returns nil suggested_next when no tasks eligible (all done or all blocked)
+- [x] `go test ./internal/state/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/state/selection.go`
-2. [ ] Define `Selection` struct with `SuggestedNext *TaskPick`, `Available []TaskPick`, `Blocked []TaskPick`
-3. [ ] Define `TaskPick` struct with `TaskID string`, `Reason string`
-4. [ ] Implement `ComputeSelection()` — iterate tasks, classify into available/blocked
-5. [ ] Implement numeric ID sorting (parse `T12` → 12 for stable ordering)
-6. [ ] Create `internal/state/selection_test.go` — test happy path, all done, all blocked, dep chains, parallel tasks
+1. [x] Create `internal/state/selection.go`
+2. [x] Define `Selection` struct with `SuggestedNext *TaskPick`, `Available []TaskPick`, `Blocked []TaskPick`
+3. [x] Define `TaskPick` struct with `TaskID string`, `Reason string`
+4. [x] Implement `ComputeSelection()` — iterate tasks, classify into available/blocked
+5. [x] Implement numeric ID sorting (parse `T12` → 12 for stable ordering)
+6. [x] Create `internal/state/selection_test.go` — test happy path, all done, all blocked, dep chains, parallel tasks
 
 ---
 

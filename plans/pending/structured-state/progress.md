@@ -74,3 +74,29 @@ All 30 state tests pass. Full test suite passes.
 ## Iteration 3 (2026-02-06 08:03) - 21/88 (23%)
 Claude execution completed in 2m23.111033791s.
 
+
+---
+### Iteration 4: T4 — Implement task selection algorithm
+**Completed:** Created `internal/state/selection.go` with:
+- `TaskPick` struct with TaskID and Reason fields (JSON-tagged for context output)
+- `Selection` struct with SuggestedNext (*TaskPick), Available ([]TaskPick), Blocked ([]TaskPick)
+- `ComputeSelection(state *PlanState) *Selection` — classifies tasks into available/blocked sets:
+  - Done/skipped/doing/claimed tasks are excluded from both sets
+  - Explicitly blocked tasks go to blocked list
+  - Todo tasks with unmet deps go to blocked list (with reason listing unmet dep IDs)
+  - Todo tasks with all deps met go to available list
+  - SuggestedNext = first available by numeric ID order
+- `parseTaskNum()` — extracts numeric suffix from "T12" → 12 for stable ordering
+- `sortByTaskID()` — sorts TaskPick slices by numeric task ID
+- Handles edge cases: nil state, empty tasks, skipped deps count as resolved
+
+Created `internal/state/selection_test.go` with 13 test functions:
+- Happy path, all done, all blocked (circular deps), dep chains, parallel tasks
+- Skipped deps count, explicitly blocked status, in-progress tasks excluded
+- Nil state, empty tasks, numeric sorting (T2 < T10), blocked reason strings
+- parseTaskNum unit tests (valid IDs, invalid IDs, edge cases)
+
+All 43 state package tests pass. Full test suite passes.
+
+**Next:** T5 (task mutation operations) or T6 (feedback operations) — both depend on T2 + T3 (complete). T7 depends on T4 + T5 + T6.
+
