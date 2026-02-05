@@ -240,25 +240,25 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 **Status:** blocked
 
 **Done when:**
-- [ ] `ContextPayload` struct defined with plan, tasks, feedback, selection, summary fields
+- [x] `ContextPayload` struct defined with plan, tasks, feedback, selection, summary fields
 - [ ] `BuildContext(state *PlanState, ctx *runner.Context) *ContextPayload` assembles full payload
 - [ ] `ralph context <plan-path> --json` outputs valid JSON to stdout
 - [ ] `ralph context <plan-path>` outputs human-readable summary to stdout
-- [ ] Payload includes: plan metadata, all tasks with criteria, unresolved feedback, selection (suggested + available + blocked), summary stats
-- [ ] Output is deterministic: tasks sorted by ID, feedback sorted by created_at
+- [x] Payload includes: plan metadata, all tasks with criteria, unresolved feedback, selection (suggested + available + blocked), summary stats
+- [x] Output is deterministic: tasks sorted by ID, feedback sorted by created_at
 - [ ] Plans without state.yaml get a useful error or empty payload
 - [ ] `go test ./internal/state/...` and `go test ./internal/cli/...` pass
 
 **Subtasks:**
-1. [ ] Create `internal/state/context.go` with `ContextPayload` struct
-2. [ ] Define nested structs: `PayloadPlan`, `PayloadTasks` (with summary), `PayloadFeedback`, `PayloadSelection`
-3. [ ] Implement `BuildContext()` — assembles payload from state + runner context
-4. [ ] Implement `Summary` computation: total, by_status counts, done_ratio
-5. [ ] Ensure deterministic ordering in all slices
+1. [x] Create `internal/state/context.go` with `ContextPayload` struct
+2. [x] Define nested structs: `PayloadPlan`, `PayloadTasks` (with summary), `PayloadFeedback`, `PayloadSelection`
+3. [x] Implement `BuildContext()` — assembles payload from state + runner context
+4. [x] Implement `Summary` computation: total, by_status counts, done_ratio
+5. [x] Ensure deterministic ordering in all slices
 6. [ ] Create `internal/cli/context.go` with cobra command
 7. [ ] Implement `--json` flag for machine output and default human-readable output
 8. [ ] Register command in `init()`
-9. [ ] Create `internal/state/context_test.go` — test payload assembly, ordering, nil state handling
+9. [x] Create `internal/state/context_test.go` — test payload assembly, ordering, nil state handling
 10. [ ] Create `internal/cli/context_test.go` — test CLI output
 
 ---

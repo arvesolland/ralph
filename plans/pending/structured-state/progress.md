@@ -152,3 +152,33 @@ All 88 state package tests pass (15 new + 73 existing). Full suite passes.
 ## Iteration 6 (2026-02-06 08:11) - 44/88 (50%)
 Claude execution completed in 1m59.549823917s.
 
+
+---
+### Iteration 7: T7 — Build context payload (subtasks 1-5, 9)
+**Completed:** Created `internal/state/context.go` with:
+- `ContextPayload` struct (top-level with Plan, Tasks, Feedback, Selection, Summary fields)
+- `PayloadPlan`, `PayloadTasks`, `PayloadFeedback`, `PayloadSelection`, `PayloadSummary` nested structs
+- `BuildContext(state *PlanState) *ContextPayload` — assembles full payload from plan state
+  - Tasks sorted by numeric ID (reuses `parseTaskNum` from selection.go)
+  - Feedback sorted by `created_at` timestamp
+  - Computes selection via existing `ComputeSelection()`
+  - Handles nil state (returns zero-value payload with empty arrays, no nulls in JSON)
+- `computeSummary()` — calculates total, by_status counts, done_ratio
+- `nonNilPicks()` — ensures nil slices serialize as `[]` not `null` in JSON
+
+Created `internal/state/context_test.go` with 9 tests:
+- `TestBuildContext_NilState` — nil input returns empty payload, no null arrays in JSON
+- `TestBuildContext_FullState` — full plan with tasks, feedback, selection, summary
+- `TestBuildContext_DeterministicOrdering` — T1<T2<T10 sorting, feedback by created_at
+- `TestBuildContext_AllTasksDone` — no suggested_next, done_ratio=1.0
+- `TestBuildContext_EmptyTasks` — empty task list edge case
+- `TestBuildContext_JSONOutput` — JSON round-trip verification
+- `TestBuildContext_NoNullArraysInJSON` — explicit null array checks
+- `TestComputeSummary` — by_status counts and done_ratio
+- `TestComputeSummary_Empty` — nil tasks edge case
+
+All 97 state tests pass. Full test suite passes.
+
+**Gotcha:** `BuildContext` signature takes only `*PlanState` (not `*runner.Context` as the plan suggested) — runner context info (iteration, branch) can be added later when wiring T11. The payload types are self-contained in the state package.
+**Next:** T7 subtask 6 — Create `internal/cli/context.go` with cobra command (and subtasks 7-8, 10).
+
