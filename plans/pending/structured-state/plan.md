@@ -73,31 +73,31 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > Foundation types that everything else builds on — must be right before building operations
 
 **Requires:** —
-**Status:** open
+**Status:** complete
 
 **Done when:**
-- [ ] `PlanState` struct with ID, Title, Status, Tasks, Feedback fields
-- [ ] `TaskState` struct with ID, Title, Status, Requires, Criteria, Notes, Artifacts fields
-- [ ] `Criterion` struct with Text, Done, DoneAt fields
-- [ ] `Feedback` struct with ID, Scope, Author, Message, Resolved, CreatedAt fields
-- [ ] `PlanStatus` and `TaskStatus` enums with valid values
-- [ ] YAML round-trip tests pass (marshal → unmarshal → compare)
-- [ ] JSON marshaling works for context output
-- [ ] `go test ./internal/state/...` passes
+- [x] `PlanState` struct with ID, Title, Status, Tasks, Feedback fields
+- [x] `TaskState` struct with ID, Title, Status, Requires, Criteria, Notes, Artifacts fields
+- [x] `Criterion` struct with Text, Done, DoneAt fields
+- [x] `Feedback` struct with ID, Scope, Author, Message, Resolved, CreatedAt fields
+- [x] `PlanStatus` and `TaskStatus` enums with valid values
+- [x] YAML round-trip tests pass (marshal → unmarshal → compare)
+- [x] JSON marshaling works for context output
+- [x] `go test ./internal/state/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/state/` package directory
-2. [ ] Create `internal/state/types.go` with all struct definitions
+1. [x] Create `internal/state/` package directory
+2. [x] Create `internal/state/types.go` with all struct definitions
    - `PlanStatus`: draft, ready, active, blocked, complete
    - `TaskStatus`: todo, claimed, doing, blocked, done, skipped
    - `PlanState`: id, title, status, created_at, tasks, feedback
    - `TaskState`: id, title, description, status, requires, criteria, notes, artifacts (commits, files_touched), started_at, done_at
    - `Criterion`: text, done, done_at
    - `Feedback`: id, scope (plan or task:Tn), author, message, resolved, resolved_at, created_at
-3. [ ] Add YAML struct tags to all fields
-4. [ ] Add JSON struct tags to all fields (for context output)
-5. [ ] Create `internal/state/types_test.go` with round-trip tests
-6. [ ] Add `PlanStatus.IsValid()` and `TaskStatus.IsValid()` validation methods
+3. [x] Add YAML struct tags to all fields
+4. [x] Add JSON struct tags to all fields (for context output)
+5. [x] Create `internal/state/types_test.go` with round-trip tests
+6. [x] Add `PlanStatus.IsValid()` and `TaskStatus.IsValid()` validation methods
 
 ---
 
