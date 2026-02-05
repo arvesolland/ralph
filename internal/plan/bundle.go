@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/arvesolland/ralph/internal/state"
 )
 
 // planTemplate is the template for a new plan.md file.
@@ -144,6 +146,12 @@ func CreateBundle(plansDir, name string) (*Plan, error) {
 		return nil, fmt.Errorf("failed to scaffold feedback.md: %w", err)
 	}
 
+	// Scaffold initial state.yaml from the template plan.md
+	if err := scaffoldState(bundleDir, name); err != nil {
+		os.RemoveAll(bundleDir)
+		return nil, fmt.Errorf("failed to scaffold state.yaml: %w", err)
+	}
+
 	// Load and return the created plan
 	return Load(bundleDir)
 }
@@ -168,6 +176,23 @@ func scaffoldFeedback(bundleDir, name string) error {
 	path := filepath.Join(bundleDir, "feedback.md")
 	content := fmt.Sprintf(feedbackTemplate, name)
 	return os.WriteFile(path, []byte(content), 0644)
+}
+
+// scaffoldState creates the initial state.yaml by parsing the plan.md template.
+// Since the plan.md only has a template T1 task, this creates a minimal state.
+func scaffoldState(bundleDir, name string) error {
+	planPath := filepath.Join(bundleDir, "plan.md")
+	content, err := os.ReadFile(planPath)
+	if err != nil {
+		return fmt.Errorf("failed to read plan.md for state init: %w", err)
+	}
+
+	st, err := state.InitStateFromPlan(string(content), name)
+	if err != nil {
+		return fmt.Errorf("failed to init state from plan: %w", err)
+	}
+
+	return state.SaveState(st, bundleDir)
 }
 
 // MigrateToBundles converts all flat plan files to bundle directories.

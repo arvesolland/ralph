@@ -12,6 +12,7 @@ import (
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
+	"github.com/arvesolland/ralph/internal/state"
 )
 
 // IterationCooldown is the delay between iterations to avoid overwhelming the API.
@@ -118,6 +119,9 @@ func NewIterationLoop(cfg LoopConfig) *IterationLoop {
 // Returns a LoopResult indicating the outcome.
 func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 	result := &LoopResult{}
+
+	// Auto-init state.yaml if plan is a bundle and state.yaml doesn't exist yet.
+	l.autoInitState()
 
 	for !l.ctx.IsMaxReached() {
 		// Check for context cancellation
@@ -356,6 +360,46 @@ func (l *IterationLoop) commitChanges() error {
 	}
 
 	return nil
+}
+
+// autoInitState generates state.yaml from plan.md if the plan is a bundle
+// and state.yaml doesn't exist yet.
+func (l *IterationLoop) autoInitState() {
+	if !l.plan.IsBundle() {
+		return
+	}
+
+	// Resolve the bundle directory inside the worktree
+	planDir := l.ctx.PlanDir
+	if planDir == "" {
+		return
+	}
+	bundleDir := filepath.Join(l.worktreePath, planDir)
+
+	// Check if state.yaml already exists
+	existing, err := state.LoadState(bundleDir)
+	if err != nil {
+		log.Warn("Failed to check state.yaml: %v", err)
+		return
+	}
+	if existing != nil {
+		return // Already has state
+	}
+
+	// Generate state.yaml from plan.md
+	log.Info("Auto-generating state.yaml from plan.md")
+	st, err := state.InitStateFromPlan(l.plan.Content, l.plan.Name)
+	if err != nil {
+		log.Warn("Failed to init state from plan: %v", err)
+		return
+	}
+
+	if err := state.SaveState(st, bundleDir); err != nil {
+		log.Warn("Failed to save auto-generated state.yaml: %v", err)
+		return
+	}
+
+	log.Info("Auto-generated state.yaml with %d tasks", len(st.Tasks))
 }
 
 // writeFeedback writes verification failure reason to the feedback file.

@@ -320,27 +320,27 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > When a plan bundle is created or first run, generate initial state.yaml from the markdown spec
 
 **Requires:** T2, T5
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `InitStateFromPlan(plan *plan.Plan) (*PlanState, error)` extracts tasks from plan.md and creates initial state
-- [ ] Task titles extracted from `### T1: Title` headings in plan.md
-- [ ] Dependencies extracted from `**Requires:** T1, T2` fields
-- [ ] Criteria extracted from `**Done when:**` checkbox lists
-- [ ] `ralph plan create <name>` scaffolds state.yaml alongside plan.md
-- [ ] Running `ralph run` or `ralph worker` on a plan without state.yaml auto-generates it
-- [ ] `go test ./internal/state/...` passes
+- [x] `InitStateFromPlan(plan *plan.Plan) (*PlanState, error)` extracts tasks from plan.md and creates initial state
+- [x] Task titles extracted from `### T1: Title` headings in plan.md
+- [x] Dependencies extracted from `**Requires:** T1, T2` fields
+- [x] Criteria extracted from `**Done when:**` checkbox lists
+- [x] `ralph plan create <name>` scaffolds state.yaml alongside plan.md
+- [x] Running `ralph run` or `ralph worker` on a plan without state.yaml auto-generates it
+- [x] `go test ./internal/state/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/state/init.go`
-2. [ ] Implement `InitStateFromPlan()` — parse plan.md headings, requires, criteria into PlanState
-3. [ ] Parse `### T{n}: Title` headings into TaskState entries
-4. [ ] Parse `**Requires:** T1, T2` into requires arrays
-5. [ ] Parse `**Done when:** - [ ] criterion text` into Criteria slices
-6. [ ] Set initial plan status to `active`, task statuses to `todo` (or `blocked` if deps)
-7. [ ] Update `internal/plan/bundle.go` `CreateBundle()` — also scaffold empty state.yaml
-8. [ ] Add auto-init logic: if state.yaml missing when runner starts, generate from plan.md
-9. [ ] Create `internal/state/init_test.go` with test fixture plan.md files
+1. [x] Create `internal/state/init.go`
+2. [x] Implement `InitStateFromPlan()` — parse plan.md headings, requires, criteria into PlanState
+3. [x] Parse `### T{n}: Title` headings into TaskState entries
+4. [x] Parse `**Requires:** T1, T2` into requires arrays
+5. [x] Parse `**Done when:** - [ ] criterion text` into Criteria slices
+6. [x] Set initial plan status to `active`, task statuses to `todo` (or `blocked` if deps)
+7. [x] Update `internal/plan/bundle.go` `CreateBundle()` — also scaffold empty state.yaml
+8. [x] Add auto-init logic: if state.yaml missing when runner starts, generate from plan.md
+9. [x] Create `internal/state/init_test.go` with test fixture plan.md files
 
 ---
 

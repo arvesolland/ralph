@@ -285,3 +285,39 @@ T9 is now **complete** — all 3 subtasks checked, all 4 "Done when" criteria ve
 ## Iteration 10 (2026-02-06 08:25) - 67/88 (76%)
 Claude execution completed in 3m24.957237917s.
 
+
+---
+### Iteration 11: T10 — Scaffold state.yaml from plan.md on bundle creation
+**Completed:** Created `internal/state/init.go` with plan.md parsing and state initialization:
+- `InitStateFromPlan(planContent, planID)` — parses markdown content, extracts tasks, returns PlanState
+- `extractPlanTitle()` — finds `# Plan: Title` or first top-level heading, falls back to planID
+- `extractTasksFromPlan()` — parses `### T{n}: Title` headings, `**Requires:**` fields, `**Done when:**` criteria
+- All tasks start as `todo`, plan starts as `active`, criteria start unchecked (regardless of markdown checkbox state)
+- Uses `taskParseState` accumulator for section-based parsing with state machine
+
+Updated `internal/plan/bundle.go`:
+- Added `scaffoldState()` — reads plan.md, calls `InitStateFromPlan()`, saves via `state.SaveState()`
+- `CreateBundle()` now calls `scaffoldState()` after feedback scaffolding, with cleanup on failure
+
+Updated `internal/runner/loop.go`:
+- Added `autoInitState()` method — checks if plan is bundle, loads state, generates from plan.md if missing
+- Called at start of `Run()` before iteration loop begins
+
+Created `internal/state/init_test.go` with 9 tests:
+- Simple plan (1 task, 2 criteria, title, ID, status)
+- Multiple tasks (3 tasks with dependency chains)
+- No Done When section (tasks with no criteria)
+- No tasks (empty plan)
+- Criteria always unchecked (even if plan.md has [x])
+- Title fallback (non-"Plan:" heading)
+- Empty content (ID as title)
+- Real fixture (testdata/init-fixture-plan.md with 4 tasks)
+- Save and load round-trip
+
+Created `internal/state/testdata/init-fixture-plan.md` — test fixture with 4 tasks (T1-T4), deps, criteria.
+
+All 106 state tests pass. Full test suite passes.
+
+**Gotcha:** The plan specifies `InitStateFromPlan(plan *plan.Plan)` but I used `(planContent string, planID string)` instead — this avoids a circular import between `state` and `plan` packages and is simpler since we only need the content string and an ID. The `plan.Plan` struct is created by the caller who already has the content.
+**Next:** T11 (wire runner loop to use structured context) — depends on T7+T9+T10 (all now complete). T12 (update prompt templates) — depends on T7+T8 (both complete). Both are now unblocked.
+
