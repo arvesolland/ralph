@@ -265,16 +265,35 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 		// Check if it's just a non-zero exit (Claude CLI returns non-zero on some errors)
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
-			stderrStr := stderrBuf.String()
+			stderrStr := strings.TrimSpace(stderrBuf.String())
 			log.Debug("Claude exited with code %d, stderr: %s", exitErr.ExitCode(), stderrStr)
+
+			// Build informative error message including stdout when stderr is empty
+			errMsg := stderrStr
+			if errMsg == "" && result != nil {
+				// stderr empty — include truncated stdout for diagnostics
+				out := strings.TrimSpace(result.TextContent)
+				if out == "" {
+					out = strings.TrimSpace(result.Output)
+				}
+				if out != "" {
+					const maxLen = 200
+					if len(out) > maxLen {
+						out = out[:maxLen] + "..."
+					}
+					errMsg = fmt.Sprintf("(no stderr) stdout: %s", out)
+				} else {
+					errMsg = "(no stderr or stdout output)"
+				}
+			}
 
 			// Determine if this is a retryable error
 			if isRetryableExitError(exitErr.ExitCode(), stderrStr) {
-				return result, fmt.Errorf("claude exited with code %d: %s", exitErr.ExitCode(), stderrStr)
+				return result, fmt.Errorf("claude exited with code %d: %s", exitErr.ExitCode(), errMsg)
 			}
 
 			// Non-retryable exit error
-			return result, WrapNonRetryable(fmt.Errorf("claude exited with code %d: %s", exitErr.ExitCode(), stderrStr))
+			return result, WrapNonRetryable(fmt.Errorf("claude exited with code %d: %s", exitErr.ExitCode(), errMsg))
 		}
 		return result, waitErr
 	}

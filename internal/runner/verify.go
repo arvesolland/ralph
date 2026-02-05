@@ -151,6 +151,11 @@ func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*Ve
 	result, err := runner.Run(ctx, prompt, opts)
 	if err != nil {
 		log.Error("Verification model call failed: %v", err)
+		if result != nil && result.TextContent != "" {
+			log.Error("Verification model output: %s", truncate(result.TextContent, 500))
+		} else if result != nil && result.Output != "" {
+			log.Error("Verification model raw output: %s", truncate(result.Output, 500))
+		}
 		return nil, fmt.Errorf("verification failed: %w", err)
 	}
 
