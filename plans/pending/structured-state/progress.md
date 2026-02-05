@@ -218,3 +218,42 @@ T7 is now **complete** — all subtasks checked, all "Done when" criteria verifi
 ## Iteration 8 (2026-02-06 08:18) - 52/88 (59%)
 Claude execution completed in 3m19.210389208s.
 
+
+---
+### Iteration 9: T8 — Add `ralph task` and `ralph feedback` CLI subcommands (all subtasks)
+**Completed:** Created two new CLI files with full command trees:
+
+**`internal/cli/task.go`** — 7 commands:
+- `taskCmd` parent: `ralph task`
+- `taskAddCmd`: `ralph task add <plan> --title "..." [--requires T1,T2] [--criteria "a;b;c"]` — calls `state.AddTask()`, saves atomically
+- `taskClaimCmd`: `ralph task claim <plan> <task-id>` — calls `state.ClaimTask()`, saves atomically
+- `taskCompleteCmd`: `ralph task complete <plan> <task-id> [--commits a,b]` — calls `state.CompleteTask()`, saves atomically
+- `taskSkipCmd`: `ralph task skip <plan> <task-id> --reason "..."` — calls `state.SkipTask()`, saves atomically
+- `taskCriterionCheckCmd`: `ralph task criterion check <plan> <task-id> <index>` — 1-indexed, calls `state.CheckCriterion()`
+- `taskCriterionUncheckCmd`: `ralph task criterion uncheck <plan> <task-id> <index>` — calls `state.UncheckCriterion()`
+- `loadAndMutate()` helper for DRY load→mutate→save→output pattern
+- `parseCommaSep()`, `parseSemicolonSep()` for flag parsing
+- All commands support `--json` via persistent flag on `taskCmd`
+
+**`internal/cli/feedback.go`** — 3 commands:
+- `feedbackCmd` parent: `ralph feedback`
+- `feedbackAddCmd`: `ralph feedback add <plan> --scope plan --message "..." [--author human]` — calls `state.AddFeedback()`
+- `feedbackResolveCmd`: `ralph feedback resolve <plan> <feedback-id>` — calls `state.ResolveFeedback()`
+- All commands support `--json` via persistent flag on `feedbackCmd`
+
+**`internal/cli/task_test.go`** — 15 tests covering:
+- taskAdd (human + JSON output), taskClaim (human + JSON), taskComplete with commits, taskSkip with reason
+- criterionCheck (human + JSON), criterionUncheck, invalid index error
+- NoStateYaml error, DepsNotMet error, parseCommaSep, parseSemicolonSep
+
+**`internal/cli/feedback_test.go`** — 8 tests covering:
+- feedbackAdd (human + JSON + invalid scope), feedbackResolve (human + JSON + not found)
+- NoStateYaml error
+
+All 21 new tests pass. Full test suite (all packages) passes.
+
+T8 is now **complete** — all 11 subtasks checked, all "Done when" criteria verified.
+
+**Gotcha:** Reused `resolveBundleDir()` from context.go for all commands — consistent bundle resolution across the CLI. The `loadAndMutate()` pattern keeps all task commands DRY (load state → call mutation → save state → output result).
+**Next:** T9 (worktree sync for state.yaml) — depends on T2 (complete). T10 (scaffold state.yaml from plan.md) — depends on T2+T5 (both complete). T12 (prompt templates) — depends on T7+T8 (both complete now). All three are unblocked.
+

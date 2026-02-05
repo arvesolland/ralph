@@ -267,33 +267,33 @@ Replace Ralph's markdown-checkbox-based task management with a structured YAML s
 > Agent-facing commands for task lifecycle — claim, criterion check, complete
 
 **Requires:** T5, T6
-**Status:** blocked
+**Status:** complete
 
 **Done when:**
-- [ ] `ralph task add <plan> --title "..." [--requires T1,T2] [--criteria "a;b;c"]` works
-- [ ] `ralph task claim <plan> <task-id>` works
-- [ ] `ralph task complete <plan> <task-id> [--commits a,b]` works
-- [ ] `ralph task criterion check <plan> <task-id> <index>` works
-- [ ] `ralph task criterion uncheck <plan> <task-id> <index>` works
-- [ ] `ralph task skip <plan> <task-id> --reason "..."` works
-- [ ] `ralph feedback add <plan> --scope task:T2 --message "..." [--author human]` works
-- [ ] `ralph feedback resolve <plan> <feedback-id>` works
-- [ ] All commands save state atomically after mutation
-- [ ] All commands support `--json` output flag
-- [ ] `go test ./internal/cli/...` passes
+- [x] `ralph task add <plan> --title "..." [--requires T1,T2] [--criteria "a;b;c"]` works
+- [x] `ralph task claim <plan> <task-id>` works
+- [x] `ralph task complete <plan> <task-id> [--commits a,b]` works
+- [x] `ralph task criterion check <plan> <task-id> <index>` works
+- [x] `ralph task criterion uncheck <plan> <task-id> <index>` works
+- [x] `ralph task skip <plan> <task-id> --reason "..."` works
+- [x] `ralph feedback add <plan> --scope task:T2 --message "..." [--author human]` works
+- [x] `ralph feedback resolve <plan> <feedback-id>` works
+- [x] All commands save state atomically after mutation
+- [x] All commands support `--json` output flag
+- [x] `go test ./internal/cli/...` passes
 
 **Subtasks:**
-1. [ ] Create `internal/cli/task.go` with `taskCmd` parent command
-2. [ ] Add `taskAddCmd` — parse flags, call `AddTask()`, save
-3. [ ] Add `taskClaimCmd` — parse args, call `ClaimTask()`, save
-4. [ ] Add `taskCompleteCmd` — parse args/flags, call `CompleteTask()`, save
-5. [ ] Add `taskSkipCmd` — parse args/flags, call `SkipTask()`, save
-6. [ ] Add `taskCriterionCmd` with `check`/`uncheck` subcommands
-7. [ ] Create `internal/cli/feedback.go` with `feedbackCmd` parent
-8. [ ] Add `feedbackAddCmd` — parse flags, call `AddFeedback()`, save
-9. [ ] Add `feedbackResolveCmd` — parse args, call `ResolveFeedback()`, save
-10. [ ] Add `--json` output support to all commands
-11. [ ] Create `internal/cli/task_test.go` and `internal/cli/feedback_test.go`
+1. [x] Create `internal/cli/task.go` with `taskCmd` parent command
+2. [x] Add `taskAddCmd` — parse flags, call `AddTask()`, save
+3. [x] Add `taskClaimCmd` — parse args, call `ClaimTask()`, save
+4. [x] Add `taskCompleteCmd` — parse args/flags, call `CompleteTask()`, save
+5. [x] Add `taskSkipCmd` — parse args/flags, call `SkipTask()`, save
+6. [x] Add `taskCriterionCmd` with `check`/`uncheck` subcommands
+7. [x] Create `internal/cli/feedback.go` with `feedbackCmd` parent
+8. [x] Add `feedbackAddCmd` — parse flags, call `AddFeedback()`, save
+9. [x] Add `feedbackResolveCmd` — parse args, call `ResolveFeedback()`, save
+10. [x] Add `--json` output support to all commands
+11. [x] Create `internal/cli/task_test.go` and `internal/cli/feedback_test.go`
 
 ---
 
