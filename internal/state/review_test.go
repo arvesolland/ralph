@@ -140,6 +140,29 @@ func TestParseStateFromResponse(t *testing.T) {
 	})
 }
 
+func TestParseStateFromResponse_StringCriteria(t *testing.T) {
+	response := "Here's the corrected state:\n```yaml\nid: test\ntitle: Test Plan\nstatus: active\ntasks:\n  - id: T1\n    title: First task\n    status: todo\n    criteria:\n      - \"All models created\"\n      - \"Tests pass\"\n```"
+	state, err := parseStateFromResponse(response)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(state.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(state.Tasks))
+	}
+	if len(state.Tasks[0].Criteria) != 2 {
+		t.Fatalf("expected 2 criteria, got %d", len(state.Tasks[0].Criteria))
+	}
+	if state.Tasks[0].Criteria[0].Text != "All models created" {
+		t.Errorf("expected 'All models created', got %q", state.Tasks[0].Criteria[0].Text)
+	}
+	if state.Tasks[0].Criteria[0].Done {
+		t.Error("expected Done=false for string criterion")
+	}
+	if state.Tasks[0].Criteria[1].Text != "Tests pass" {
+		t.Errorf("expected 'Tests pass', got %q", state.Tasks[0].Criteria[1].Text)
+	}
+}
+
 func TestMergeStates(t *testing.T) {
 	now := time.Now()
 	earlier := now.Add(-1 * time.Hour)

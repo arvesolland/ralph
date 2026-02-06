@@ -1,7 +1,11 @@
 // Package state manages structured plan state via state.yaml.
 package state
 
-import "time"
+import (
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
 
 // PlanStatus represents the lifecycle status of a plan.
 type PlanStatus string
@@ -73,6 +77,23 @@ type Criterion struct {
 	Text   string     `yaml:"text"              json:"text"`
 	Done   bool       `yaml:"done"              json:"done"`
 	DoneAt *time.Time `yaml:"done_at,omitempty" json:"done_at,omitempty"`
+}
+
+// UnmarshalYAML handles both string and struct formats for Criterion.
+// LLMs frequently output criteria as plain strings instead of {text, done} objects.
+func (c *Criterion) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		c.Text = value.Value
+		c.Done = false
+		return nil
+	}
+	type rawCriterion Criterion
+	var raw rawCriterion
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*c = Criterion(raw)
+	return nil
 }
 
 // Artifacts tracks what a task produced.

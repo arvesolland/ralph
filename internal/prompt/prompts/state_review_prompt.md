@@ -28,6 +28,12 @@ If there are gaps or issues:
 - Only add missing tasks, fix dependencies, or add missing criteria
 - New tasks should have status: todo
 - Use the same YAML structure and field names as the current state
+- Criteria MUST use the object format with `text` and `done` fields, NOT plain strings:
+  ```yaml
+  criteria:
+    - text: "Unit tests pass"
+      done: false
+  ```
 - Do NOT remove any existing tasks (even if they seem unnecessary)
 
 {{VALIDATION_ERROR}}

@@ -221,6 +221,92 @@ func TestEmptyOptionalFields(t *testing.T) {
 	}
 }
 
+func TestCriterionUnmarshalYAML(t *testing.T) {
+	t.Run("string criterion", func(t *testing.T) {
+		input := `- "All models created"`
+		var criteria []Criterion
+		if err := yaml.Unmarshal([]byte(input), &criteria); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(criteria) != 1 {
+			t.Fatalf("expected 1 criterion, got %d", len(criteria))
+		}
+		if criteria[0].Text != "All models created" {
+			t.Errorf("expected text 'All models created', got %q", criteria[0].Text)
+		}
+		if criteria[0].Done {
+			t.Error("expected Done to be false for string criterion")
+		}
+	})
+
+	t.Run("struct criterion", func(t *testing.T) {
+		input := `- text: "Tests pass"
+  done: true`
+		var criteria []Criterion
+		if err := yaml.Unmarshal([]byte(input), &criteria); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(criteria) != 1 {
+			t.Fatalf("expected 1 criterion, got %d", len(criteria))
+		}
+		if criteria[0].Text != "Tests pass" {
+			t.Errorf("expected text 'Tests pass', got %q", criteria[0].Text)
+		}
+		if !criteria[0].Done {
+			t.Error("expected Done to be true")
+		}
+	})
+
+	t.Run("mixed list", func(t *testing.T) {
+		input := `- "String criterion"
+- text: "Struct criterion"
+  done: true`
+		var criteria []Criterion
+		if err := yaml.Unmarshal([]byte(input), &criteria); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(criteria) != 2 {
+			t.Fatalf("expected 2 criteria, got %d", len(criteria))
+		}
+		if criteria[0].Text != "String criterion" || criteria[0].Done {
+			t.Errorf("first criterion wrong: %+v", criteria[0])
+		}
+		if criteria[1].Text != "Struct criterion" || !criteria[1].Done {
+			t.Errorf("second criterion wrong: %+v", criteria[1])
+		}
+	})
+
+	t.Run("full state with string criteria", func(t *testing.T) {
+		input := `id: test
+title: Test Plan
+status: active
+tasks:
+  - id: T1
+    title: First task
+    status: todo
+    criteria:
+      - "All models created"
+      - "Tests pass"
+`
+		var state PlanState
+		if err := yaml.Unmarshal([]byte(input), &state); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(state.Tasks) != 1 {
+			t.Fatalf("expected 1 task, got %d", len(state.Tasks))
+		}
+		if len(state.Tasks[0].Criteria) != 2 {
+			t.Fatalf("expected 2 criteria, got %d", len(state.Tasks[0].Criteria))
+		}
+		if state.Tasks[0].Criteria[0].Text != "All models created" {
+			t.Errorf("expected 'All models created', got %q", state.Tasks[0].Criteria[0].Text)
+		}
+		if state.Tasks[0].Criteria[1].Text != "Tests pass" {
+			t.Errorf("expected 'Tests pass', got %q", state.Tasks[0].Criteria[1].Text)
+		}
+	})
+}
+
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && searchString(s, substr)
 }
