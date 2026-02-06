@@ -67,6 +67,10 @@ func Load(path string) (*Plan, error) {
 		// Bundle: directory containing plan.md
 		bundleDir = absPath
 		planPath = filepath.Join(absPath, "plan.md")
+	} else if filepath.Base(absPath) == "plan.md" && looksLikeBundle(filepath.Dir(absPath)) {
+		// plan.md inside a bundle directory — treat as bundle
+		bundleDir = filepath.Dir(absPath)
+		planPath = absPath
 	} else {
 		// Legacy flat file
 		bundleDir = ""
@@ -92,6 +96,17 @@ func Load(path string) (*Plan, error) {
 		Branch:    branch,
 		BundleDir: bundleDir,
 	}, nil
+}
+
+// looksLikeBundle returns true if the directory contains bundle files
+// (progress.md, feedback.md, or state.yaml), indicating it's a plan bundle.
+func looksLikeBundle(dir string) bool {
+	for _, name := range []string{"progress.md", "feedback.md", "state.yaml"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // deriveName extracts the plan name from the path.

@@ -136,8 +136,9 @@ func Verify(ctx context.Context, p *plan.Plan, runner Runner, model string) (*Ve
 	// Set up options for verification model
 	opts := DefaultOptions()
 	opts.Model = model
-	opts.Print = true          // Use --print mode for simple prompt/response
-	opts.OutputFormat = "text" // Use text format for verification (stream-json requires --verbose with --print)
+	opts.Print = true           // Use --print mode for simple prompt/response
+	opts.OutputFormat = "text"  // Use text format for verification (stream-json requires --verbose with --print)
+	opts.NoPermissions = true   // Skip interactive permission prompts
 
 	// Use timeout for verification if not already set
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {

@@ -486,9 +486,10 @@ type reviewRunnerAdapter struct {
 
 func (a *reviewRunnerAdapter) Run(ctx context.Context, prompt string, opts state.ReviewRunnerOptions) (*state.ReviewRunnerResult, error) {
 	runnerOpts := Options{
-		Model:        opts.Model,
-		Print:        opts.Print,
-		OutputFormat: opts.OutputFormat,
+		Model:         opts.Model,
+		Print:         opts.Print,
+		OutputFormat:  opts.OutputFormat,
+		NoPermissions: true,
 	}
 	result, err := a.runner.Run(ctx, prompt, runnerOpts)
 	if err != nil {
