@@ -454,18 +454,22 @@ func (l *IterationLoop) autoInitState(ctx context.Context) {
 		return
 	}
 
-	// Check if state.yaml already exists
+	// Check if state.yaml already exists with tasks
 	existing, err := state.LoadState(bundleDir)
 	if err != nil {
 		log.Warn("Failed to check state.yaml: %v", err)
 		return
 	}
-	if existing != nil {
-		return // Already has state
+	if existing != nil && len(existing.Tasks) > 0 {
+		return // Already has state with tasks
 	}
 
-	// Generate state.yaml from plan.md
-	log.Info("Auto-generating state.yaml from plan.md")
+	// Generate state.yaml from plan.md (first time, or re-init if tasks are empty)
+	if existing != nil && len(existing.Tasks) == 0 {
+		log.Info("Re-initializing state.yaml (exists but has 0 tasks)")
+	} else {
+		log.Info("Auto-generating state.yaml from plan.md")
+	}
 	st, err := state.InitStateFromPlan(l.plan.Content, l.plan.Name)
 	if err != nil {
 		log.Warn("Failed to init state from plan: %v", err)
