@@ -82,7 +82,11 @@ func Load(path string) (*Plan, error) {
 		return nil, err
 	}
 
-	name := deriveName(absPath, bundleDir != "")
+	namePath := absPath
+	if bundleDir != "" {
+		namePath = bundleDir
+	}
+	name := deriveName(namePath, bundleDir != "")
 	status := extractStatus(string(content))
 	branch := deriveBranch(name)
 	tasks := ExtractTasks(string(content))
