@@ -4,7 +4,7 @@
 
 Every iteration you MUST:
 1. **Study context** - Read CLAUDE.md, specs/INDEX.md, plan, and progress file
-2. **One task at a time** - Complete ONE subtask per iteration, then end
+2. **ONE TASK ONLY** - Pick ONE task (e.g., T3), complete it, then STOP. Do NOT continue to the next task. End your response after committing.
 3. **Pick next task** - Select first incomplete task where dependencies are met
 4. **Verify completion** - Test/validate before marking anything complete
 5. **Update state** - Use `ralph task` commands (structured plans) or check off plan checkboxes (legacy plans)
@@ -322,10 +322,12 @@ refactor(api): extract common middleware
 - Plan file (with updated checkboxes/status) — for legacy plans
 - Progress file (always - even if just created with header)
 
-Commit after completing each subtask. Small, atomic commits. Example:
+Commit after completing your task. Small, atomic commits. Example:
 ```bash
 git add -A && git commit -m "feat(auth): implement token validation"
 ```
+
+**After committing, END your response.** Do not start another task. The loop will start a new iteration.
 
 ---
 
@@ -351,15 +353,16 @@ A task is complete ONLY when:
 
 ---
 
-## One Subtask Per Iteration
+## HARD RULE: One Task Per Iteration
 
-**Default:** Complete ONE subtask per iteration, then end your response.
+**Complete exactly ONE task per iteration, then STOP.**
 
-**Exception:** For trivial, closely-related subtasks (e.g., "add import" + "use imported function"), you may complete 2-3 in one iteration if:
-- They're part of the same logical change
-- Combined they're still a small, focused commit
+- Pick one task (e.g., T3). Implement it. Validate it. Commit it. End your response.
+- Do NOT start the next task. Do NOT "batch" multiple tasks. Do NOT continue after committing.
+- This applies even if tasks seem small or related. Each task gets its own iteration.
+- The only exception: subtasks *within* a single task (e.g., T3's implementation steps) should all be completed together — they are part of one task.
 
-When in doubt, do one subtask and end.
+**Why:** Each iteration gets fresh context. Cramming multiple tasks into one iteration produces worse results, misses gotchas, and makes debugging harder. Trust the loop.
 
 ---
 
@@ -450,11 +453,12 @@ ralph feedback add <plan-path> --scope task:T2 --message "Need API key for integ
 4. ☐ Read plan file
 5. ☐ Read/create progress file (create with header if doesn't exist)
 6. ☐ **Check feedback** (structured: `feedback.unresolved` in context JSON; legacy: feedback.md file)
-7. ☐ Select next task (structured: `selection.suggested_next`; legacy: first incomplete task)
+7. ☐ Select ONE task (structured: `selection.suggested_next`; legacy: first incomplete task)
 8. ☐ **Claim task** (structured: `ralph task claim`; legacy: n/a)
 9. ☐ Implement (or signal `<blocker>` if human action required)
 10. ☐ Validate (lint + test)
 11. ☐ **Update state** (structured: `ralph task criterion check` + `ralph task complete`; legacy: update checkboxes + status)
 12. ☐ **Update progress file** (EVERY iteration - log what you did)
 13. ☐ **Commit ALL changes** (code + progress file)
-14. ☐ **If ALL tasks complete:** Verify all done, commit, THEN output `<promise>COMPLETE</promise>`
+14. ☐ **STOP. End your response.** (The loop will start iteration N+1 for the next task.)
+15. ☐ **If ALL tasks complete:** Verify all done, commit, THEN output `<promise>COMPLETE</promise>`

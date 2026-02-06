@@ -20,7 +20,7 @@ import (
 const IterationCooldown = 3 * time.Second
 
 // IterationTimeout is the default timeout for a single iteration.
-const IterationTimeout = 30 * time.Minute
+const IterationTimeout = 60 * time.Minute
 
 // LoopResult represents the outcome of the iteration loop.
 type LoopResult struct {

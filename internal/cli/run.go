@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
@@ -23,6 +24,7 @@ import (
 )
 
 var maxIterations int
+var iterationTimeout time.Duration
 
 var runCmd = &cobra.Command{
 	Use:   "run <plan-file>",
@@ -47,6 +49,7 @@ Example:
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.Flags().IntVar(&maxIterations, "max", runner.DefaultMaxIterations, "maximum iterations before stopping")
+	runCmd.Flags().DurationVar(&iterationTimeout, "timeout", runner.IterationTimeout, "timeout per iteration (e.g., 60m, 2h)")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -81,6 +84,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	log.Info("Running plan: %s", p.Name)
 	log.Info("Branch: %s", p.Branch)
 	log.Info("Max iterations: %d", maxIterations)
+	log.Info("Iteration timeout: %v", iterationTimeout)
 
 	// Load configuration
 	cfg, err := config.LoadWithDefaults(GetConfigPath())
@@ -167,13 +171,14 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	// Create iteration loop
 	loop := runner.NewIterationLoop(runner.LoopConfig{
-		Plan:          p,
-		Context:       execCtx,
-		Config:        cfg,
-		Runner:        claudeRunner,
-		Git:           g,
-		PromptBuilder: promptBuilder,
-		WorktreePath:  worktreePath,
+		Plan:             p,
+		Context:          execCtx,
+		Config:           cfg,
+		Runner:           claudeRunner,
+		Git:              g,
+		PromptBuilder:    promptBuilder,
+		WorktreePath:     worktreePath,
+		IterationTimeout: iterationTimeout,
 		OnIteration: func(iteration int, result *runner.Result) {
 			log.Info("Iteration %d/%d complete", iteration, maxIterations)
 			if result.IsComplete {

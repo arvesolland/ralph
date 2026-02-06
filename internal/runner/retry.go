@@ -103,6 +103,12 @@ func (r *Retrier) DoWithContext(ctx context.Context, fn func() error) error {
 			break
 		}
 
+		// Don't retry if context is already done (e.g., iteration timeout expired)
+		if ctx.Err() != nil {
+			log.Debug("Context done before retry, returning last error")
+			return lastErr
+		}
+
 		// Calculate delay with exponential backoff
 		delay := r.calculateDelay(attempt)
 
