@@ -446,6 +446,137 @@ Verifies all Ralph core principles:
 }
 
 // =============================================================================
+// TEST: One Task Per Iteration (agent must stop after each task)
+// =============================================================================
+
+func TestOneTaskPerIteration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ws := setupWorkspace(t)
+	defer ws.KeepOnFailure()
+	defer ws.Cleanup()
+
+	// 3 independent tasks (no dependencies) — if the agent batches them,
+	// they'd all land in one commit. If it obeys "one task then stop",
+	// each task gets its own iteration and its own commit.
+	ws.CreatePlanBundle("test-plan", `# Plan: One Task Per Iteration Test
+
+## Context
+Tests that the agent completes exactly ONE task per iteration, then stops.
+Each task creates a distinct marker file. They are independent (no dependencies)
+so the agent has no excuse to batch them.
+
+## Tasks
+
+### T1: Create marker A
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] File `+"`output/a.txt`"+` exists with content "task-a-done"
+
+**Subtasks:**
+1. [ ] Create `+"`output/a.txt`"+` with content "task-a-done"
+
+---
+
+### T2: Create marker B
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] File `+"`output/b.txt`"+` exists with content "task-b-done"
+
+**Subtasks:**
+1. [ ] Create `+"`output/b.txt`"+` with content "task-b-done"
+
+---
+
+### T3: Create marker C
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] File `+"`output/c.txt`"+` exists with content "task-c-done"
+
+**Subtasks:**
+1. [ ] Create `+"`output/c.txt`"+` with content "task-c-done"
+`)
+
+	// Run with ralph run (not worker, to keep commits on same branch for easy inspection)
+	ws.RunRalph(t, "run", "plans/pending/test-plan", "--max", "10", "-v")
+
+	// All 3 files should exist
+	ws.AssertFileExists(t, "output/a.txt", "T1 should be completed")
+	ws.AssertFileContains(t, "output/a.txt", "task-a-done", "T1 correct content")
+	ws.AssertFileExists(t, "output/b.txt", "T2 should be completed")
+	ws.AssertFileContains(t, "output/b.txt", "task-b-done", "T2 correct content")
+	ws.AssertFileExists(t, "output/c.txt", "T3 should be completed")
+	ws.AssertFileContains(t, "output/c.txt", "task-c-done", "T3 correct content")
+
+	// KEY ASSERTION: There should be at least 3 task commits (one per task).
+	// If the agent batched all 3 into one iteration, there'd be only 1-2 commits.
+	// We filter out the initial workspace commit to count only agent commits.
+	out, err := ws.GitOutput(t, "log", "--oneline")
+	if err != nil {
+		t.Fatalf("Failed to get git log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	t.Logf("Git log (%d commits):", len(lines))
+	for _, line := range lines {
+		t.Logf("  %s", line)
+	}
+
+	// Count commits that are NOT the initial workspace setup.
+	// The initial commit message is "Initial test workspace".
+	agentCommits := 0
+	for _, line := range lines {
+		if !strings.Contains(line, "Initial test workspace") {
+			agentCommits++
+		}
+	}
+
+	// We expect at least 3 agent commits (one per task).
+	// The agent may also make additional commits (progress file, state, etc.)
+	// but the minimum is 3 if it's doing one task per iteration.
+	if agentCommits < 3 {
+		t.Errorf("ONE-TASK-PER-ITERATION VIOLATED: expected at least 3 agent commits (one per task), got %d. Agent likely batched multiple tasks into a single iteration.", agentCommits)
+	} else {
+		t.Logf("SUCCESS: %d agent commits for 3 tasks — agent respected one-task-per-iteration", agentCommits)
+	}
+
+	// Additional check: verify each marker file was introduced in a SEPARATE commit.
+	// Use git log to find which commit introduced each file.
+	filesInCommits := make(map[string]string) // filename -> commit hash
+	for _, marker := range []string{"output/a.txt", "output/b.txt", "output/c.txt"} {
+		commitOut, err := ws.GitOutput(t, "log", "--oneline", "--diff-filter=A", "--", marker)
+		if err != nil {
+			t.Logf("Warning: could not find introducing commit for %s: %v", marker, err)
+			continue
+		}
+		commitLine := strings.TrimSpace(commitOut)
+		if commitLine != "" {
+			hash := strings.Fields(commitLine)[0]
+			filesInCommits[marker] = hash
+			t.Logf("  %s introduced in commit %s", marker, hash)
+		}
+	}
+
+	// If all 3 files were introduced in different commits, the agent obeyed the rule.
+	uniqueCommits := make(map[string]bool)
+	for _, hash := range filesInCommits {
+		uniqueCommits[hash] = true
+	}
+	if len(filesInCommits) == 3 && len(uniqueCommits) < 3 {
+		t.Errorf("ONE-TASK-PER-ITERATION VIOLATED: marker files were introduced in only %d unique commits (expected 3 separate commits)", len(uniqueCommits))
+	} else if len(filesInCommits) == 3 && len(uniqueCommits) == 3 {
+		t.Logf("SUCCESS: all 3 marker files introduced in separate commits")
+	}
+}
+
+// =============================================================================
 // TEST: Plan Bundles (ralph plan create)
 // =============================================================================
 
