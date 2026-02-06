@@ -1105,7 +1105,7 @@ Integration test: verify Slack notifications are sent.
 }
 
 // =============================================================================
-// TEST: State Review — Standard Format (T1/T2 headings)
+// TEST: State Review — Standard Format (20 tasks, exact verification)
 // =============================================================================
 
 func TestStateReview_StandardFormat(t *testing.T) {
@@ -1117,122 +1117,130 @@ func TestStateReview_StandardFormat(t *testing.T) {
 	defer ws.KeepOnFailure()
 	defer ws.Cleanup()
 
-	// Standard plan format: ### T1: Title, **Requires:**, **Done when:** checkboxes.
-	// The regex parser should handle this well, and the LLM review should confirm alignment.
-	ws.CreatePlanBundle("standard-plan", `# Plan: Standard Format Test
+	// Standard plan format with 20 tasks: ### T1: Title, **Requires:**, **Done when:** checkboxes.
+	// The regex parser handles this format, and the LLM review should confirm ALIGNED.
+	ws.CreatePlanBundle("standard-plan", standardFormatPlan)
 
-## Context
-A plan using the standard T1/T2 heading format to test that the regex parser
-correctly populates state.yaml and the LLM review confirms alignment.
-
-## Tasks
-
-### T1: Set up database schema
-**Requires:** —
-**Status:** open
-
-**Done when:**
-- [ ] Migration file exists for users table
-- [ ] Migration file exists for sessions table
-
----
-
-### T2: Implement user registration endpoint
-**Requires:** T1
-**Status:** open
-
-**Done when:**
-- [ ] POST /api/register endpoint exists
-- [ ] Validates email and password
-- [ ] Returns JWT token on success
-
----
-
-### T3: Implement login endpoint
-**Requires:** T1
-**Status:** open
-
-**Done when:**
-- [ ] POST /api/login endpoint exists
-- [ ] Returns JWT token for valid credentials
-- [ ] Returns 401 for invalid credentials
-
----
-
-### T4: Add authentication middleware
-**Requires:** T2, T3
-**Status:** open
-
-**Done when:**
-- [ ] Middleware extracts JWT from Authorization header
-- [ ] Protected routes return 401 without valid token
-`)
-
-	// Commit the plan so ralph can work with it
 	ws.Git(t, "add", "-A")
 	ws.Git(t, "commit", "-q", "-m", "Add standard format plan")
 
-	// Run ralph plan review
 	output := ws.RunRalph(t, "plan", "review", "plans/pending/standard-plan", "-v")
 	t.Logf("Review output:\n%s", output)
 
-	// Load and verify state.yaml
 	stateYAML := ws.readStateYAML(t, "plans/pending/standard-plan")
 
-	// Verify all 4 tasks are present
-	if len(stateYAML.Tasks) < 4 {
-		t.Errorf("Expected at least 4 tasks, got %d", len(stateYAML.Tasks))
+	// ── Exact task count ──
+	if len(stateYAML.Tasks) != 20 {
+		t.Errorf("Expected exactly 20 tasks, got %d", len(stateYAML.Tasks))
 	}
 
-	// Build task lookup
+	// ── Build lookup ──
 	taskByID := make(map[string]*stateTask)
 	for i := range stateYAML.Tasks {
 		taskByID[stateYAML.Tasks[i].ID] = &stateYAML.Tasks[i]
 	}
 
-	// Verify task IDs exist
-	for _, id := range []string{"T1", "T2", "T3", "T4"} {
+	// ── Verify every task ID exists ──
+	for i := 1; i <= 20; i++ {
+		id := fmt.Sprintf("T%d", i)
 		if _, ok := taskByID[id]; !ok {
 			t.Errorf("Missing task %s in state.yaml", id)
 		}
 	}
 
-	// Verify T2 depends on T1
-	if t2, ok := taskByID["T2"]; ok {
-		if !containsString(t2.Requires, "T1") {
-			t.Errorf("T2 should require T1, got requires: %v", t2.Requires)
+	// ── Expected titles (exact match) ──
+	expectedTitles := map[string]string{
+		"T1":  "Add multiselect checkbox to MetadataTypeModal",
+		"T2":  "Handle dataType toggle logic",
+		"T3":  "Persist multiselect flag to database",
+		"T4":  "Add form validation for multiselect configuration",
+		"T5":  "Create MultiSelectToggle component",
+		"T6":  "Implement multiselect case in ImageMetadataPanel",
+		"T7":  "Parse stored JSON array values",
+		"T8":  "Handle toggle selection and deselection logic",
+		"T9":  "Store multiselect values as JSON strings",
+		"T10": "Add multiselect styling and visual states",
+		"T11": "Update single image metadata PATCH API",
+		"T12": "Update single image metadata GET API",
+		"T13": "Add API input validation for multiselect values",
+		"T14": "Update BatchOperationsSidebar field rendering",
+		"T15": "Implement batch metadata PATCH API for arrays",
+		"T16": "Handle batch merge operations",
+		"T17": "Add database migration for dataType column",
+		"T18": "Write unit tests for MultiSelectToggle",
+		"T19": "Write API integration tests for multiselect CRUD",
+		"T20": "Write E2E test for multiselect workflow",
+	}
+	for id, expectedTitle := range expectedTitles {
+		if task, ok := taskByID[id]; ok {
+			if task.Title != expectedTitle {
+				t.Errorf("Task %s: expected title %q, got %q", id, expectedTitle, task.Title)
+			}
 		}
 	}
 
-	// Verify T3 depends on T1
-	if t3, ok := taskByID["T3"]; ok {
-		if !containsString(t3.Requires, "T1") {
-			t.Errorf("T3 should require T1, got requires: %v", t3.Requires)
+	// ── Expected dependencies (exact match) ──
+	expectedDeps := map[string][]string{
+		"T1":  {},
+		"T2":  {"T1"},
+		"T3":  {"T2"},
+		"T4":  {"T2"},
+		"T5":  {},
+		"T6":  {"T5", "T3"},
+		"T7":  {"T6"},
+		"T8":  {"T7"},
+		"T9":  {"T8"},
+		"T10": {"T5"},
+		"T11": {"T9"},
+		"T12": {"T11"},
+		"T13": {"T11"},
+		"T14": {"T6"},
+		"T15": {"T14", "T11"},
+		"T16": {"T15"},
+		"T17": {"T3"},
+		"T18": {"T5", "T10"},
+		"T19": {"T11", "T12", "T13"},
+		"T20": {"T18", "T19", "T16"},
+	}
+	for id, expectedReqs := range expectedDeps {
+		task, ok := taskByID[id]
+		if !ok {
+			continue
+		}
+		if len(expectedReqs) == 0 {
+			if len(task.Requires) != 0 {
+				t.Errorf("Task %s: expected no deps, got %v", id, task.Requires)
+			}
+			continue
+		}
+		for _, dep := range expectedReqs {
+			if !containsString(task.Requires, dep) {
+				t.Errorf("Task %s: expected dep %s, got %v", id, dep, task.Requires)
+			}
+		}
+		if len(task.Requires) != len(expectedReqs) {
+			t.Errorf("Task %s: expected %d deps, got %d (%v)", id, len(expectedReqs), len(task.Requires), task.Requires)
 		}
 	}
 
-	// Verify T4 depends on T2 and T3
-	if t4, ok := taskByID["T4"]; ok {
-		if !containsString(t4.Requires, "T2") || !containsString(t4.Requires, "T3") {
-			t.Errorf("T4 should require T2 and T3, got requires: %v", t4.Requires)
+	// ── Expected minimum criteria counts ──
+	expectedMinCriteria := map[string]int{
+		"T1": 2, "T2": 2, "T3": 2, "T4": 2, "T5": 3,
+		"T6": 2, "T7": 3, "T8": 3, "T9": 2, "T10": 2,
+		"T11": 2, "T12": 2, "T13": 2, "T14": 2, "T15": 2,
+		"T16": 3, "T17": 2, "T18": 3, "T19": 3, "T20": 3,
+	}
+	for id, minCount := range expectedMinCriteria {
+		task, ok := taskByID[id]
+		if !ok {
+			continue
+		}
+		if len(task.Criteria) < minCount {
+			t.Errorf("Task %s: expected at least %d criteria, got %d", id, minCount, len(task.Criteria))
 		}
 	}
 
-	// Verify T1 has criteria (should have at least 2)
-	if t1, ok := taskByID["T1"]; ok {
-		if len(t1.Criteria) < 2 {
-			t.Errorf("T1 should have at least 2 criteria, got %d", len(t1.Criteria))
-		}
-	}
-
-	// Verify T4 has criteria
-	if t4, ok := taskByID["T4"]; ok {
-		if len(t4.Criteria) < 2 {
-			t.Errorf("T4 should have at least 2 criteria, got %d", len(t4.Criteria))
-		}
-	}
-
-	// All tasks should be todo
+	// ── All tasks should be todo ──
 	for _, task := range stateYAML.Tasks {
 		if task.Status != "todo" {
 			t.Errorf("Task %s should be 'todo', got '%s'", task.ID, task.Status)
@@ -1240,10 +1248,14 @@ correctly populates state.yaml and the LLM review confirms alignment.
 	}
 
 	t.Logf("SUCCESS: Standard format plan correctly populated state.yaml with %d tasks", len(stateYAML.Tasks))
+	for _, task := range stateYAML.Tasks {
+		t.Logf("  %s: %s (requires: %v, criteria: %d)",
+			task.ID, task.Title, task.Requires, len(task.Criteria))
+	}
 }
 
 // =============================================================================
-// TEST: State Review — Non-Standard Format (no T1/T2 headings)
+// TEST: State Review — Non-Standard Format (20 tasks, YAML frontmatter)
 // =============================================================================
 
 func TestStateReview_NonStandardFormat(t *testing.T) {
@@ -1255,133 +1267,96 @@ func TestStateReview_NonStandardFormat(t *testing.T) {
 	defer ws.KeepOnFailure()
 	defer ws.Cleanup()
 
-	// Non-standard plan format: numbered list tasks, freeform criteria,
-	// no ### T1: headings, uses "After:" instead of "Requires:", etc.
-	// The regex parser will fail to extract tasks from this.
-	// The LLM review should correctly identify and populate all tasks.
-	ws.CreatePlanBundle("freeform-plan", `# Plan: Build a CLI Todo App
+	// Non-standard plan format based on real-world example:
+	// - YAML frontmatter with todos list, statuses, dependencies
+	// - Mermaid diagram
+	// - Numbered implementation steps (not ### T1: headings)
+	// - Mixed prose criteria, no **Done when:** checkboxes
+	// - File path references, code blocks, data format examples
+	// The regex parser cannot parse any of this.
+	nonStandardPlan, err := os.ReadFile("testdata/nonstandard_plan.md")
+	if err != nil {
+		t.Fatalf("Failed to read testdata/nonstandard_plan.md: %v", err)
+	}
+	ws.CreatePlanBundle("freeform-plan", string(nonStandardPlan))
 
-## Overview
-Build a simple command-line todo application in Go that supports adding,
-listing, completing, and deleting tasks. Data persists to a JSON file.
-
-## Implementation Steps
-
-### Phase 1: Core Data Layer
-
-1. **Define the data model**
-   Create a Task struct with fields: ID (int), Title (string), Done (bool), CreatedAt (time).
-   Create a TodoList struct that holds a slice of Tasks.
-   Success criteria:
-   - types.go file exists with Task and TodoList structs
-   - Structs have JSON tags for serialization
-
-2. **Implement JSON persistence**
-   After: Step 1
-   Read and write the todo list to ~/.todos.json.
-   Success criteria:
-   - Can save a TodoList to disk as JSON
-   - Can load a TodoList from disk
-   - Handles missing file gracefully (returns empty list)
-
-### Phase 2: CLI Commands
-
-3. **Add command**
-   After: Step 2
-   Implement "todo add <title>" that creates a new task.
-   The task gets an auto-incremented ID.
-   Acceptance:
-   - Running "todo add Buy milk" creates a task
-   - Task is persisted to JSON file
-   - Prints confirmation with task ID
-
-4. **List command**
-   After: Step 2
-   Implement "todo list" that shows all tasks.
-   Acceptance:
-   - Shows task ID, title, and done status
-   - Marks done tasks with [x] and pending with [ ]
-   - Shows "No tasks" when list is empty
-
-5. **Complete command**
-   After: Steps 3 and 4
-   Implement "todo done <id>" that marks a task as complete.
-   Acceptance:
-   - Marks the specified task as done
-   - Prints confirmation
-   - Returns error for invalid ID
-
-6. **Delete command**
-   After: Step 5
-   Implement "todo delete <id>" that removes a task.
-   Acceptance:
-   - Removes the task from the list
-   - Prints confirmation
-   - Returns error for invalid ID
-
-## Verification
-Run all commands in sequence to verify the app works end-to-end.
-`)
-
-	// Commit the plan
 	ws.Git(t, "add", "-A")
 	ws.Git(t, "commit", "-q", "-m", "Add freeform plan")
 
-	// Run ralph plan review
 	output := ws.RunRalph(t, "plan", "review", "plans/pending/freeform-plan", "-v")
 	t.Logf("Review output:\n%s", output)
 
-	// Load and verify state.yaml
 	stateYAML := ws.readStateYAML(t, "plans/pending/freeform-plan")
 
-	// The plan has 6 logical tasks (steps 1-6).
-	// The LLM should have identified all of them.
-	if len(stateYAML.Tasks) < 6 {
-		t.Errorf("Expected at least 6 tasks from freeform plan, got %d", len(stateYAML.Tasks))
-		for i, task := range stateYAML.Tasks {
-			t.Logf("  Task %d: ID=%s Title=%s Requires=%v Criteria=%d",
-				i, task.ID, task.Title, task.Requires, len(task.Criteria))
-		}
+	// ── The plan has 20 logical tasks. LLM must find them all. ──
+	if len(stateYAML.Tasks) < 20 {
+		t.Errorf("Expected at least 20 tasks from freeform plan, got %d", len(stateYAML.Tasks))
 	}
 
-	// Verify tasks have titles (non-empty)
+	// ── Every task must have a non-empty title ──
 	for _, task := range stateYAML.Tasks {
 		if task.Title == "" {
 			t.Errorf("Task %s has empty title", task.ID)
 		}
 	}
 
-	// Verify at least some tasks have criteria (the plan specifies acceptance criteria for each)
+	// ── Most tasks should have criteria (plan specifies them for each) ──
 	tasksWithCriteria := 0
 	for _, task := range stateYAML.Tasks {
 		if len(task.Criteria) > 0 {
 			tasksWithCriteria++
 		}
 	}
-	if tasksWithCriteria < 3 {
-		t.Errorf("Expected at least 3 tasks with criteria, got %d", tasksWithCriteria)
+	if tasksWithCriteria < 15 {
+		t.Errorf("Expected at least 15 tasks with criteria, got %d", tasksWithCriteria)
 	}
 
-	// Verify dependencies exist — the plan has clear ordering
-	// At least some tasks should have dependencies (steps 2+ depend on earlier steps)
+	// ── Many tasks have explicit dependencies ──
 	tasksWithDeps := 0
 	for _, task := range stateYAML.Tasks {
 		if len(task.Requires) > 0 {
 			tasksWithDeps++
 		}
 	}
-	if tasksWithDeps < 3 {
-		t.Errorf("Expected at least 3 tasks with dependencies, got %d", tasksWithDeps)
+	if tasksWithDeps < 14 {
+		t.Errorf("Expected at least 14 tasks with dependencies, got %d", tasksWithDeps)
 	}
 
-	// All tasks should be todo status
+	// ── All tasks should be todo status ──
 	for _, task := range stateYAML.Tasks {
 		if task.Status != "todo" {
 			t.Errorf("Task %s should be 'todo', got '%s'", task.ID, task.Status)
 		}
 	}
 
-	// Log the full state for debugging
+	// ── Verify key themes are covered by checking title keywords ──
+	// The plan covers: modal config, component creation, panel integration,
+	// JSON parsing, API updates, batch operations, migration, and tests.
+	themes := map[string]bool{
+		"modal":     false,
+		"component": false,
+		"panel":     false,
+		"api":       false,
+		"batch":     false,
+		"migrat":    false,
+		"test":      false,
+		"valid":     false,
+	}
+	for _, task := range stateYAML.Tasks {
+		titleLower := strings.ToLower(task.Title)
+		for theme := range themes {
+			if strings.Contains(titleLower, theme) {
+				themes[theme] = true
+			}
+		}
+	}
+	for theme, found := range themes {
+		if !found {
+			t.Errorf("Expected at least one task with '%s' in title", theme)
+		}
+	}
+
+	// ── Log everything for debugging ──
 	t.Logf("Freeform plan state.yaml (%d tasks):", len(stateYAML.Tasks))
 	for _, task := range stateYAML.Tasks {
 		t.Logf("  %s: %s (requires: %v, criteria: %d)",
@@ -1390,6 +1365,234 @@ Run all commands in sequence to verify the app works end-to-end.
 
 	t.Logf("SUCCESS: Non-standard format plan correctly populated state.yaml with %d tasks", len(stateYAML.Tasks))
 }
+
+// =============================================================================
+// PLAN FIXTURES (kept as constants to avoid cluttering test functions)
+// =============================================================================
+
+// standardFormatPlan is a 20-task plan using the standard ### T1: format.
+// Based on the multi-select dropdown feature but expanded to cover all
+// implementation steps including components, APIs, batch ops, migration, tests.
+const standardFormatPlan = `# Plan: Multi-Select Dropdown Implementation
+
+## Context
+Add support for multi-select dropdown fields in the annotation tool.
+Introduces a checkbox toggle in the MetadataTypeModal, toggle-button
+style multi-selection in the ImageMetadataPanel, array value storage,
+batch operations support, database migration, and full test coverage.
+
+## Tasks
+
+### T1: Add multiselect checkbox to MetadataTypeModal
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] "Allow Multiple Selections" checkbox renders when dataType is 'select'
+- [ ] Checkbox is hidden for non-select types (text, number, date)
+
+---
+
+### T2: Handle dataType toggle logic
+**Requires:** T1
+**Status:** open
+
+**Done when:**
+- [ ] Checking the box sets dataType to 'multiselect'
+- [ ] Unchecking sets dataType back to 'select'
+- [ ] Options list is preserved when toggling
+
+---
+
+### T3: Persist multiselect flag to database
+**Requires:** T2
+**Status:** open
+
+**Done when:**
+- [ ] Creating a metadata type with multiselect saves dataType='multiselect'
+- [ ] Editing an existing type toggles dataType correctly
+
+---
+
+### T4: Add form validation for multiselect configuration
+**Requires:** T2
+**Status:** open
+
+**Done when:**
+- [ ] Multiselect types require at least 2 options
+- [ ] Error message shown when validation fails
+
+---
+
+### T5: Create MultiSelectToggle component
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] Component renders list of option buttons
+- [ ] Supports controlled selectedValues prop (string array)
+- [ ] Fires onChange callback with updated selection array
+
+---
+
+### T6: Implement multiselect case in ImageMetadataPanel
+**Requires:** T5, T3
+**Status:** open
+
+**Done when:**
+- [ ] renderFieldContent switch has 'multiselect' case
+- [ ] Case renders MultiSelectToggle with correct props
+
+---
+
+### T7: Parse stored JSON array values
+**Requires:** T6
+**Status:** open
+
+**Done when:**
+- [ ] JSON.parse(value) correctly extracts array from stored string
+- [ ] Handles null/undefined/empty string gracefully (returns [])
+- [ ] Handles malformed JSON gracefully (returns [])
+
+---
+
+### T8: Handle toggle selection and deselection logic
+**Requires:** T7
+**Status:** open
+
+**Done when:**
+- [ ] Clicking unselected option adds it to the array
+- [ ] Clicking selected option removes it from the array
+- [ ] Selection order is preserved
+
+---
+
+### T9: Store multiselect values as JSON strings
+**Requires:** T8
+**Status:** open
+
+**Done when:**
+- [ ] Selections are stored as JSON.stringify(selectedValues)
+- [ ] Empty selection stores empty array "[]"
+
+---
+
+### T10: Add multiselect styling and visual states
+**Requires:** T5
+**Status:** open
+
+**Done when:**
+- [ ] Selected buttons have distinct visual style (filled/highlighted)
+- [ ] Unselected buttons have outline/muted style
+
+---
+
+### T11: Update single image metadata PATCH API
+**Requires:** T9
+**Status:** open
+
+**Done when:**
+- [ ] PATCH /api/images/[imageId] accepts array values for multiselect fields
+- [ ] Array values are stored as JSON string in the database
+
+---
+
+### T12: Update single image metadata GET API
+**Requires:** T11
+**Status:** open
+
+**Done when:**
+- [ ] GET response includes multiselect values as stored JSON strings
+- [ ] Frontend can parse the returned value correctly
+
+---
+
+### T13: Add API input validation for multiselect values
+**Requires:** T11
+**Status:** open
+
+**Done when:**
+- [ ] API rejects non-array values for multiselect fields
+- [ ] API rejects values not in the allowed options list
+
+---
+
+### T14: Update BatchOperationsSidebar field rendering
+**Requires:** T6
+**Status:** open
+
+**Done when:**
+- [ ] Multiselect fields render MultiSelectToggle in batch panel
+- [ ] Batch selection is independent per image
+
+---
+
+### T15: Implement batch metadata PATCH API for arrays
+**Requires:** T14, T11
+**Status:** open
+
+**Done when:**
+- [ ] Batch PATCH endpoint accepts array values for multiselect fields
+- [ ] All selected images are updated with the array value
+
+---
+
+### T16: Handle batch merge operations
+**Requires:** T15
+**Status:** open
+
+**Done when:**
+- [ ] "Replace" mode overwrites existing multiselect values
+- [ ] "Add" mode unions new values with existing values
+- [ ] "Remove" mode subtracts values from existing arrays
+
+---
+
+### T17: Add database migration for dataType column
+**Requires:** T3
+**Status:** open
+
+**Done when:**
+- [ ] Migration adds 'multiselect' as valid dataType enum value
+- [ ] Rollback migration removes the value cleanly
+
+---
+
+### T18: Write unit tests for MultiSelectToggle
+**Requires:** T5, T10
+**Status:** open
+
+**Done when:**
+- [ ] Test: renders all options as buttons
+- [ ] Test: clicking option fires onChange with toggled array
+- [ ] Test: selected options have correct visual class
+
+---
+
+### T19: Write API integration tests for multiselect CRUD
+**Requires:** T11, T12, T13
+**Status:** open
+
+**Done when:**
+- [ ] Test: creating multiselect metadata type via API
+- [ ] Test: saving and reading multiselect values
+- [ ] Test: validation rejects invalid values
+
+---
+
+### T20: Write E2E test for multiselect workflow
+**Requires:** T18, T19, T16
+**Status:** open
+
+**Done when:**
+- [ ] Test: create multiselect field in modal
+- [ ] Test: select multiple values in annotation panel
+- [ ] Test: batch update multiselect values across images
+`
+
+// nonStandardFormatPlan is loaded from testdata/nonstandard_plan.md at test time.
+// It uses YAML frontmatter, numbered steps, mermaid diagrams, prose criteria,
+// and "Depends on:" phrasing — all of which the regex parser cannot handle.
 
 // =============================================================================
 // STATE YAML HELPERS (for review integration tests)
