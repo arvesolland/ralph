@@ -375,6 +375,11 @@ func isRetryableExitError(code int, stderr string) bool {
 		return true
 	}
 
+	// Exit code 137 (SIGKILL) — usually timeout or OOM, worth retrying
+	if code == 137 {
+		return true
+	}
+
 	// Exit code 1 with empty stderr might be transient
 	if code == 1 && stderr == "" {
 		return true

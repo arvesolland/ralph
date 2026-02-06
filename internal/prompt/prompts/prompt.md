@@ -113,6 +113,16 @@ ralph feedback add {{PLAN_DIR}} --scope task:T2 --message "..." --author agent
 ralph feedback resolve {{PLAN_DIR}} <feedback-id>
 ```
 
+### Fallback: Direct State.yaml Editing
+
+If `ralph task` commands fail (timeout, killed, or not found), edit `{{PLAN_DIR}}/state.yaml` directly:
+
+**Complete a task:** Change `status: doing` to `status: done`, add `done_at` timestamp, set all criteria `done: true`.
+
+**Valid statuses:** `todo`, `doing`, `done`, `skipped`
+
+Prefer `ralph task` commands when they work. Use direct editing only as fallback.
+
 ---
 
 ## Blockers

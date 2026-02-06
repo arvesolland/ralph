@@ -172,6 +172,18 @@ func TestIsRetryableExitError(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "exit code 137 SIGKILL",
+			code:   137,
+			stderr: "",
+			want:   true,
+		},
+		{
+			name:   "exit code 137 with stderr",
+			code:   137,
+			stderr: "Killed",
+			want:   true,
+		},
+		{
 			name:   "exit code 2 with empty stderr - not retryable",
 			code:   2,
 			stderr: "",

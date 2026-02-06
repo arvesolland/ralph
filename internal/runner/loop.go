@@ -180,11 +180,27 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 					result.Completed = true
 					return result
 				}
-				// State exists but not all tasks done — write feedback
-				reason := l.stateIncompleteReason()
-				log.Warn("Criteria-gated verification failed: %s", reason)
-				if err := l.writeFeedback(reason); err != nil {
-					log.Error("Failed to write verification feedback: %v", err)
+				// State exists but not all tasks done — fall back to LLM verification
+				log.Warn("State.yaml incomplete, falling back to LLM verification...")
+				verifyCtx, cancel := context.WithTimeout(ctx, VerificationTimeout)
+				verifyResult, verifyErr := Verify(verifyCtx, l.plan, l.runner, l.config.Completion.VerificationModel)
+				cancel()
+
+				if verifyErr != nil {
+					log.Warn("LLM verification failed: %v", verifyErr)
+				} else if verifyResult.Verified {
+					log.Success("Plan verified complete by LLM (state.yaml was stale)")
+					result.Completed = true
+					return result
+				} else {
+					log.Warn("LLM verification failed: %s", verifyResult.Reason)
+					combinedReason := fmt.Sprintf(
+						"LLM verification: %s\n\nstate.yaml also shows: %s\n\n"+
+							"If `ralph task` commands are failing, edit state.yaml directly to update task statuses.",
+						verifyResult.Reason, l.stateIncompleteReason())
+					if err := l.writeFeedback(combinedReason); err != nil {
+						log.Error("Failed to write verification feedback: %v", err)
+					}
 				}
 			} else {
 				// Fallback: LLM verification for plans without state.yaml

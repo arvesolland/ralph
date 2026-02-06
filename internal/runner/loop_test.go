@@ -520,7 +520,7 @@ func TestIterationLoop_CriteriaGatedCompletion(t *testing.T) {
 
 func TestIterationLoop_CriteriaGatedCompletion_NotAllDone(t *testing.T) {
 	// Set up a plan bundle with state.yaml where NOT all tasks are done.
-	// Agent claims complete but criteria gate should reject it.
+	// Agent claims complete, state.yaml incomplete, LLM fallback also says NO.
 	tempDir := t.TempDir()
 	bundlePath := filepath.Join(tempDir, "plans", "current", "test-plan")
 	os.MkdirAll(bundlePath, 0755)
@@ -581,6 +581,9 @@ func TestIterationLoop_CriteriaGatedCompletion_NotAllDone(t *testing.T) {
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
 			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
+			// LLM verification: Verify() does programmatic checkbox check first.
+			// Plan has unchecked boxes so checkCheckboxes() short-circuits before LLM call.
+			// The NO response is returned by the programmatic check, not a runner call.
 			{TextContent: "Still working..."},
 		},
 	}
@@ -598,17 +601,120 @@ func TestIterationLoop_CriteriaGatedCompletion_NotAllDone(t *testing.T) {
 
 	result := loop.Run(context.Background())
 
-	// Should NOT complete — T2 is still todo
+	// Should NOT complete — both state.yaml and LLM verification say incomplete
 	if result.Completed {
-		t.Error("Expected criteria-gated verification to reject incomplete plan")
+		t.Error("Expected verification to reject incomplete plan")
 	}
 	// Should hit max iterations
 	if result.Error == nil || !strings.Contains(result.Error.Error(), "max iterations") {
 		t.Errorf("Expected max iterations error, got: %v", result.Error)
 	}
-	// No LLM verification calls (only iteration calls)
+	// 2 runner calls: iteration + next iteration (LLM verify was short-circuited by checkbox check)
 	if len(mockRunner.RecordedOpts) != 2 {
-		t.Errorf("Expected 2 runner calls (iterations only, no LLM verify), got %d", len(mockRunner.RecordedOpts))
+		t.Errorf("Expected 2 runner calls (iteration + iteration; LLM verify short-circuited), got %d", len(mockRunner.RecordedOpts))
+	}
+
+	// Check that combined feedback was written
+	feedbackPath := plan.FeedbackPath(p)
+	content, err := os.ReadFile(feedbackPath)
+	if err != nil {
+		t.Logf("Could not read feedback file: %v", err)
+	} else if !strings.Contains(string(content), "state.yaml also shows") {
+		t.Errorf("Expected combined feedback with state.yaml info, got: %s", string(content))
+	}
+}
+
+func TestIterationLoop_StateYamlFallbackToLLM(t *testing.T) {
+	// Plan bundle with state.yaml where T2 is still todo, but plan.md has all
+	// checkboxes checked (agent did the work but couldn't update state.yaml).
+	// Agent claims COMPLETE → state.yaml incomplete → LLM fallback says YES → loop completes.
+	tempDir := t.TempDir()
+	bundlePath := filepath.Join(tempDir, "plans", "current", "test-plan")
+	os.MkdirAll(bundlePath, 0755)
+
+	planPath := filepath.Join(bundlePath, "plan.md")
+	planContent := `# Plan: Test
+**Status:** complete
+## Tasks
+### T1: Do something
+**Status:** complete
+**Done when:**
+- [x] First thing
+### T2: Do another thing
+**Status:** complete
+**Done when:**
+- [x] Second thing
+`
+	os.WriteFile(planPath, []byte(planContent), 0644)
+
+	// Create state.yaml with T1 done, T2 still todo (stale)
+	now := time.Now()
+	st := &state.PlanState{
+		ID:     "test-plan",
+		Title:  "Test",
+		Status: state.PlanStatusActive,
+		Tasks: []state.TaskState{
+			{
+				ID:     "T1",
+				Title:  "Do something",
+				Status: state.TaskStatusDone,
+				Criteria: []state.Criterion{
+					{Text: "First thing", Done: true, DoneAt: &now},
+				},
+			},
+			{
+				ID:     "T2",
+				Title:  "Do another thing",
+				Status: state.TaskStatusTodo,
+				Criteria: []state.Criterion{
+					{Text: "Second thing", Done: false},
+				},
+			},
+		},
+	}
+	if err := state.SaveState(st, bundlePath); err != nil {
+		t.Fatalf("Failed to save state: %v", err)
+	}
+
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	p, err := plan.Load(bundlePath)
+	if err != nil {
+		t.Fatalf("Failed to load plan: %v", err)
+	}
+
+	ctx := NewContext(p, "main", 10, tempDir)
+
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
+			{TextContent: "YES"}, // LLM verification fallback says complete
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		Plan:             p,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	// Should complete — LLM overrides stale state.yaml
+	if !result.Completed {
+		t.Errorf("Expected LLM fallback to verify completion, error: %v", result.Error)
+	}
+	if result.Iterations != 1 {
+		t.Errorf("Expected 1 iteration, got %d", result.Iterations)
+	}
+	// 2 runner calls: iteration + LLM verify fallback
+	if len(mockRunner.RecordedOpts) != 2 {
+		t.Errorf("Expected 2 runner calls (iteration + LLM verify), got %d", len(mockRunner.RecordedOpts))
 	}
 }
 
