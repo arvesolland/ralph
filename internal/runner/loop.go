@@ -126,7 +126,7 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 	result := &LoopResult{}
 
 	// Auto-init state.yaml if plan is a bundle and state.yaml doesn't exist yet.
-	l.autoInitState()
+	l.autoInitState(ctx)
 
 	for !l.ctx.IsMaxReached() {
 		// Check for context cancellation
@@ -430,8 +430,9 @@ func (l *IterationLoop) resolveBundleDir() string {
 }
 
 // autoInitState generates state.yaml from plan.md if the plan is a bundle
-// and state.yaml doesn't exist yet.
-func (l *IterationLoop) autoInitState() {
+// and state.yaml doesn't exist yet. After regex-based init, it runs an LLM
+// review loop to fix any gaps.
+func (l *IterationLoop) autoInitState(ctx context.Context) {
 	bundleDir := l.resolveBundleDir()
 	if bundleDir == "" {
 		return
@@ -461,6 +462,41 @@ func (l *IterationLoop) autoInitState() {
 	}
 
 	log.Info("Auto-generated state.yaml with %d tasks", len(st.Tasks))
+
+	// Run LLM review loop to fix gaps in regex-parsed state
+	reviewCfg := state.ReviewConfig{
+		PromptBuilder: l.promptBuilder,
+		Model:         l.config.Completion.VerificationModel,
+		MaxAttempts:   5,
+	}
+	adapter := &reviewRunnerAdapter{runner: l.runner}
+	result, reviewErr := state.ReviewState(ctx, adapter, l.plan.Content, bundleDir, reviewCfg)
+	if reviewErr != nil {
+		log.Warn("State review failed: %v (continuing with regex-parsed state)", reviewErr)
+		return
+	}
+	log.Info("State review: %d iterations, aligned=%v, changes=%d",
+		result.Iterations, result.Aligned, result.Changes)
+}
+
+// reviewRunnerAdapter adapts runner.Runner to state.ReviewRunner.
+type reviewRunnerAdapter struct {
+	runner Runner
+}
+
+func (a *reviewRunnerAdapter) Run(ctx context.Context, prompt string, opts state.ReviewRunnerOptions) (*state.ReviewRunnerResult, error) {
+	runnerOpts := Options{
+		Model:        opts.Model,
+		Print:        opts.Print,
+		OutputFormat: opts.OutputFormat,
+	}
+	result, err := a.runner.Run(ctx, prompt, runnerOpts)
+	if err != nil {
+		return nil, err
+	}
+	return &state.ReviewRunnerResult{
+		TextContent: result.TextContent,
+	}, nil
 }
 
 // isStateComplete returns true if the plan's state.yaml indicates all tasks are done or skipped.
