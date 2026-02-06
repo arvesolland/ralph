@@ -45,6 +45,8 @@ func TestIsAligned(t *testing.T) {
 		{"exact ALIGNED", "ALIGNED", true},
 		{"ALIGNED with whitespace", "  ALIGNED  \n", true},
 		{"ALIGNED on its own line", "Some preamble\nALIGNED\nMore text", true},
+		{"ALIGNED with backticks", "`ALIGNED`", true},
+		{"ALIGNED with backticks and whitespace", "  `ALIGNED`  \n", true},
 		{"not aligned - yaml response", "```yaml\ntasks: []\n```", false},
 		{"not aligned - empty", "", false},
 		{"not aligned - partial", "NOT ALIGNED", false},

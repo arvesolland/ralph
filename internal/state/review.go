@@ -44,7 +44,7 @@ type ReviewResult struct {
 }
 
 // DefaultReviewModel is the default model for state review.
-const DefaultReviewModel = "claude-opus-4-5-latest"
+const DefaultReviewModel = "opus"
 
 // yamlFenceRegex extracts YAML content from markdown code fences.
 var yamlFenceRegex = regexp.MustCompile("(?s)```ya?ml\n(.*?)```")
@@ -188,11 +188,15 @@ func buildReviewPromptInline(planContent, stateYAML, validationError string) str
 // isAligned checks if the LLM response indicates the state is aligned.
 func isAligned(response string) bool {
 	trimmed := strings.TrimSpace(response)
-	// Check for exact match or line starting with ALIGNED
+	// Strip backticks — LLMs sometimes wrap the response in `ALIGNED`
+	trimmed = strings.Trim(trimmed, "`")
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "ALIGNED" {
 		return true
 	}
 	for _, line := range strings.Split(trimmed, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.Trim(line, "`")
 		line = strings.TrimSpace(line)
 		if line == "ALIGNED" {
 			return true

@@ -24,7 +24,7 @@ const VerificationTimeout = 120 * time.Second
 
 // DefaultVerificationModel is the default model used for verification.
 // Using Opus for better accuracy on complex plans.
-const DefaultVerificationModel = "claude-opus-4-5-latest"
+const DefaultVerificationModel = "opus"
 
 // stopKeywords are phrases in human feedback that indicate forced completion.
 var stopKeywords = []string{
