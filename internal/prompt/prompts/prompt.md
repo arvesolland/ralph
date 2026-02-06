@@ -16,16 +16,25 @@ You work in an iteration loop. Each iteration, you complete ONE task from the pl
 
 ---
 
+## Your Working Context
+
+- **Iteration:** {{ITERATION}} / {{MAX_ITERATIONS}}
+- **Branch:** `{{FEATURE_BRANCH}}` (base: `{{BASE_BRANCH}}`)
+- **Plan bundle:** `{{PLAN_DIR}}/`
+  - `plan.md` — Tasks, acceptance criteria, dependencies
+  - `progress.md` — What previous iterations did, gotchas, next steps
+  - `feedback.md` — Human input and blocker responses
+  - `state.yaml` — Structured task state (if present)
+
 ## Setup (Every Iteration)
 
-Read these files in order before doing any work:
+Read these files before doing any work:
 
 1. **CLAUDE.md** — Project patterns, commands, architecture
 2. **specs/INDEX.md** — Feature landscape (if exists; don't read individual specs unless plan references them)
-3. **.ralph/context.json** — Your plan file path, branch names, iteration number
-4. **Plan file** — Tasks, acceptance criteria, dependencies
-5. **Progress file** — What previous iterations did, gotchas, what to do next (same dir as plan: `progress.md` for bundles, `<name>.progress.md` for flat files). Create with header if missing.
-6. **Feedback** — Check `{{CONTEXT_JSON}}` → `feedback.unresolved` (structured) or `feedback.md` (legacy)
+3. **`{{PLAN_DIR}}/plan.md`** — Your plan
+4. **`{{PLAN_DIR}}/progress.md`** — What previous iterations did (create with header if missing)
+5. **Feedback** — Check `{{CONTEXT_JSON}}` → `feedback.unresolved` (structured) or `{{PLAN_DIR}}/feedback.md` (legacy)
 
 If `{{CONTEXT_JSON}}` is present below, it contains structured state with task statuses, selection guidance, and progress stats. Use `selection.suggested_next` to pick your task.
 
@@ -39,7 +48,7 @@ If `{{CONTEXT_JSON}}` is present below, it contains structured state with task s
 
 ### 2. Claim it (structured plans only)
 ```bash
-ralph task claim <plan-path> <task-id>
+ralph task claim {{PLAN_DIR}} <task-id>
 ```
 
 ### 3. Implement it
@@ -56,8 +65,8 @@ Fix failures before proceeding. Do not commit broken code.
 ### 5. Update state
 **Structured plans:**
 ```bash
-ralph task criterion check <plan-path> <task-id> <criterion-index>  # for each verified criterion
-ralph task complete <plan-path> <task-id> --commits <sha>
+ralph task criterion check {{PLAN_DIR}} <task-id> <criterion-index>  # for each verified criterion
+ralph task complete {{PLAN_DIR}} <task-id> --commits <sha>
 ```
 
 **Legacy plans:** Check off subtasks `[ ]` → `[x]`, set `**Status:** complete` when all "Done when" criteria verified.
@@ -94,14 +103,14 @@ Only when ALL tasks are done/skipped:
 ## Task Commands Reference (Structured Plans)
 
 ```bash
-ralph task claim <plan> <task-id>                              # Start working
-ralph task criterion check <plan> <task-id> <index>            # Mark criterion verified (1-based)
-ralph task criterion uncheck <plan> <task-id> <index>          # Undo mistake
-ralph task complete <plan> <task-id> --commits <sha1,sha2>     # Finish task (all criteria must be checked)
-ralph task skip <plan> <task-id> --reason "reason"             # Skip task
-ralph task add <plan> --title "..." --requires T2 --criteria "a;b"  # Add discovered work
-ralph feedback add <plan> --scope task:T2 --message "..." --author agent
-ralph feedback resolve <plan> <feedback-id>
+ralph task claim {{PLAN_DIR}} <task-id>                              # Start working
+ralph task criterion check {{PLAN_DIR}} <task-id> <index>            # Mark criterion verified (1-based)
+ralph task criterion uncheck {{PLAN_DIR}} <task-id> <index>          # Undo mistake
+ralph task complete {{PLAN_DIR}} <task-id> --commits <sha1,sha2>     # Finish task (all criteria must be checked)
+ralph task skip {{PLAN_DIR}} <task-id> --reason "reason"             # Skip task
+ralph task add {{PLAN_DIR}} --title "..." --requires T2 --criteria "a;b"  # Add discovered work
+ralph feedback add {{PLAN_DIR}} --scope task:T2 --message "..." --author agent
+ralph feedback resolve {{PLAN_DIR}} <feedback-id>
 ```
 
 ---
