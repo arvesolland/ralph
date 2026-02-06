@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // testTimeout is the maximum time for a single test
@@ -1100,5 +1102,347 @@ Integration test: verify Slack notifications are sent.
 
 	// Log success
 	t.Logf("SUCCESS: Slack notifications working - %d posts, %d updates", len(postMessages), len(updates))
+}
+
+// =============================================================================
+// TEST: State Review — Standard Format (T1/T2 headings)
+// =============================================================================
+
+func TestStateReview_StandardFormat(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ws := setupWorkspace(t)
+	defer ws.KeepOnFailure()
+	defer ws.Cleanup()
+
+	// Standard plan format: ### T1: Title, **Requires:**, **Done when:** checkboxes.
+	// The regex parser should handle this well, and the LLM review should confirm alignment.
+	ws.CreatePlanBundle("standard-plan", `# Plan: Standard Format Test
+
+## Context
+A plan using the standard T1/T2 heading format to test that the regex parser
+correctly populates state.yaml and the LLM review confirms alignment.
+
+## Tasks
+
+### T1: Set up database schema
+**Requires:** —
+**Status:** open
+
+**Done when:**
+- [ ] Migration file exists for users table
+- [ ] Migration file exists for sessions table
+
+---
+
+### T2: Implement user registration endpoint
+**Requires:** T1
+**Status:** open
+
+**Done when:**
+- [ ] POST /api/register endpoint exists
+- [ ] Validates email and password
+- [ ] Returns JWT token on success
+
+---
+
+### T3: Implement login endpoint
+**Requires:** T1
+**Status:** open
+
+**Done when:**
+- [ ] POST /api/login endpoint exists
+- [ ] Returns JWT token for valid credentials
+- [ ] Returns 401 for invalid credentials
+
+---
+
+### T4: Add authentication middleware
+**Requires:** T2, T3
+**Status:** open
+
+**Done when:**
+- [ ] Middleware extracts JWT from Authorization header
+- [ ] Protected routes return 401 without valid token
+`)
+
+	// Commit the plan so ralph can work with it
+	ws.Git(t, "add", "-A")
+	ws.Git(t, "commit", "-q", "-m", "Add standard format plan")
+
+	// Run ralph plan review
+	output := ws.RunRalph(t, "plan", "review", "plans/pending/standard-plan", "-v")
+	t.Logf("Review output:\n%s", output)
+
+	// Load and verify state.yaml
+	stateYAML := ws.readStateYAML(t, "plans/pending/standard-plan")
+
+	// Verify all 4 tasks are present
+	if len(stateYAML.Tasks) < 4 {
+		t.Errorf("Expected at least 4 tasks, got %d", len(stateYAML.Tasks))
+	}
+
+	// Build task lookup
+	taskByID := make(map[string]*stateTask)
+	for i := range stateYAML.Tasks {
+		taskByID[stateYAML.Tasks[i].ID] = &stateYAML.Tasks[i]
+	}
+
+	// Verify task IDs exist
+	for _, id := range []string{"T1", "T2", "T3", "T4"} {
+		if _, ok := taskByID[id]; !ok {
+			t.Errorf("Missing task %s in state.yaml", id)
+		}
+	}
+
+	// Verify T2 depends on T1
+	if t2, ok := taskByID["T2"]; ok {
+		if !containsString(t2.Requires, "T1") {
+			t.Errorf("T2 should require T1, got requires: %v", t2.Requires)
+		}
+	}
+
+	// Verify T3 depends on T1
+	if t3, ok := taskByID["T3"]; ok {
+		if !containsString(t3.Requires, "T1") {
+			t.Errorf("T3 should require T1, got requires: %v", t3.Requires)
+		}
+	}
+
+	// Verify T4 depends on T2 and T3
+	if t4, ok := taskByID["T4"]; ok {
+		if !containsString(t4.Requires, "T2") || !containsString(t4.Requires, "T3") {
+			t.Errorf("T4 should require T2 and T3, got requires: %v", t4.Requires)
+		}
+	}
+
+	// Verify T1 has criteria (should have at least 2)
+	if t1, ok := taskByID["T1"]; ok {
+		if len(t1.Criteria) < 2 {
+			t.Errorf("T1 should have at least 2 criteria, got %d", len(t1.Criteria))
+		}
+	}
+
+	// Verify T4 has criteria
+	if t4, ok := taskByID["T4"]; ok {
+		if len(t4.Criteria) < 2 {
+			t.Errorf("T4 should have at least 2 criteria, got %d", len(t4.Criteria))
+		}
+	}
+
+	// All tasks should be todo
+	for _, task := range stateYAML.Tasks {
+		if task.Status != "todo" {
+			t.Errorf("Task %s should be 'todo', got '%s'", task.ID, task.Status)
+		}
+	}
+
+	t.Logf("SUCCESS: Standard format plan correctly populated state.yaml with %d tasks", len(stateYAML.Tasks))
+}
+
+// =============================================================================
+// TEST: State Review — Non-Standard Format (no T1/T2 headings)
+// =============================================================================
+
+func TestStateReview_NonStandardFormat(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ws := setupWorkspace(t)
+	defer ws.KeepOnFailure()
+	defer ws.Cleanup()
+
+	// Non-standard plan format: numbered list tasks, freeform criteria,
+	// no ### T1: headings, uses "After:" instead of "Requires:", etc.
+	// The regex parser will fail to extract tasks from this.
+	// The LLM review should correctly identify and populate all tasks.
+	ws.CreatePlanBundle("freeform-plan", `# Plan: Build a CLI Todo App
+
+## Overview
+Build a simple command-line todo application in Go that supports adding,
+listing, completing, and deleting tasks. Data persists to a JSON file.
+
+## Implementation Steps
+
+### Phase 1: Core Data Layer
+
+1. **Define the data model**
+   Create a Task struct with fields: ID (int), Title (string), Done (bool), CreatedAt (time).
+   Create a TodoList struct that holds a slice of Tasks.
+   Success criteria:
+   - types.go file exists with Task and TodoList structs
+   - Structs have JSON tags for serialization
+
+2. **Implement JSON persistence**
+   After: Step 1
+   Read and write the todo list to ~/.todos.json.
+   Success criteria:
+   - Can save a TodoList to disk as JSON
+   - Can load a TodoList from disk
+   - Handles missing file gracefully (returns empty list)
+
+### Phase 2: CLI Commands
+
+3. **Add command**
+   After: Step 2
+   Implement "todo add <title>" that creates a new task.
+   The task gets an auto-incremented ID.
+   Acceptance:
+   - Running "todo add Buy milk" creates a task
+   - Task is persisted to JSON file
+   - Prints confirmation with task ID
+
+4. **List command**
+   After: Step 2
+   Implement "todo list" that shows all tasks.
+   Acceptance:
+   - Shows task ID, title, and done status
+   - Marks done tasks with [x] and pending with [ ]
+   - Shows "No tasks" when list is empty
+
+5. **Complete command**
+   After: Steps 3 and 4
+   Implement "todo done <id>" that marks a task as complete.
+   Acceptance:
+   - Marks the specified task as done
+   - Prints confirmation
+   - Returns error for invalid ID
+
+6. **Delete command**
+   After: Step 5
+   Implement "todo delete <id>" that removes a task.
+   Acceptance:
+   - Removes the task from the list
+   - Prints confirmation
+   - Returns error for invalid ID
+
+## Verification
+Run all commands in sequence to verify the app works end-to-end.
+`)
+
+	// Commit the plan
+	ws.Git(t, "add", "-A")
+	ws.Git(t, "commit", "-q", "-m", "Add freeform plan")
+
+	// Run ralph plan review
+	output := ws.RunRalph(t, "plan", "review", "plans/pending/freeform-plan", "-v")
+	t.Logf("Review output:\n%s", output)
+
+	// Load and verify state.yaml
+	stateYAML := ws.readStateYAML(t, "plans/pending/freeform-plan")
+
+	// The plan has 6 logical tasks (steps 1-6).
+	// The LLM should have identified all of them.
+	if len(stateYAML.Tasks) < 6 {
+		t.Errorf("Expected at least 6 tasks from freeform plan, got %d", len(stateYAML.Tasks))
+		for i, task := range stateYAML.Tasks {
+			t.Logf("  Task %d: ID=%s Title=%s Requires=%v Criteria=%d",
+				i, task.ID, task.Title, task.Requires, len(task.Criteria))
+		}
+	}
+
+	// Verify tasks have titles (non-empty)
+	for _, task := range stateYAML.Tasks {
+		if task.Title == "" {
+			t.Errorf("Task %s has empty title", task.ID)
+		}
+	}
+
+	// Verify at least some tasks have criteria (the plan specifies acceptance criteria for each)
+	tasksWithCriteria := 0
+	for _, task := range stateYAML.Tasks {
+		if len(task.Criteria) > 0 {
+			tasksWithCriteria++
+		}
+	}
+	if tasksWithCriteria < 3 {
+		t.Errorf("Expected at least 3 tasks with criteria, got %d", tasksWithCriteria)
+	}
+
+	// Verify dependencies exist — the plan has clear ordering
+	// At least some tasks should have dependencies (steps 2+ depend on earlier steps)
+	tasksWithDeps := 0
+	for _, task := range stateYAML.Tasks {
+		if len(task.Requires) > 0 {
+			tasksWithDeps++
+		}
+	}
+	if tasksWithDeps < 3 {
+		t.Errorf("Expected at least 3 tasks with dependencies, got %d", tasksWithDeps)
+	}
+
+	// All tasks should be todo status
+	for _, task := range stateYAML.Tasks {
+		if task.Status != "todo" {
+			t.Errorf("Task %s should be 'todo', got '%s'", task.ID, task.Status)
+		}
+	}
+
+	// Log the full state for debugging
+	t.Logf("Freeform plan state.yaml (%d tasks):", len(stateYAML.Tasks))
+	for _, task := range stateYAML.Tasks {
+		t.Logf("  %s: %s (requires: %v, criteria: %d)",
+			task.ID, task.Title, task.Requires, len(task.Criteria))
+	}
+
+	t.Logf("SUCCESS: Non-standard format plan correctly populated state.yaml with %d tasks", len(stateYAML.Tasks))
+}
+
+// =============================================================================
+// STATE YAML HELPERS (for review integration tests)
+// =============================================================================
+
+// stateYAMLFile represents the parsed state.yaml for assertions.
+type stateYAMLFile struct {
+	ID     string      `yaml:"id"`
+	Title  string      `yaml:"title"`
+	Status string      `yaml:"status"`
+	Tasks  []stateTask `yaml:"tasks"`
+}
+
+type stateTask struct {
+	ID       string          `yaml:"id"`
+	Title    string          `yaml:"title"`
+	Status   string          `yaml:"status"`
+	Requires []string        `yaml:"requires"`
+	Criteria []stateCriterion `yaml:"criteria"`
+}
+
+type stateCriterion struct {
+	Text string `yaml:"text"`
+	Done bool   `yaml:"done"`
+}
+
+// readStateYAML loads and parses state.yaml from a plan bundle path (relative to workspace).
+func (ws *Workspace) readStateYAML(t *testing.T, bundlePath string) stateYAMLFile {
+	t.Helper()
+
+	statePath := filepath.Join(ws.Path, bundlePath, "state.yaml")
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("Failed to read state.yaml at %s: %v", statePath, err)
+	}
+
+	t.Logf("state.yaml content:\n%s", string(data))
+
+	var state stateYAMLFile
+	if err := yaml.Unmarshal(data, &state); err != nil {
+		t.Fatalf("Failed to parse state.yaml: %v", err)
+	}
+
+	return state
+}
+
+// containsString checks if a slice contains a specific string.
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
 }
 
