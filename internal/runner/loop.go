@@ -408,8 +408,8 @@ func (l *IterationLoop) commitChanges() error {
 		return nil
 	}
 
-	// Stage all changes
-	allFiles := append(append(status.Staged, status.Unstaged...), status.Untracked...)
+	// Stage tracked changes only (not untracked — they may be gitignored)
+	allFiles := append(status.Staged, status.Unstaged...)
 	if err := l.git.Add(allFiles...); err != nil {
 		return fmt.Errorf("staging changes: %w", err)
 	}

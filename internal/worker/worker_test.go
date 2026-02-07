@@ -1040,6 +1040,114 @@ func TestWorker_SendNotifications_NilConfig(t *testing.T) {
 	}
 }
 
+func TestWorker_LoadOrCreateContext_StaleContext(t *testing.T) {
+	// When a worktree is reused with a different plan, the existing context.json
+	// should be detected as stale and recreated.
+	tmpDir := t.TempDir()
+
+	cfg := config.Defaults()
+	cfg.Git.BaseBranch = "main"
+
+	w := &Worker{
+		config:        cfg,
+		maxIterations: 10,
+	}
+
+	// Create a context.json for "old-plan"
+	ralphDir := filepath.Join(tmpDir, ".ralph")
+	os.MkdirAll(ralphDir, 0755)
+	ctxPath := filepath.Join(ralphDir, "context.json")
+
+	oldCtx := &runner.Context{
+		PlanFile:      "plans/current/old-plan/plan.md",
+		PlanDir:       "plans/current/old-plan",
+		FeatureBranch: "feat/old-plan",
+		BaseBranch:    "main",
+		Iteration:     5,
+		MaxIterations: 10,
+	}
+	if err := runner.SaveContext(oldCtx, ctxPath); err != nil {
+		t.Fatalf("Failed to save old context: %v", err)
+	}
+
+	// Create a new plan bundle for "new-plan"
+	bundlePath := filepath.Join(tmpDir, "plans", "current", "new-plan")
+	os.MkdirAll(bundlePath, 0755)
+	planPath := filepath.Join(bundlePath, "plan.md")
+	os.WriteFile(planPath, []byte("# Plan: New\n## Tasks\n- [ ] Task 1\n"), 0644)
+
+	p, err := plan.Load(bundlePath)
+	if err != nil {
+		t.Fatalf("Failed to load plan: %v", err)
+	}
+
+	// loadOrCreateContext should detect stale context and create a fresh one
+	execCtx, err := w.loadOrCreateContext(p, tmpDir)
+	if err != nil {
+		t.Fatalf("loadOrCreateContext() error = %v", err)
+	}
+
+	// Should be fresh context (iteration 1, matching new-plan)
+	if execCtx.Iteration != 1 {
+		t.Errorf("Iteration = %d, want 1 (fresh context)", execCtx.Iteration)
+	}
+	if filepath.Base(execCtx.PlanDir) != "new-plan" {
+		t.Errorf("PlanDir base = %q, want %q", filepath.Base(execCtx.PlanDir), "new-plan")
+	}
+}
+
+func TestWorker_LoadOrCreateContext_MatchingContext(t *testing.T) {
+	// When context.json matches the current plan, it should be reused.
+	tmpDir := t.TempDir()
+
+	cfg := config.Defaults()
+	cfg.Git.BaseBranch = "main"
+
+	w := &Worker{
+		config:        cfg,
+		maxIterations: 10,
+	}
+
+	// Create a context.json for "my-plan" at iteration 3
+	ralphDir := filepath.Join(tmpDir, ".ralph")
+	os.MkdirAll(ralphDir, 0755)
+	ctxPath := filepath.Join(ralphDir, "context.json")
+
+	existingCtx := &runner.Context{
+		PlanFile:      "plans/current/my-plan/plan.md",
+		PlanDir:       "plans/current/my-plan",
+		FeatureBranch: "feat/my-plan",
+		BaseBranch:    "main",
+		Iteration:     3,
+		MaxIterations: 10,
+	}
+	if err := runner.SaveContext(existingCtx, ctxPath); err != nil {
+		t.Fatalf("Failed to save context: %v", err)
+	}
+
+	// Create a plan bundle with the same name
+	bundlePath := filepath.Join(tmpDir, "plans", "current", "my-plan")
+	os.MkdirAll(bundlePath, 0755)
+	planPath := filepath.Join(bundlePath, "plan.md")
+	os.WriteFile(planPath, []byte("# Plan: My\n## Tasks\n- [ ] Task 1\n"), 0644)
+
+	p, err := plan.Load(bundlePath)
+	if err != nil {
+		t.Fatalf("Failed to load plan: %v", err)
+	}
+
+	// loadOrCreateContext should reuse the existing context
+	execCtx, err := w.loadOrCreateContext(p, tmpDir)
+	if err != nil {
+		t.Fatalf("loadOrCreateContext() error = %v", err)
+	}
+
+	// Should reuse existing context (iteration 3)
+	if execCtx.Iteration != 3 {
+		t.Errorf("Iteration = %d, want 3 (reused context)", execCtx.Iteration)
+	}
+}
+
 func TestWorker_SetupNotifications(t *testing.T) {
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, ".ralph")

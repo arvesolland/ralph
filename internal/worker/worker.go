@@ -557,12 +557,18 @@ func (w *Worker) loadOrCreateContext(p *plan.Plan, worktreePath string) (*runner
 	// Try to load existing context
 	execCtx, err := runner.LoadContext(ctxPath)
 	if err == nil {
-		log.Debug("Loaded existing context at iteration %d", execCtx.Iteration)
-		return execCtx, nil
-	}
-
-	// Check if it's a "not exist" error (using errors.Is to handle wrapped errors)
-	if !errors.Is(err, os.ErrNotExist) {
+		// Validate context matches current plan (worktree may be reused)
+		if filepath.Base(execCtx.PlanDir) != p.Name {
+			log.Warn("Stale context.json for plan '%s', recreating for '%s'",
+				filepath.Base(execCtx.PlanDir), p.Name)
+			os.Remove(ctxPath)
+			// fall through to create new context
+		} else {
+			log.Debug("Loaded existing context at iteration %d", execCtx.Iteration)
+			return execCtx, nil
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		// Real error (not "file doesn't exist")
 		return nil, fmt.Errorf("loading context: %w", err)
 	}
 
