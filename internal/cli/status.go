@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arvesolland/ralph/internal/plan"
+	"github.com/arvesolland/ralph/internal/config"
+	"github.com/arvesolland/ralph/internal/log"
 	"github.com/spf13/cobra"
 )
 
@@ -15,18 +16,19 @@ const (
 	statusColorGreen  = "\033[32m"
 	statusColorYellow = "\033[33m"
 	statusColorGray   = "\033[90m"
+	statusColorCyan   = "\033[36m"
 )
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Display queue status and worktree information",
-	Long: `Display the current state of the plan queue and worktrees.
+	Short: "Display project status from ATM",
+	Long: `Display the current project status from the ATM task management service.
 
 Shows:
-- Count of plans in each queue (pending, current, complete)
-- Current plan name and branch if one is active
-- List of pending plans by name
-- Worktree status (count, paths)`,
+- Project information
+- Active plan (if any) with task statistics
+- Available and blocked tasks
+- Recent progress entries`,
 	RunE: runStatus,
 }
 
@@ -35,88 +37,123 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	// Find plans directory (relative to current working directory)
-	plansDir := "plans"
-
-	// Check if plans directory exists
-	if _, err := os.Stat(plansDir); os.IsNotExist(err) {
-		fmt.Println("No plans directory found. Run 'ralph init' to initialize.")
-		return nil
+	// Load configuration
+	cfg, err := config.LoadWithDefaults(GetConfigPath())
+	if err != nil {
+		log.Warn("Failed to load config, using defaults: %v", err)
+		cfg = config.Defaults()
 	}
 
-	queue := plan.NewQueue(plansDir)
-
-	// Get current plan directly to access tasks for progress
-	currentPlan, err := queue.Current()
-	if err != nil {
-		return fmt.Errorf("getting current plan: %w", err)
+	// Determine project slug
+	projectSlug := cfg.ATM.ProjectSlug
+	if projectSlug == "" {
+		return fmt.Errorf("atm.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
 	}
 
-	// Get pending plans directly to access tasks for progress
-	pendingPlans, err := queue.Pending()
-	if err != nil {
-		return fmt.Errorf("getting pending plans: %w", err)
-	}
+	// Create ATM client
+	atmClient := cfg.ATMClient()
 
-	// Get complete count
-	status, err := queue.Status()
+	// Fetch project context
+	agentCtx, err := atmClient.ProjectContext(projectSlug)
 	if err != nil {
-		return fmt.Errorf("getting queue status: %w", err)
+		return fmt.Errorf("fetching project context: %w", err)
 	}
 
 	// Determine if we should use colors
 	useColor := !noColor && isTerminalFd(os.Stdout)
 
-	// Print header
-	fmt.Println("Queue Status")
-	fmt.Println("============")
-	fmt.Println()
-
-	// Current plan (green) with progress
-	if currentPlan != nil {
-		progress := plan.CalculateProgress(currentPlan.Tasks)
-		if useColor {
-			fmt.Printf("%sCurrent:%s %s (branch: %s)\n",
-				statusColorGreen, statusColorReset,
-				currentPlan.Name, currentPlan.Branch)
-		} else {
-			fmt.Printf("Current: %s (branch: %s)\n",
-				currentPlan.Name, currentPlan.Branch)
-		}
-		// Progress bar and task count
-		fmt.Printf("         %s %d%%\n", progress.Bar(20), progress.Percent)
-		fmt.Printf("         Tasks: %d/%d completed\n", progress.Completed, progress.Total)
-	} else {
-		if useColor {
-			fmt.Printf("%sCurrent:%s (none)\n", statusColorGray, statusColorReset)
-		} else {
-			fmt.Println("Current: (none)")
-		}
-	}
-	fmt.Println()
-
-	// Pending plans (yellow) with progress
+	// Print project info
 	if useColor {
-		fmt.Printf("%sPending:%s %d plan(s)\n", statusColorYellow, statusColorReset, len(pendingPlans))
+		fmt.Printf("%sProject:%s %s (%s)\n", statusColorCyan, statusColorReset, agentCtx.Project.Name, agentCtx.Project.Slug)
 	} else {
-		fmt.Printf("Pending: %d plan(s)\n", len(pendingPlans))
+		fmt.Printf("Project: %s (%s)\n", agentCtx.Project.Name, agentCtx.Project.Slug)
 	}
-	if len(pendingPlans) > 0 {
-		for _, p := range pendingPlans {
-			progress := plan.CalculateProgress(p.Tasks)
-			fmt.Printf("  - %s %s\n", p.Name, progress.String())
+	if agentCtx.Project.Description != "" {
+		fmt.Printf("  %s\n", agentCtx.Project.Description)
+	}
+	fmt.Println()
+
+	// Print active plan
+	if agentCtx.Plan.ID > 0 {
+		if useColor {
+			fmt.Printf("%sActive Plan:%s %s (ID: %d, status: %s)\n",
+				statusColorGreen, statusColorReset,
+				agentCtx.Plan.Title, agentCtx.Plan.ID, agentCtx.Plan.Status)
+		} else {
+			fmt.Printf("Active Plan: %s (ID: %d, status: %s)\n",
+				agentCtx.Plan.Title, agentCtx.Plan.ID, agentCtx.Plan.Status)
+		}
+		if agentCtx.Plan.FeatureBranch != "" {
+			fmt.Printf("  Branch: %s\n", agentCtx.Plan.FeatureBranch)
+		}
+
+		// Task stats
+		stats := agentCtx.Stats
+		if stats.TotalTasks > 0 {
+			completed := stats.Done + stats.Skipped
+			pct := 0
+			if stats.TotalTasks > 0 {
+				pct = completed * 100 / stats.TotalTasks
+			}
+			fmt.Printf("  Tasks: %d/%d completed (%d%%)\n", completed, stats.TotalTasks, pct)
+			fmt.Printf("    Done: %d  Doing: %d  Claimed: %d  Blocked: %d  Available: %d  Skipped: %d\n",
+				stats.Done, stats.Doing, stats.Claimed, stats.Blocked, stats.Available, stats.Skipped)
+		}
+	} else {
+		if useColor {
+			fmt.Printf("%sActive Plan:%s (none)\n", statusColorGray, statusColorReset)
+		} else {
+			fmt.Println("Active Plan: (none)")
 		}
 	}
 	fmt.Println()
 
-	// Complete count
-	fmt.Printf("Complete: %d plan(s)\n", status.CompleteCount)
-	fmt.Println()
+	// Available tasks
+	if len(agentCtx.AvailableTasks) > 0 {
+		if useColor {
+			fmt.Printf("%sAvailable Tasks:%s %d\n", statusColorYellow, statusColorReset, len(agentCtx.AvailableTasks))
+		} else {
+			fmt.Printf("Available Tasks: %d\n", len(agentCtx.AvailableTasks))
+		}
+		for _, task := range agentCtx.AvailableTasks {
+			fmt.Printf("  - [%d] %s\n", task.ID, task.Title)
+		}
+		fmt.Println()
+	}
 
-	// Worktree status (placeholder until worktree module is implemented)
-	fmt.Println("Worktrees")
-	fmt.Println("---------")
-	fmt.Printf("  (worktree status not yet implemented)\n")
+	// Blocked tasks
+	if len(agentCtx.BlockedTasks) > 0 {
+		fmt.Printf("Blocked Tasks: %d\n", len(agentCtx.BlockedTasks))
+		for _, task := range agentCtx.BlockedTasks {
+			fmt.Printf("  - [%d] %s\n", task.ID, task.Title)
+		}
+		fmt.Println()
+	}
+
+	// Recent progress
+	if len(agentCtx.RecentProgress) > 0 {
+		fmt.Println("Recent Progress:")
+		limit := len(agentCtx.RecentProgress)
+		if limit > 5 {
+			limit = 5
+		}
+		for _, p := range agentCtx.RecentProgress[:limit] {
+			fmt.Printf("  [%s] %s: %s\n", p.CreatedAt, p.Author, truncate(p.Body, 80))
+		}
+		fmt.Println()
+	}
+
+	// Recent feedback
+	if len(agentCtx.RecentFeedback) > 0 {
+		fmt.Println("Recent Feedback:")
+		limit := len(agentCtx.RecentFeedback)
+		if limit > 5 {
+			limit = 5
+		}
+		for _, f := range agentCtx.RecentFeedback[:limit] {
+			fmt.Printf("  [%s] %s: %s\n", f.CreatedAt, f.Author, truncate(f.Body, 80))
+		}
+	}
 
 	return nil
 }
@@ -128,4 +165,12 @@ func isTerminalFd(f *os.File) bool {
 		return false
 	}
 	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+// truncate shortens a string to maxLen, adding "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }

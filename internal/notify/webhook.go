@@ -12,9 +12,22 @@ import (
 
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/log"
-	"github.com/arvesolland/ralph/internal/plan"
-	"github.com/arvesolland/ralph/internal/runner"
 )
+
+// PlanInfo holds plan details needed for notifications.
+type PlanInfo struct {
+	Name   string
+	Branch string
+}
+
+// Blocker holds blocker details needed for notifications.
+type Blocker struct {
+	Content     string
+	Description string
+	Action      string
+	Resume      string
+	Hash        string
+}
 
 // ProgressPhase represents the current phase of plan execution.
 type ProgressPhase string
@@ -46,23 +59,23 @@ type ProgressStatus struct {
 // Notifier defines the interface for sending notifications.
 type Notifier interface {
 	// Start sends a notification when a plan starts.
-	Start(p *plan.Plan) error
+	Start(p PlanInfo) error
 
 	// Complete sends a notification when a plan completes.
-	Complete(p *plan.Plan, prURL string) error
+	Complete(p PlanInfo, prURL string) error
 
 	// Blocker sends a notification when a blocker is encountered.
-	Blocker(p *plan.Plan, blocker *runner.Blocker) error
+	BlockerNotify(p PlanInfo, blocker *Blocker) error
 
 	// Error sends a notification when an error occurs.
-	Error(p *plan.Plan, err error) error
+	Error(p PlanInfo, err error) error
 
 	// Iteration sends a notification for each iteration (if enabled).
-	Iteration(p *plan.Plan, iteration, maxIterations int) error
+	Iteration(p PlanInfo, iteration, maxIterations int) error
 
 	// UpdateProgress updates the parent message with current progress.
 	// This provides a "living status card" that shows the current state.
-	UpdateProgress(p *plan.Plan, status *ProgressStatus) error
+	UpdateProgress(p PlanInfo, status *ProgressStatus) error
 }
 
 // WebhookNotifier sends notifications via Slack incoming webhooks.
@@ -112,7 +125,7 @@ type attachment struct {
 }
 
 // Start sends a notification when a plan starts.
-func (w *WebhookNotifier) Start(p *plan.Plan) error {
+func (w *WebhookNotifier) Start(p PlanInfo) error {
 	msg := slackMessage{
 		Blocks: []slackBlock{
 			{
@@ -136,7 +149,7 @@ func (w *WebhookNotifier) Start(p *plan.Plan) error {
 }
 
 // Complete sends a notification when a plan completes.
-func (w *WebhookNotifier) Complete(p *plan.Plan, prURL string) error {
+func (w *WebhookNotifier) Complete(p PlanInfo, prURL string) error {
 	text := fmt.Sprintf(":white_check_mark: *Plan Complete*\n`%s`", p.Name)
 
 	fields := []slackText{
@@ -167,8 +180,8 @@ func (w *WebhookNotifier) Complete(p *plan.Plan, prURL string) error {
 	return nil
 }
 
-// Blocker sends a notification when a blocker is encountered.
-func (w *WebhookNotifier) Blocker(p *plan.Plan, blocker *runner.Blocker) error {
+// BlockerNotify sends a notification when a blocker is encountered.
+func (w *WebhookNotifier) BlockerNotify(p PlanInfo, blocker *Blocker) error {
 	if blocker == nil {
 		return nil
 	}
@@ -224,7 +237,7 @@ func (w *WebhookNotifier) Blocker(p *plan.Plan, blocker *runner.Blocker) error {
 }
 
 // Error sends a notification when an error occurs.
-func (w *WebhookNotifier) Error(p *plan.Plan, err error) error {
+func (w *WebhookNotifier) Error(p PlanInfo, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -258,7 +271,7 @@ func (w *WebhookNotifier) Error(p *plan.Plan, err error) error {
 }
 
 // Iteration sends a notification for each iteration (if enabled).
-func (w *WebhookNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) error {
+func (w *WebhookNotifier) Iteration(p PlanInfo, iteration, maxIterations int) error {
 	msg := slackMessage{
 		Blocks: []slackBlock{
 			{
@@ -276,14 +289,11 @@ func (w *WebhookNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) 
 }
 
 // UpdateProgress is a no-op for webhooks since they don't support message updates.
-// Webhooks are fire-and-forget, so we can't update the original message.
-func (w *WebhookNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) error {
-	// Webhooks don't support message updates
+func (w *WebhookNotifier) UpdateProgress(p PlanInfo, status *ProgressStatus) error {
 	return nil
 }
 
 // sendAsync sends the message asynchronously.
-// Errors are logged but not returned.
 func (w *WebhookNotifier) sendAsync(msg slackMessage) {
 	go func() {
 		if err := w.send(msg); err != nil {
@@ -326,23 +336,14 @@ func (w *WebhookNotifier) send(msg slackMessage) error {
 // Used when notifications are disabled.
 type NoopNotifier struct{}
 
-// Start does nothing.
-func (n *NoopNotifier) Start(p *plan.Plan) error { return nil }
-
-// Complete does nothing.
-func (n *NoopNotifier) Complete(p *plan.Plan, prURL string) error { return nil }
-
-// Blocker does nothing.
-func (n *NoopNotifier) Blocker(p *plan.Plan, blocker *runner.Blocker) error { return nil }
-
-// Error does nothing.
-func (n *NoopNotifier) Error(p *plan.Plan, err error) error { return nil }
-
-// Iteration does nothing.
-func (n *NoopNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) error { return nil }
-
-// UpdateProgress does nothing.
-func (n *NoopNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) error { return nil }
+func (n *NoopNotifier) Start(p PlanInfo) error                           { return nil }
+func (n *NoopNotifier) Complete(p PlanInfo, prURL string) error          { return nil }
+func (n *NoopNotifier) BlockerNotify(p PlanInfo, blocker *Blocker) error { return nil }
+func (n *NoopNotifier) Error(p PlanInfo, err error) error                { return nil }
+func (n *NoopNotifier) Iteration(p PlanInfo, iteration, maxIterations int) error {
+	return nil
+}
+func (n *NoopNotifier) UpdateProgress(p PlanInfo, status *ProgressStatus) error { return nil }
 
 // Ensure NoopNotifier implements Notifier.
 var _ Notifier = (*NoopNotifier)(nil)
@@ -353,7 +354,6 @@ var _ Notifier = (*WebhookNotifier)(nil)
 // NewNotifier creates a Notifier based on the configuration.
 // Returns a SlackNotifier if bot_token is configured, falls back to WebhookNotifier,
 // and returns NoopNotifier if neither is configured.
-// When global_bot is true, loads bot credentials from ~/.ralph/slack.env.
 func NewNotifier(cfg *config.Config, tracker *ThreadTracker) Notifier {
 	if cfg == nil {
 		return &NoopNotifier{}
@@ -381,7 +381,7 @@ func NewNotifier(cfg *config.Config, tracker *ThreadTracker) Notifier {
 			BotToken:      botToken,
 			Channel:       cfg.Slack.Channel,
 			ThreadTracker: tracker,
-			WebhookURL:    cfg.Slack.WebhookURL, // Fallback
+			WebhookURL:    cfg.Slack.WebhookURL,
 			APIURL:        apiURL,
 			RepoName:      cfg.Project.Name,
 		})

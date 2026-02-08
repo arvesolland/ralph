@@ -2,16 +2,18 @@
 
 Plans are structured markdown files that define tasks for Ralph to implement.
 
-## State Management
+## Task Management
 
-Plan bundles may contain a `state.yaml` file alongside `plan.md`. When present, `state.yaml` is the **source of truth for task status** — not the markdown checkboxes in `plan.md`.
+Task state is managed by ATM (Autonomous Task Manager) via the `atm-cli` command. The plan markdown defines *what* to build (tasks, criteria, context), while ATM tracks runtime state (task status, progress).
 
-- `plan.md` defines *what* to build (tasks, criteria, context) — it is the human-readable spec
-- `state.yaml` tracks *runtime state* (task status, criteria checked, feedback) — it is the machine-owned control plane
-- Agents update `state.yaml` via `ralph task` and `ralph feedback` CLI commands
-- Agents should NOT update checkboxes in `plan.md` when `state.yaml` exists
-
-Plans without `state.yaml` work as before: the agent updates `plan.md` checkboxes directly.
+Agents manage task status via `atm-cli` commands:
+```bash
+atm-cli task list              # View all tasks
+atm-cli task start <id>        # Start a task
+atm-cli task done <id>         # Complete a task
+atm-cli task skip <id>         # Skip a task
+atm-cli task add --title "..." # Add discovered work
+```
 
 ## Structure
 
@@ -26,11 +28,10 @@ Write this once, write it well. Tasks reference this implicitly.]
 
 ## Rules
 
-1. **Pick task:** First task (by number) where status ≠ `complete` and all `Requires` are `complete`
-2. **Subtasks are sequential.** Complete 1 before 2.
-3. **Task complete when:** All "Done when" + all subtasks checked → set Status: `complete`
-4. **Update file after each checkbox.**
-5. **New work found?** Add to Discovered section, continue current task.
+1. **Pick task:** First task (by number) where status is not complete and all dependencies are satisfied
+2. **Tasks are sequential.** Complete one before the next.
+3. **Task complete when:** All acceptance criteria met
+4. **New work found?** Add via `atm-cli task add`, continue current task.
 
 ---
 
@@ -46,11 +47,6 @@ Write this once, write it well. Tasks reference this implicitly.]
 - [ ] [Specific, testable criterion]
 - [ ] [Specific, testable criterion]
 
-**Subtasks:**
-1. [ ] [First subtask] — [brief what/why if not obvious]
-2. [ ] [Second subtask]
-3. [ ] [Third subtask]
-
 ---
 
 ### T2: [Task Title]
@@ -61,10 +57,6 @@ Write this once, write it well. Tasks reference this implicitly.]
 
 **Done when:**
 - [ ] [Criterion]
-
-**Subtasks:**
-1. [ ] [Subtask]
-2. [ ] [Subtask]
 
 ---
 
@@ -90,12 +82,7 @@ Write this once, write it well. Tasks reference this implicitly.]
 
 ### Done When
 - Specific, testable acceptance criteria
-- All must be checked for task to be complete
-
-### Subtasks
-- Numbered for explicit ordering
-- Complete 1 before starting 2
-- Brief description, add "— [why]" if not obvious
+- All must be verified for task to be complete
 
 ---
 
@@ -103,12 +90,10 @@ Write this once, write it well. Tasks reference this implicitly.]
 
 ```
 Find first T[n] where:
-  - Status ≠ complete
+  - Status is not complete
   - Every task in "Requires" has Status = complete
 
-Within that task, find first unchecked subtask.
-
-Return: Task context + subtask to work on.
+Return: Task context + work to do.
 ```
 
 ---
@@ -116,9 +101,8 @@ Return: Task context + subtask to work on.
 ## Completion
 
 When a task is complete:
-1. All "Done when" checkboxes are checked
-2. All subtask checkboxes are checked
-3. Change `**Status:** open` → `**Status:** complete`
+1. All "Done when" criteria are verified
+2. Mark task done via `atm-cli task done <id>`
 
 When ALL tasks are complete, output:
 ```
@@ -135,7 +119,7 @@ When ALL tasks are complete, output:
 ## Context
 Replace session-based auth with JWT. Enables stateless auth and microservices readiness.
 
-**End state:** Users hit /auth/login → receive JWT + refresh token → use JWT for API calls.
+**End state:** Users hit /auth/login -> receive JWT + refresh token -> use JWT for API calls.
 
 **Constraints:**
 - Backward compatible with mobile clients < v2.3
@@ -146,11 +130,10 @@ Replace session-based auth with JWT. Enables stateless auth and microservices re
 
 ## Rules
 
-1. **Pick task:** First task (by number) where status ≠ `complete` and all `Requires` are `complete`
-2. **Subtasks are sequential.** Complete 1 before 2.
-3. **Task complete when:** All "Done when" + all subtasks checked → set Status: `complete`
-4. **Update file after each checkbox.**
-5. **New work found?** Add to Discovered section, continue current task.
+1. **Pick task:** First task (by number) where status is not complete and all dependencies satisfied
+2. **Tasks are sequential.** Complete one before the next.
+3. **Task complete when:** All "Done when" criteria met
+4. **New work found?** Add via `atm-cli task add`, continue current task.
 
 ---
 
@@ -166,11 +149,6 @@ Replace session-based auth with JWT. Enables stateless auth and microservices re
 - [ ] JWT claims documented in `/docs/auth/jwt-claims.md`
 - [ ] Refresh token rotation strategy documented
 
-**Subtasks:**
-1. [ ] Draft JWT claims (sub, iat, exp, roles, permissions)
-2. [ ] Design refresh token rotation (one-time use)
-3. [ ] Document in `/docs/auth/`
-
 ---
 
 ### T2: Implement Token Service
@@ -184,11 +162,6 @@ Replace session-based auth with JWT. Enables stateless auth and microservices re
 - [ ] Unit tests pass
 - [ ] No secrets in code
 
-**Subtasks:**
-1. [ ] Implement `generate()` with claims from T1
-2. [ ] Implement `validate()` with expiry handling
-3. [ ] Write unit tests
-
 ---
 
 ### T3: Update Login Endpoint
@@ -201,27 +174,9 @@ Replace session-based auth with JWT. Enables stateless auth and microservices re
 - [ ] /auth/login returns `{ accessToken, refreshToken, expiresIn }`
 - [ ] API docs updated
 
-**Subtasks:**
-1. [ ] Modify LoginController response format
-2. [ ] Update API documentation
-
 ---
 
 ## Discovered
 
 *(None yet)*
 ```
-
----
-
-## Plan Location
-
-For queue workflow:
-```
-plans/
-├── pending/    # Waiting to be processed
-├── current/    # Active plan (0-1 files)
-└── complete/   # Finished with logs
-```
-
-See the `ralph-plan` skill in `.claude/skills/ralph-plan/SKILL.md` for full documentation.

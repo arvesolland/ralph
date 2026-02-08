@@ -4,10 +4,10 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
-	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/worktree"
 	"github.com/spf13/cobra"
 )
@@ -55,9 +55,28 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating worktree manager: %w", err)
 	}
 
-	// Create queue for active plan lookup
-	plansDir := "plans"
-	queue := plan.NewQueue(plansDir)
+	// Build set of active worktree names by scanning the worktrees base directory.
+	// In v2, there's no filesystem queue — any existing worktree directory is considered
+	// active unless it appears orphaned (no branch checked out, etc).
+	// For now, we pass an empty map so ALL worktrees are considered orphaned candidates
+	// and the safety checks (uncommitted changes) protect against accidental removal.
+	activePlans := make(map[string]bool)
+
+	// If .ralph/worktrees has entries that match branches currently in use, mark them active.
+	// Walk worktree dirs and check if git branch exists on remote.
+	worktreesDirAbs := filepath.Join(repoRoot, ".ralph", "worktrees")
+	if entries, dirErr := os.ReadDir(worktreesDirAbs); dirErr == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			// Check if the worktree has a context.json (means it's actively used)
+			ctxPath := filepath.Join(worktreesDirAbs, entry.Name(), "context.json")
+			if _, statErr := os.Stat(ctxPath); statErr == nil {
+				activePlans[entry.Name()] = true
+			}
+		}
+	}
 
 	if cleanupDryRun {
 		fmt.Println("Dry run - no changes will be made")
@@ -65,7 +84,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run cleanup
-	results, err := manager.Cleanup(queue)
+	results, err := manager.Cleanup(activePlans)
 	if err != nil {
 		return fmt.Errorf("cleaning up worktrees: %w", err)
 	}

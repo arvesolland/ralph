@@ -1,10 +1,6 @@
 package cli
 
 import (
-	"bytes"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -54,6 +50,12 @@ func TestWorkerCmd_FlagsRegistered(t *testing.T) {
 		t.Error("expected --merge flag to be registered")
 	}
 
+	// Check --branch flag
+	branchFlag := cmd.Flags().Lookup("branch")
+	if branchFlag == nil {
+		t.Error("expected --branch flag to be registered")
+	}
+
 	// Check --interval flag
 	intervalFlag := cmd.Flags().Lookup("interval")
 	if intervalFlag == nil {
@@ -75,6 +77,18 @@ func TestWorkerCmd_FlagsRegistered(t *testing.T) {
 		}
 	}
 
+	// Check --sync flag
+	syncFlag := cmd.Flags().Lookup("sync")
+	if syncFlag == nil {
+		t.Error("expected --sync flag to be registered")
+	}
+
+	// Check --sync-interval flag
+	syncIntervalFlag := cmd.Flags().Lookup("sync-interval")
+	if syncIntervalFlag == nil {
+		t.Error("expected --sync-interval flag to be registered")
+	}
+
 	// Check --push flag
 	pushFlag := cmd.Flags().Lookup("push")
 	if pushFlag == nil {
@@ -86,122 +100,48 @@ func TestWorkerCmd_FlagsRegistered(t *testing.T) {
 	}
 }
 
-func TestWorkerCmd_RequiresGitRepo(t *testing.T) {
-	// Save current directory
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(oldWd)
-
-	// Create temp directory (not a git repo)
-	tempDir, err := os.MkdirTemp("", "worker-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Change to temp directory
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatal(err)
-	}
-
-	// Reset flags to defaults
-	workerOnce = true // Use once mode to avoid continuous polling
-	workerPRMode = false
-	workerMergeMode = false
-	workerInterval = worker.DefaultPollInterval
-	workerMaxIter = worker.DefaultMaxIterations
-
-	// Run should fail because we're not in a git repo
-	err = runWorker(workerCmd, []string{})
-	if err == nil {
-		t.Error("expected error when not in git repo")
-	}
-
-	expectedMsg := "not in a git repository"
-	if err != nil && !bytes.Contains([]byte(err.Error()), []byte(expectedMsg)) {
-		t.Errorf("expected error containing '%s', got: %v", expectedMsg, err)
-	}
-}
-
-func TestWorkerCmd_OnceMode_EmptyQueue(t *testing.T) {
-	// Save current directory
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(oldWd)
-
-	// Create temp git repo
-	tempDir, err := os.MkdirTemp("", "worker-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Initialize git repo
-	setupWorkerTestGitRepo(t, tempDir)
-
-	// Create required directories
-	plansDir := filepath.Join(tempDir, "plans")
-	os.MkdirAll(filepath.Join(plansDir, "pending"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "current"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "complete"), 0755)
-
-	// Create .ralph directory
-	ralphDir := filepath.Join(tempDir, ".ralph")
-	os.MkdirAll(ralphDir, 0755)
-
-	// Change to temp directory
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatal(err)
-	}
-
-	// Reset flags to defaults
-	workerOnce = true
-	workerPRMode = false
-	workerMergeMode = false
-	workerInterval = 100 * time.Millisecond // Short interval for test
-	workerMaxIter = worker.DefaultMaxIterations
-
-	// Run should succeed with empty queue (exits gracefully)
-	err = runWorker(workerCmd, []string{})
-	if err != nil {
-		t.Errorf("expected no error with empty queue in once mode, got: %v", err)
-	}
-}
-
 func TestWorkerCmd_CompletionModeFlags(t *testing.T) {
 	tests := []struct {
 		name         string
 		prFlag       bool
 		mergeFlag    bool
+		branchFlag   bool
 		expectedMode string
 	}{
 		{
 			name:         "default is pr",
 			prFlag:       false,
 			mergeFlag:    false,
+			branchFlag:   false,
 			expectedMode: "pr",
 		},
 		{
 			name:         "explicit pr",
 			prFlag:       true,
 			mergeFlag:    false,
+			branchFlag:   false,
 			expectedMode: "pr",
 		},
 		{
 			name:         "merge mode",
 			prFlag:       false,
 			mergeFlag:    true,
+			branchFlag:   false,
 			expectedMode: "merge",
 		},
 		{
-			name:         "merge takes precedence",
-			prFlag:       true,
+			name:         "branch mode",
+			prFlag:       false,
+			mergeFlag:    false,
+			branchFlag:   true,
+			expectedMode: "branch",
+		},
+		{
+			name:         "branch takes precedence over merge",
+			prFlag:       false,
 			mergeFlag:    true,
-			expectedMode: "merge",
+			branchFlag:   true,
+			expectedMode: "branch",
 		},
 	}
 
@@ -211,6 +151,9 @@ func TestWorkerCmd_CompletionModeFlags(t *testing.T) {
 			completionMode := "pr"
 			if tt.mergeFlag {
 				completionMode = "merge"
+			}
+			if tt.branchFlag {
+				completionMode = "branch"
 			}
 
 			if completionMode != tt.expectedMode {
@@ -241,32 +184,24 @@ func TestWorkerCmd_IntervalParsing(t *testing.T) {
 	}
 }
 
-// setupWorkerTestGitRepo initializes a basic git repo for testing
-func setupWorkerTestGitRepo(t *testing.T, dir string) {
-	t.Helper()
-
-	// git init
-	runWorkerGitCmd(t, dir, "init", "-b", "main")
-
-	// Configure git user for commits
-	runWorkerGitCmd(t, dir, "config", "user.email", "test@example.com")
-	runWorkerGitCmd(t, dir, "config", "user.name", "Test User")
-
-	// Create initial commit
-	readme := filepath.Join(dir, "README.md")
-	if err := os.WriteFile(readme, []byte("# Test\n"), 0644); err != nil {
-		t.Fatal(err)
+func TestNameToWorktreeBranch(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{"feat prefix", "feat-my-feature", "feat/my-feature"},
+		{"no feat prefix", "main", "main"},
+		{"feat only", "feat-", "feat/"},
+		{"feat with nested", "feat-sub-feature", "feat/sub-feature"},
 	}
-	runWorkerGitCmd(t, dir, "add", "README.md")
-	runWorkerGitCmd(t, dir, "commit", "-m", "Initial commit")
-}
 
-func runWorkerGitCmd(t *testing.T, dir string, args ...string) {
-	t.Helper()
-
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("git command failed: git %v: %v", args, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := nameToWorktreeBranch(tt.input)
+			if got != tt.expect {
+				t.Errorf("nameToWorktreeBranch(%q) = %q, want %q", tt.input, got, tt.expect)
+			}
+		})
 	}
 }

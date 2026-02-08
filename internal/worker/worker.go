@@ -1,5 +1,5 @@
 // Package worker implements the queue processing loop for Ralph.
-// It takes plans from the pending queue, creates worktrees, runs the iteration loop,
+// It polls ATM for ready plans, creates worktrees, runs the iteration loop,
 // and handles completion (PR or merge).
 package worker
 
@@ -8,834 +8,578 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/arvesolland/ralph/internal/atm"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/notify"
-	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
-	"github.com/arvesolland/ralph/internal/worktree"
 )
 
-// Common errors returned by Worker operations.
-var (
-	// ErrQueueEmpty is returned when there are no plans to process.
-	ErrQueueEmpty = errors.New("no pending plans in queue")
+// Default constants for worker configuration.
+const (
+	DefaultPollInterval  = 30 * time.Second
+	DefaultMaxIterations = 200
+)
 
-	// ErrInterrupted is returned when the worker is interrupted by signal.
+// Sentinel errors returned by the worker.
+var (
+	ErrQueueEmpty  = errors.New("no pending plans in queue")
 	ErrInterrupted = errors.New("interrupted by signal")
 )
 
-// DefaultPollInterval is the default time to wait between queue checks when empty.
-const DefaultPollInterval = 30 * time.Second
-
-// DefaultMaxIterations is the default maximum number of iterations per plan.
-const DefaultMaxIterations = 200
-
-// Worker processes plans from the queue.
-type Worker struct {
-	// queue is the plan queue manager
-	queue *plan.Queue
-
-	// config is the loaded configuration
-	config *config.Config
-
-	// configDir is the path to the .ralph directory
-	configDir string
-
-	// worktreeManager manages worktree creation/removal
-	worktreeManager *worktree.WorktreeManager
-
-	// git is the git interface for the main repository
-	git git.Git
-
-	// mainWorktreePath is the path to the main repository worktree
-	mainWorktreePath string
-
-	// runner executes Claude CLI
-	runner runner.Runner
-
-	// promptBuilder builds prompts from templates
-	promptBuilder *prompt.Builder
-
-	// notifier sends Slack notifications
-	notifier notify.Notifier
-
-	// threadTracker tracks Slack threads for reply handling
-	threadTracker *notify.ThreadTracker
-
-	// bot is the Socket Mode bot for handling Slack replies
-	bot *notify.SocketModeBot
-
-	// pollInterval is the time to wait between queue checks when empty
-	pollInterval time.Duration
-
-	// maxIterations is the maximum iterations per plan
-	maxIterations int
-
-	// completionMode is "pr" or "merge"
-	completionMode string
-
-	// syncEnabled enables git pull before queue checks
-	syncEnabled bool
-
-	// syncInterval is the minimum time between syncs (0 = sync every time)
-	syncInterval time.Duration
-
-	// lastSyncTime tracks when we last synced
-	lastSyncTime time.Time
-
-	// pushAfterIteration enables pushing to remote after each iteration
-	pushAfterIteration bool
-
-	// onPlanStart is called when a plan starts processing
-	onPlanStart func(p *plan.Plan)
-
-	// onPlanComplete is called when a plan completes successfully
-	onPlanComplete func(p *plan.Plan, result *runner.LoopResult)
-
-	// onPlanError is called when a plan fails
-	onPlanError func(p *plan.Plan, err error)
-
-	// onBlocker is called when a blocker is detected
-	onBlocker func(p *plan.Plan, blocker *runner.Blocker)
+// PlanInfo holds the minimal info needed for notifications and logging.
+type PlanInfo struct {
+	ID     int
+	Name   string
+	Branch string
 }
 
-// WorkerConfig holds configuration for creating a Worker.
+// WorktreeManager provides an interface for worktree lifecycle management.
+// The concrete implementation is injected by the CLI layer.
+type WorktreeManager interface {
+	Create(name, branch string) (string, error) // returns worktree path
+	Get(name string) (string, error)            // returns path or "" if not found
+	Remove(name string, deleteBranch bool) error
+	Exists(name string) bool
+}
+
+// WorkerConfig holds all configuration for creating a new Worker.
 type WorkerConfig struct {
-	// Queue is the plan queue manager
-	Queue *plan.Queue
-
-	// Config is the loaded configuration
-	Config *config.Config
-
-	// ConfigDir is the path to the .ralph directory
-	ConfigDir string
-
-	// WorktreeManager manages worktree creation/removal
-	WorktreeManager *worktree.WorktreeManager
-
-	// Git is the git interface for the main repository
-	Git git.Git
-
-	// MainWorktreePath is the path to the main repository worktree
-	MainWorktreePath string
-
-	// Runner executes Claude CLI
-	Runner runner.Runner
-
-	// PromptBuilder builds prompts from templates
-	PromptBuilder *prompt.Builder
-
-	// Notifier sends Slack notifications (optional, use NewNotifier to create)
-	Notifier notify.Notifier
-
-	// PollInterval is the time to wait between queue checks when empty
-	PollInterval time.Duration
-
-	// MaxIterations is the maximum iterations per plan
-	MaxIterations int
-
-	// CompletionMode is "pr" or "merge"
-	CompletionMode string
-
-	// SyncEnabled enables git pull --rebase before queue checks
-	SyncEnabled bool
-
-	// SyncInterval is the minimum time between syncs (0 = sync every time)
-	SyncInterval time.Duration
-
-	// PushAfterIteration enables pushing to remote after each iteration
+	ATM                atm.ATM
+	ProjectSlug        string
+	Config             *config.Config
+	ConfigDir          string
+	WorktreeManager    WorktreeManager
+	Git                git.Git
+	MainWorktreePath   string
+	Runner             runner.Runner
+	PromptBuilder      *prompt.Builder
+	Notifier           notify.Notifier
+	PollInterval       time.Duration
+	MaxIterations      int
+	CompletionMode     string
+	SyncEnabled        bool
+	SyncInterval       time.Duration
 	PushAfterIteration bool
 
 	// Callbacks
-	OnPlanStart    func(p *plan.Plan)
-	OnPlanComplete func(p *plan.Plan, result *runner.LoopResult)
-	OnPlanError    func(p *plan.Plan, err error)
-	OnBlocker      func(p *plan.Plan, blocker *runner.Blocker)
+	OnPlanStart    func(info *PlanInfo)
+	OnPlanComplete func(info *PlanInfo, result *runner.LoopResult)
+	OnPlanError    func(info *PlanInfo, err error)
+	OnBlocker      func(info *PlanInfo, blocker *runner.Blocker)
+}
+
+// Worker processes plans from the ATM queue.
+type Worker struct {
+	atm                atm.ATM
+	projectSlug        string
+	config             *config.Config
+	configDir          string
+	worktreeManager    WorktreeManager
+	git                git.Git
+	mainWorktreePath   string
+	runner             runner.Runner
+	promptBuilder      *prompt.Builder
+	notifier           notify.Notifier
+	pollInterval       time.Duration
+	maxIterations      int
+	completionMode     string
+	syncEnabled        bool
+	syncInterval       time.Duration
+	lastSyncTime       time.Time
+	pushAfterIteration bool
+
+	// Callbacks
+	onPlanStart    func(info *PlanInfo)
+	onPlanComplete func(info *PlanInfo, result *runner.LoopResult)
+	onPlanError    func(info *PlanInfo, err error)
+	onBlocker      func(info *PlanInfo, blocker *runner.Blocker)
 }
 
 // NewWorker creates a new Worker with the given configuration.
 func NewWorker(cfg WorkerConfig) *Worker {
-	pollInterval := cfg.PollInterval
-	if pollInterval == 0 {
-		pollInterval = DefaultPollInterval
-	}
-
-	maxIterations := cfg.MaxIterations
-	if maxIterations == 0 {
-		maxIterations = DefaultMaxIterations
-	}
-
-	completionMode := cfg.CompletionMode
-	if completionMode == "" {
-		completionMode = "pr"
-	}
-
-	// Use provided notifier or create noop
-	notifier := cfg.Notifier
-	if notifier == nil {
-		notifier = &notify.NoopNotifier{}
-	}
-
-	return &Worker{
-		queue:            cfg.Queue,
-		config:           cfg.Config,
-		configDir:        cfg.ConfigDir,
-		worktreeManager:  cfg.WorktreeManager,
-		git:              cfg.Git,
-		mainWorktreePath: cfg.MainWorktreePath,
-		runner:           cfg.Runner,
-		promptBuilder:    cfg.PromptBuilder,
-		notifier:         notifier,
-		pollInterval:     pollInterval,
-		maxIterations:    maxIterations,
-		completionMode:   completionMode,
+	w := &Worker{
+		atm:                cfg.ATM,
+		projectSlug:        cfg.ProjectSlug,
+		config:             cfg.Config,
+		configDir:          cfg.ConfigDir,
+		worktreeManager:    cfg.WorktreeManager,
+		git:                cfg.Git,
+		mainWorktreePath:   cfg.MainWorktreePath,
+		runner:             cfg.Runner,
+		promptBuilder:      cfg.PromptBuilder,
+		notifier:           cfg.Notifier,
+		pollInterval:       cfg.PollInterval,
+		maxIterations:      cfg.MaxIterations,
+		completionMode:     cfg.CompletionMode,
 		syncEnabled:        cfg.SyncEnabled,
 		syncInterval:       cfg.SyncInterval,
 		pushAfterIteration: cfg.PushAfterIteration,
 		onPlanStart:        cfg.OnPlanStart,
-		onPlanComplete:   cfg.OnPlanComplete,
-		onPlanError:      cfg.OnPlanError,
-		onBlocker:        cfg.OnBlocker,
+		onPlanComplete:     cfg.OnPlanComplete,
+		onPlanError:        cfg.OnPlanError,
+		onBlocker:          cfg.OnBlocker,
 	}
+
+	// Apply defaults
+	if w.pollInterval == 0 {
+		w.pollInterval = DefaultPollInterval
+	}
+	if w.maxIterations == 0 {
+		w.maxIterations = DefaultMaxIterations
+	}
+	if w.completionMode == "" {
+		w.completionMode = "pr"
+	}
+	if w.notifier == nil {
+		w.notifier = &notify.NoopNotifier{}
+	}
+
+	return w
 }
 
-// syncFromRemote pulls changes from remote if sync is enabled and interval has passed.
-// Returns nil on success or if sync is disabled. Logs warnings on failure but doesn't error.
-func (w *Worker) syncFromRemote() {
-	if !w.syncEnabled {
-		return
-	}
-
-	// Check if we should sync based on interval
-	if w.syncInterval > 0 && time.Since(w.lastSyncTime) < w.syncInterval {
-		log.Debug("Skipping sync, last sync was %v ago (interval: %v)", time.Since(w.lastSyncTime), w.syncInterval)
-		return
-	}
-
-	log.Info("Syncing with remote...")
-	if err := w.git.PullRebase(); err != nil {
-		log.Warn("Failed to sync with remote: %v (continuing with local state)", err)
-		// Don't return error - sync failures are non-fatal
-	} else {
-		log.Debug("Sync complete")
-	}
-
-	w.lastSyncTime = time.Now()
-}
-
-// Run processes plans from the queue continuously until interrupted.
-// It polls for new plans when the queue is empty.
+// Run starts the continuous worker loop, processing plans until the context is cancelled.
 func (w *Worker) Run(ctx context.Context) error {
-	log.Info("Worker started, polling interval: %v", w.pollInterval)
-	if w.syncEnabled {
-		log.Info("Sync enabled (interval: %v)", w.syncInterval)
-	}
+	log.Info("Worker started (poll interval: %v, max iterations: %d, completion: %s)",
+		w.pollInterval, w.maxIterations, w.completionMode)
 
-	// Set up interrupt handling
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
+	// Set up signal handling
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		select {
-		case sig := <-sigCh:
-			log.Warn("Received signal %v, finishing current work...", sig)
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
+	defer signal.Stop(sigCh)
 
 	for {
-		// Check for cancellation
 		select {
 		case <-ctx.Done():
-			log.Info("Worker stopping due to context cancellation")
+			log.Info("Worker context cancelled, shutting down")
 			return ctx.Err()
+		case sig := <-sigCh:
+			log.Info("Worker received signal: %v", sig)
+			return ErrInterrupted
 		default:
 		}
 
-		// Sync from remote before checking queue
+		// Sync from remote if enabled
 		w.syncFromRemote()
 
-		// Try to process a plan
+		// Try to process one plan
 		err := w.RunOnce(ctx)
-		if err != nil {
-			if errors.Is(err, ErrQueueEmpty) {
-				// No plans available, wait and poll again
-				log.Debug("Queue empty, waiting %v before next check", w.pollInterval)
-				select {
-				case <-ctx.Done():
-					log.Info("Worker stopping while waiting")
-					return ctx.Err()
-				case <-time.After(w.pollInterval):
-					continue
-				}
-			}
-
-			if errors.Is(err, context.Canceled) || errors.Is(err, ErrInterrupted) {
-				log.Info("Worker interrupted")
-				return err
-			}
-
-			// Log error but continue processing
-			log.Error("Error processing plan: %v", err)
-			// Wait a bit before retrying to avoid tight error loops
+		if err == ErrQueueEmpty {
+			log.Debug("Queue empty, waiting %v before next poll", w.pollInterval)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(5 * time.Second):
+			case sig := <-sigCh:
+				log.Info("Worker received signal: %v", sig)
+				return ErrInterrupted
+			case <-time.After(w.pollInterval):
+				continue
 			}
+		}
+		if err != nil {
+			log.Error("Worker error: %v", err)
+			// Continue running after errors
 		}
 	}
 }
 
-// RunOnce processes a single plan from the queue and returns.
-// Returns ErrQueueEmpty if no plans are pending.
+// RunOnce attempts to process a single plan from the queue.
+// Returns ErrQueueEmpty if no plans are available.
 func (w *Worker) RunOnce(ctx context.Context) error {
-	// Check if there's already a current plan
-	currentPlan, err := w.queue.Current()
+	// Check for an active plan (resume scenario)
+	agentCtx, err := w.atm.ProjectContext(w.projectSlug)
 	if err != nil {
-		return fmt.Errorf("checking current queue: %w", err)
+		return fmt.Errorf("fetching project context: %w", err)
 	}
 
-	var p *plan.Plan
+	var plan *atm.Plan
 
-	if currentPlan != nil {
-		// Resume the current plan
-		log.Info("Resuming current plan: %s", currentPlan.Name)
-		p = currentPlan
+	// Check if there's an active plan to resume
+	if agentCtx.Plan.ID > 0 && agentCtx.Plan.Status == atm.PlanStatusActive {
+		planCopy := agentCtx.Plan
+		plan = &planCopy
+		log.Info("Resuming active plan #%d: %s", plan.ID, plan.Title)
 	} else {
-		// Get next pending plan
-		pending, err := w.queue.Pending()
+		// Check for ready plans
+		readyPlans, err := w.atm.ListPlans(w.projectSlug, atm.PlanStatusReady)
 		if err != nil {
-			return fmt.Errorf("listing pending plans: %w", err)
+			return fmt.Errorf("listing ready plans: %w", err)
 		}
 
-		if len(pending) == 0 {
+		if len(readyPlans) == 0 {
 			return ErrQueueEmpty
 		}
 
-		// Take the first pending plan
-		p = pending[0]
+		// Take the first ready plan
+		plan = &readyPlans[0]
+		log.Info("Activating plan #%d: %s", plan.ID, plan.Title)
 
-		// Activate it (move to current/)
-		log.Info("Activating plan: %s", p.Name)
-		if err := w.queue.Activate(p); err != nil {
-			return fmt.Errorf("activating plan: %w", err)
+		// Transition to active
+		updated, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusActive)
+		if err != nil {
+			return fmt.Errorf("activating plan #%d: %w", plan.ID, err)
 		}
-	}
-
-	// Check if plan was already completed (PR exists) but didn't get archived
-	// This can happen if:
-	// 1. Instance was terminated after PR creation but before completion
-	// 2. Plan is in pending/ but already has a PR from a previous run (worktree isolation)
-	if w.completionMode == "pr" {
-		if prExists, prURL := w.checkExistingPR(p); prExists {
-			log.Warn("Found existing PR for plan '%s' (likely interrupted during completion)", p.Name)
-			log.Info("PR: %s", prURL)
-			log.Info("Recovering by completing plan...")
-
-			// Complete the plan (archive and cleanup)
-			if err := w.recoverCompletedPlan(p, prURL); err != nil {
-				log.Error("Failed to recover plan: %v", err)
-				// Continue anyway - plan will be reprocessed
-			} else {
-				// Successfully recovered, move to next plan
-				log.Success("Plan '%s' recovered and archived", p.Name)
-				return nil
-			}
-		}
+		plan = updated
 	}
 
 	// Process the plan
-	return w.processPlan(ctx, p)
-}
-
-// processPlan handles the full lifecycle of a single plan:
-// create worktree → sync files → run hooks → run loop → sync back → complete
-func (w *Worker) processPlan(ctx context.Context, p *plan.Plan) error {
-	// Send start notification via Slack
-	w.sendStartNotification(p)
-
-	// Notify callback
-	if w.onPlanStart != nil {
-		w.onPlanStart(p)
+	info := &PlanInfo{
+		ID:     plan.ID,
+		Name:   plan.Title,
+		Branch: plan.FeatureBranch,
 	}
 
-	// Create or get existing worktree
-	wt, err := w.ensureWorktree(p)
+	return w.processPlan(ctx, plan, info)
+}
+
+// processPlan executes the full lifecycle of a plan: setup, iterate, complete.
+func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo) error {
+	log.Info("Processing plan: %s (branch: %s)", info.Name, info.Branch)
+
+	// Send start notification
+	w.sendStartNotification(info)
+
+	// Call start callback
+	if w.onPlanStart != nil {
+		w.onPlanStart(info)
+	}
+
+	// Ensure worktree exists
+	worktreePath, err := w.ensureWorktree(plan)
 	if err != nil {
-		w.notifyError(p, err)
+		w.notifyError(info, err)
+		if w.onPlanError != nil {
+			w.onPlanError(info, err)
+		}
 		return fmt.Errorf("ensuring worktree: %w", err)
 	}
 
-	// Sync files to worktree
-	if err := worktree.SyncToWorktree(p, wt.Path, w.config, w.mainWorktreePath); err != nil {
-		w.notifyError(p, err)
-		return fmt.Errorf("syncing to worktree: %w", err)
-	}
+	log.Info("Using worktree: %s", worktreePath)
 
-	// Run init hooks (only for newly created worktrees)
-	// We track this by checking if context.json exists
-	ctxPath := runner.ContextPath(wt.Path)
-	if _, err := os.Stat(ctxPath); os.IsNotExist(err) {
-		log.Info("Running worktree init hooks...")
-		hookResult, hookErr := worktree.RunInitHooks(wt.Path, w.config, w.mainWorktreePath)
-		if hookErr != nil {
-			log.Warn("Init hooks failed: %v", hookErr)
-			// Continue anyway - hooks are optional
-		} else if hookResult != nil {
-			log.Debug("Init hooks completed via method: %s", hookResult.Method)
-		}
-	}
-
-	// Set up git for the worktree
-	wtGit := git.NewGit(wt.Path)
-
-	// Load or create execution context
-	execCtx, err := w.loadOrCreateContext(p, wt.Path)
+	// Create or load execution context
+	execCtx, err := w.loadOrCreateContext(plan, worktreePath)
 	if err != nil {
-		w.notifyError(p, err)
+		w.notifyError(info, err)
+		if w.onPlanError != nil {
+			w.onPlanError(info, err)
+		}
 		return fmt.Errorf("loading context: %w", err)
 	}
 
-	// Create the iteration loop with notification callbacks
+	// Create the iteration loop
 	loop := runner.NewIterationLoop(runner.LoopConfig{
-		Plan:          p,
-		Context:       execCtx,
-		Config:        w.config,
-		Runner:        w.runner,
-		Git:           wtGit,
-		PromptBuilder: w.promptBuilder,
-		WorktreePath:  wt.Path,
-		OnBeforeIteration: func() {
-			// Sync feedback file from main workspace to worktree before each iteration
-			// This picks up any Slack replies that were written to the main workspace
-			if err := worktree.SyncFeedbackToWorktree(p, wt.Path, w.mainWorktreePath); err != nil {
-				log.Warn("Failed to sync feedback to worktree: %v", err)
-			}
-		},
+		ATM:              w.atm,
+		PlanID:           plan.ID,
+		ProjectSlug:      w.projectSlug,
+		Context:          execCtx,
+		Config:           w.config,
+		Runner:           w.runner,
+		Git:              git.NewGit(worktreePath),
+		PromptBuilder:    w.promptBuilder,
+		WorktreePath:     worktreePath,
+		IterationTimeout: runner.IterationTimeout,
 		OnIteration: func(iteration int, result *runner.Result) {
-			// Update the parent message with progress (preferred)
-			w.updateProgress(p, iteration, notify.PhaseRunning, "")
-
-			// Also send iteration notification if configured (legacy behavior)
-			w.sendIterationNotification(p, iteration, w.maxIterations)
+			w.sendIterationNotification(info, iteration, w.maxIterations)
 		},
 		OnBlocker: func(blocker *runner.Blocker) {
-			// Update parent message to show blocked state
-			w.updateProgress(p, execCtx.Iteration, notify.PhaseBlocked, blocker.Description)
-
-			// Send blocker notification via Slack (thread reply with details)
-			w.sendBlockerNotification(p, blocker)
-
-			// Call user callback
+			w.sendBlockerNotification(info, blocker)
 			if w.onBlocker != nil {
-				w.onBlocker(p, blocker)
+				w.onBlocker(info, blocker)
 			}
 		},
 		OnAfterCommit: func() {
-			// Push to remote after each commit if enabled
 			if w.pushAfterIteration {
-				log.Debug("Pushing to remote after iteration...")
-				if err := wtGit.Push(); err != nil {
-					log.Warn("Failed to push to remote: %v", err)
-					// Non-fatal, continue
-				} else {
-					log.Debug("Pushed to remote successfully")
+				wtGit := git.NewGit(worktreePath)
+				if err := wtGit.PushWithUpstream("origin", plan.FeatureBranch); err != nil {
+					log.Warn("Failed to push after iteration: %v", err)
 				}
 			}
 		},
 	})
 
 	// Run the iteration loop
-	log.Info("Starting iteration loop for plan: %s", p.Name)
-	result := loop.Run(ctx)
-
-	// Sync files back from worktree
-	if syncErr := worktree.SyncFromWorktree(p, wt.Path, w.mainWorktreePath); syncErr != nil {
-		log.Error("Failed to sync from worktree: %v", syncErr)
-		// Continue to handle completion
-	}
+	loopResult := loop.Run(ctx)
 
 	// Handle result
-	if result.Error != nil {
-		// Check if it's a cancellation
-		if errors.Is(result.Error, context.Canceled) {
-			log.Info("Plan processing interrupted")
-			return ErrInterrupted
+	if loopResult.Completed {
+		log.Success("Plan completed: %s", info.Name)
+
+		// Complete the plan
+		if err := w.completePlan(plan, info, worktreePath); err != nil {
+			log.Error("Failed to complete plan: %v", err)
+			w.notifyError(info, err)
+			if w.onPlanError != nil {
+				w.onPlanError(info, err)
+			}
+			return fmt.Errorf("completing plan: %w", err)
 		}
 
-		// Check if max iterations reached - archive the plan so it doesn't retry forever
-		if strings.Contains(result.Error.Error(), "max iterations") {
-			log.Warn("Max iterations reached, archiving plan as incomplete")
-			w.notifyError(p, result.Error)
-
-			// Write to progress file that plan was archived due to max iterations
-			archiveMsg := fmt.Sprintf("**Plan archived:** Max iterations (%d) reached without completion.\n\n"+
-				"To resume this plan, use: `ralph resume %s`\n", w.maxIterations, p.Name)
-			if progressErr := plan.AppendProgress(p, result.Iterations, archiveMsg); progressErr != nil {
-				log.Warn("Failed to write archive message to progress: %v", progressErr)
-			}
-
-			// Archive the plan (move to complete/) so it stops being retried
-			if archiveErr := w.queue.Complete(p); archiveErr != nil {
-				log.Error("Failed to archive incomplete plan: %v", archiveErr)
-			}
-
-			// Clean up worktree
-			if err := w.worktreeManager.Remove(p, false); err != nil {
-				log.Warn("Failed to remove worktree: %v", err)
-			}
-
-			// Return nil so worker continues to next plan instead of retrying
-			return nil
+		// Call complete callback
+		if w.onPlanComplete != nil {
+			w.onPlanComplete(info, loopResult)
 		}
 
-		w.notifyError(p, result.Error)
-		return result.Error
+		return nil
 	}
 
-	if result.Completed {
-		// Plan completed successfully
-		return w.completePlan(ctx, p, wt, result)
-	}
+	// Plan didn't complete (max iterations or error)
+	if loopResult.Error != nil {
+		log.Error("Plan failed: %s - %v", info.Name, loopResult.Error)
 
-	// Plan didn't complete (max iterations or blocker)
-	if result.FinalBlocker != nil {
-		log.Warn("Plan blocked: %s", result.FinalBlocker.Description)
-	}
+		// Mark plan as blocked in ATM
+		if _, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusBlocked); err != nil {
+			log.Error("Failed to set plan status to blocked: %v", err)
+		}
 
-	// Notify completion (even if not verified complete)
-	if w.onPlanComplete != nil {
-		w.onPlanComplete(p, result)
+		w.notifyError(info, loopResult.Error)
+		if w.onPlanError != nil {
+			w.onPlanError(info, loopResult.Error)
+		}
+
+		return loopResult.Error
 	}
 
 	return nil
 }
 
-// ensureWorktree creates a worktree for the plan if it doesn't exist.
-func (w *Worker) ensureWorktree(p *plan.Plan) (*worktree.Worktree, error) {
-	// Check if worktree already exists
-	existing, err := w.worktreeManager.Get(p)
-	if err != nil {
-		return nil, fmt.Errorf("checking existing worktree: %w", err)
+// ensureWorktree creates or reuses a worktree for the plan.
+func (w *Worker) ensureWorktree(plan *atm.Plan) (string, error) {
+	if w.worktreeManager == nil {
+		// No worktree manager, use main worktree
+		return w.mainWorktreePath, nil
 	}
 
-	if existing != nil {
-		log.Debug("Using existing worktree: %s", existing.Path)
-		return existing, nil
+	// Use plan feature branch as worktree name
+	name := branchToWorktreeName(plan.FeatureBranch)
+
+	// Check if worktree already exists
+	if w.worktreeManager.Exists(name) {
+		path, err := w.worktreeManager.Get(name)
+		if err != nil {
+			return "", fmt.Errorf("getting existing worktree: %w", err)
+		}
+		log.Debug("Reusing existing worktree: %s", path)
+		return path, nil
 	}
 
 	// Create new worktree
-	log.Info("Creating worktree for branch: %s", p.Branch)
-	wt, err := w.worktreeManager.Create(p)
+	path, err := w.worktreeManager.Create(name, plan.FeatureBranch)
 	if err != nil {
-		return nil, fmt.Errorf("creating worktree: %w", err)
+		return "", fmt.Errorf("creating worktree: %w", err)
 	}
 
-	log.Success("Worktree created: %s", wt.Path)
-	return wt, nil
+	log.Info("Created worktree: %s (branch: %s)", path, plan.FeatureBranch)
+	return path, nil
 }
 
-// loadOrCreateContext loads existing context or creates new one.
-func (w *Worker) loadOrCreateContext(p *plan.Plan, worktreePath string) (*runner.Context, error) {
+// loadOrCreateContext loads an existing context or creates a new one.
+func (w *Worker) loadOrCreateContext(plan *atm.Plan, worktreePath string) (*runner.Context, error) {
 	ctxPath := runner.ContextPath(worktreePath)
 
 	// Try to load existing context
 	execCtx, err := runner.LoadContext(ctxPath)
 	if err == nil {
-		// Validate context matches current plan (worktree may be reused)
-		if filepath.Base(execCtx.PlanDir) != p.Name {
-			log.Warn("Stale context.json for plan '%s', recreating for '%s'",
-				filepath.Base(execCtx.PlanDir), p.Name)
-			os.Remove(ctxPath)
-			// fall through to create new context
-		} else {
-			log.Debug("Loaded existing context at iteration %d", execCtx.Iteration)
+		// Check if context matches the current plan
+		if execCtx.PlanID == plan.ID {
+			log.Debug("Resuming context at iteration %d", execCtx.Iteration)
 			return execCtx, nil
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		// Real error (not "file doesn't exist")
-		return nil, fmt.Errorf("loading context: %w", err)
+		log.Warn("Stale context (plan ID %d vs %d), creating fresh context", execCtx.PlanID, plan.ID)
 	}
 
-	// Create new context with paths relative to worktree
-	baseBranch := w.config.Git.BaseBranch
-	if baseBranch == "" {
-		baseBranch = "main"
+	// Create fresh context
+	baseBranch := "main"
+	if w.config != nil && w.config.Git.BaseBranch != "" {
+		baseBranch = w.config.Git.BaseBranch
 	}
 
-	// NewContext computes relative paths from worktreePath
-	execCtx = runner.NewContext(p, baseBranch, w.maxIterations, worktreePath)
+	execCtx = runner.NewContext(plan.ID, plan.FeatureBranch, baseBranch, w.maxIterations)
 
 	// Save the new context
 	if err := runner.SaveContext(execCtx, ctxPath); err != nil {
 		return nil, fmt.Errorf("saving context: %w", err)
 	}
 
-	log.Debug("Created new execution context (planDir: %s)", execCtx.PlanDir)
 	return execCtx, nil
 }
 
-// completePlan handles plan completion (archive, PR/merge, cleanup).
-// Completion is graceful - PR/merge errors are logged but don't fail the overall completion.
-func (w *Worker) completePlan(ctx context.Context, p *plan.Plan, wt *worktree.Worktree, result *runner.LoopResult) error {
-	log.Success("Plan completed: %s", p.Name)
-
-	// Set up git for the worktree
-	wtGit := git.NewGit(wt.Path)
-
-	// Handle completion based on mode
+// completePlan handles the completion workflow (PR creation or merge).
+func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath string) error {
 	var prURL string
 
 	switch w.completionMode {
 	case "pr":
-		baseBranch := w.config.Git.BaseBranch
-		if baseBranch == "" {
-			baseBranch = "main"
-		}
-		prCfg := PRCreationConfig{
-			Plan:          p,
-			Worktree:      wt,
-			Git:           wtGit,
-			Runner:        w.runner,
-			PromptBuilder: w.promptBuilder,
-			BaseBranch:    baseBranch,
-		}
-		var err error
-		prURL, err = CompletePR(prCfg)
+		url, err := w.completePR(plan, info, worktreePath)
 		if err != nil {
-			// PR creation failure is logged but not fatal
-			// The plan is still complete, code is committed locally
-			log.Error("Failed to create PR: %v", err)
-			log.Warn("Plan completed but PR not created. Branch: %s", p.Branch)
+			return err
 		}
+		prURL = url
+
 	case "merge":
-		// Use CompleteMerge for merge mode
-		mainGit := git.NewGit(w.mainWorktreePath)
-		baseBranch := w.config.Git.BaseBranch
-		if baseBranch == "" {
-			baseBranch = "main"
+		baseBranch := "main"
+		if w.config != nil && w.config.Git.BaseBranch != "" {
+			baseBranch = w.config.Git.BaseBranch
 		}
-		if err := CompleteMerge(p, baseBranch, mainGit); err != nil {
-			log.Error("Failed to merge: %v", err)
-			log.Warn("Plan completed but merge failed. Branch: %s", p.Branch)
+		if err := CompleteMerge(plan.FeatureBranch, baseBranch, w.git); err != nil {
+			return fmt.Errorf("merge completion: %w", err)
 		}
+
 	case "branch":
-		// Push branch only, no PR or merge
-		if err := CompleteBranch(p, wtGit); err != nil {
-			log.Error("Failed to push branch: %v", err)
-			log.Warn("Plan completed but branch not pushed. Branch: %s", p.Branch)
+		baseBranch := "main"
+		if w.config != nil && w.config.Git.BaseBranch != "" {
+			baseBranch = w.config.Git.BaseBranch
 		}
-	default:
-		log.Debug("Unknown completion mode: %s, skipping", w.completionMode)
+		wtGit := git.NewGit(worktreePath)
+		if err := CompleteBranch(plan.FeatureBranch, baseBranch, wtGit); err != nil {
+			return fmt.Errorf("branch completion: %w", err)
+		}
 	}
 
-	// Send completion notification via Slack
-	w.sendCompleteNotification(p, prURL)
-
-	// Notify callback with PR URL if available
-	if w.onPlanComplete != nil {
-		w.onPlanComplete(p, result)
-	}
-
-	// Archive the plan (move to complete/)
-	if err := w.queue.Complete(p); err != nil {
-		log.Error("Failed to archive plan: %v", err)
-		// Continue with cleanup
+	// Update ATM status to complete
+	if _, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusComplete); err != nil {
+		log.Error("Failed to set plan status to complete in ATM: %v", err)
 	}
 
 	// Clean up worktree
-	log.Info("Cleaning up worktree...")
-	deleteBranch := w.completionMode == "merge" // Only delete branch in merge mode
-	if err := w.worktreeManager.Remove(p, deleteBranch); err != nil {
-		log.Warn("Failed to remove worktree: %v", err)
-		// Non-fatal
+	if w.worktreeManager != nil {
+		name := branchToWorktreeName(plan.FeatureBranch)
+		if err := w.worktreeManager.Remove(name, false); err != nil {
+			log.Warn("Failed to remove worktree: %v", err)
+		}
 	}
 
-	// Log PR URL at the end for visibility
-	if prURL != "" {
-		log.Success("PR URL: %s", prURL)
-	}
+	// Send completion notification
+	w.sendCompleteNotification(info, prURL)
 
 	return nil
 }
 
-// notifyError sends error notification and calls the error callback if set.
-func (w *Worker) notifyError(p *plan.Plan, err error) {
-	// Update parent message to show error state
-	w.updateProgress(p, 0, notify.PhaseError, err.Error())
+// completePR pushes the branch and creates a PR.
+func (w *Worker) completePR(plan *atm.Plan, info *PlanInfo, worktreePath string) (string, error) {
+	wtGit := git.NewGit(worktreePath)
 
-	// Send error notification via Slack (thread reply with details)
-	if w.config != nil && w.config.Slack.NotifyError {
-		if notifyErr := w.notifier.Error(p, err); notifyErr != nil {
-			log.Debug("Failed to send error notification: %v", notifyErr)
-		}
+	// Push branch
+	if err := pushBranch(wtGit, plan.FeatureBranch); err != nil {
+		return "", fmt.Errorf("pushing branch: %w", err)
 	}
 
-	// Call user callback
-	if w.onPlanError != nil {
-		w.onPlanError(p, err)
+	// Create PR
+	prURL, err := createPRSimple(plan.Title, plan.FeatureBranch, worktreePath, w.runner, w.promptBuilder)
+	if err != nil {
+		log.Error("Failed to create PR: %v", err)
+		logManualPRInstructionsSimple(info.Name, info.Branch)
+		return "", nil // Non-fatal; branch is pushed
 	}
+
+	log.Success("PR created: %s", prURL)
+	return prURL, nil
 }
 
-// sendStartNotification sends a start notification if configured.
-func (w *Worker) sendStartNotification(p *plan.Plan) {
-	if w.config != nil && w.config.Slack.NotifyStart {
-		if err := w.notifier.Start(p); err != nil {
-			log.Debug("Failed to send start notification: %v", err)
-		}
-		// Start already creates the status card, but ensure we track the initial state
-		w.updateProgress(p, 1, notify.PhaseInitializing, "Setting up worktree...")
+// syncFromRemote pulls latest changes from the remote if sync is enabled.
+func (w *Worker) syncFromRemote() {
+	if !w.syncEnabled {
+		return
 	}
+
+	if time.Since(w.lastSyncTime) < w.syncInterval {
+		return
+	}
+
+	log.Debug("Syncing from remote...")
+	if err := w.git.Pull(); err != nil {
+		log.Warn("Failed to sync from remote: %v", err)
+	}
+	w.lastSyncTime = time.Now()
 }
 
-// sendCompleteNotification sends a completion notification if configured.
-func (w *Worker) sendCompleteNotification(p *plan.Plan, prURL string) {
-	// Update parent message to show complete state
-	message := ""
-	if prURL != "" {
-		message = fmt.Sprintf("<%s|View PR>", prURL)
-	}
-	w.updateProgress(p, w.maxIterations, notify.PhaseComplete, message)
-
-	// Send completion notification via Slack (thread reply with details)
-	if w.config != nil && w.config.Slack.NotifyComplete {
-		if err := w.notifier.Complete(p, prURL); err != nil {
-			log.Debug("Failed to send complete notification: %v", err)
-		}
-	}
-}
-
-// sendBlockerNotification sends a blocker notification if configured.
-func (w *Worker) sendBlockerNotification(p *plan.Plan, blocker *runner.Blocker) {
-	if w.config != nil && w.config.Slack.NotifyBlocker {
-		if err := w.notifier.Blocker(p, blocker); err != nil {
-			log.Debug("Failed to send blocker notification: %v", err)
-		}
-	}
-}
-
-// sendIterationNotification sends an iteration notification if configured.
-func (w *Worker) sendIterationNotification(p *plan.Plan, iteration, maxIterations int) {
-	if w.config != nil && w.config.Slack.NotifyIteration {
-		if err := w.notifier.Iteration(p, iteration, maxIterations); err != nil {
-			log.Debug("Failed to send iteration notification: %v", err)
-		}
-	}
-}
-
-// updateProgress updates the parent message with current progress status.
-func (w *Worker) updateProgress(p *plan.Plan, iteration int, phase notify.ProgressPhase, message string) {
-	status := &notify.ProgressStatus{
-		Iteration:     iteration,
-		MaxIterations: w.maxIterations,
-		Phase:         phase,
-		Message:       message,
-	}
-	if err := w.notifier.UpdateProgress(p, status); err != nil {
-		log.Debug("Failed to update progress: %v", err)
-	}
-}
-
-// SetupNotifications configures the notifier and optionally starts the Socket Mode bot.
-// This should be called before starting the worker.
-// Returns a cleanup function that should be called when the worker stops.
+// SetupNotifications creates and configures the notifier based on worker config.
+// Returns a cleanup function that should be called on shutdown.
 func (w *Worker) SetupNotifications(ctx context.Context) func() {
-	if w.config == nil {
-		return func() {}
-	}
-
-	// Create thread tracker for thread-based replies
-	trackerPath := notify.ThreadTrackerPath(w.configDir)
-	tracker, err := notify.NewThreadTracker(trackerPath)
+	tracker, err := notify.NewThreadTracker(w.configDir)
 	if err != nil {
 		log.Warn("Failed to create thread tracker: %v", err)
-		// Continue without thread tracking
+		tracker = nil
 	}
-	w.threadTracker = tracker
-
-	// Create notifier based on configuration
 	w.notifier = notify.NewNotifier(w.config, tracker)
-
-	// Auto-start Socket Mode bot if configured
-	if w.config.Slack.Channel != "" {
-		planBasePath := filepath.Join(w.mainWorktreePath, "plans", "current")
-		w.bot = notify.StartBotIfConfigured(ctx, tracker, planBasePath, w.config.Slack.Channel)
-		if w.bot != nil {
-			log.Info("Socket Mode bot started for Slack replies")
-		} else {
-			log.Warn("Socket Mode bot not started - SLACK_APP_TOKEN may be missing")
-			log.Warn("Slack thread replies will not be captured to feedback files")
-		}
-	}
-
-	// Return cleanup function
 	return func() {
-		if w.bot != nil {
-			w.bot.Stop()
-			log.Debug("Socket Mode bot stopped")
-		}
+		// ThreadTracker auto-saves on Set/Delete; no explicit save needed.
 	}
 }
 
-
-// checkExistingPR checks if a PR already exists for the plan's branch.
-// Returns (true, prURL) if PR exists, (false, "") otherwise.
-func (w *Worker) checkExistingPR(p *plan.Plan) (bool, string) {
-	// Use gh CLI to check for PR
-	cmd := exec.Command("gh", "pr", "list", "--head", p.Branch, "--state", "all", "--json", "url", "--jq", ".[0].url")
-	cmd.Dir = w.mainWorktreePath
-
-	output, err := cmd.Output()
-	if err != nil {
-		// Command failed - gh might not be available or repo not configured
-		log.Debug("Failed to check for existing PR: %v", err)
-		return false, ""
-	}
-
-	prURL := strings.TrimSpace(string(output))
-	if prURL == "" || prURL == "null" {
-		return false, ""
-	}
-
-	return true, prURL
+// toNotifyPlanInfo converts a worker PlanInfo to a notify.PlanInfo.
+func toNotifyPlanInfo(info *PlanInfo) notify.PlanInfo {
+	return notify.PlanInfo{Name: info.Name, Branch: info.Branch}
 }
 
-// recoverCompletedPlan handles recovery of a plan that was completed but not archived.
-// This happens when instance is terminated between PR creation and plan archival.
-func (w *Worker) recoverCompletedPlan(p *plan.Plan, prURL string) error {
-	// Send completion notification
-	w.sendCompleteNotification(p, prURL)
-
-	// Archive the plan (move to complete/)
-	if err := w.queue.Complete(p); err != nil {
-		return fmt.Errorf("archiving plan: %w", err)
+// toNotifyBlocker converts a runner.Blocker to a notify.Blocker.
+func toNotifyBlocker(b *runner.Blocker) *notify.Blocker {
+	if b == nil {
+		return nil
 	}
-
-	// Clean up worktree if it exists
-	if w.worktreeManager.Exists(p) {
-		log.Info("Cleaning up worktree...")
-		// Don't delete branch - PR still references it
-		if err := w.worktreeManager.Remove(p, false); err != nil {
-			log.Warn("Failed to remove worktree: %v", err)
-			// Non-fatal
-		}
+	return &notify.Blocker{
+		Content:     b.Content,
+		Description: b.Description,
+		Action:      b.Action,
+		Resume:      b.Resume,
+		Hash:        b.Hash,
 	}
+}
 
-	log.Success("Plan recovery complete: %s", p.Name)
-	return nil
+// Notification methods using PlanInfo.
+
+func (w *Worker) sendStartNotification(info *PlanInfo) {
+	if w.config == nil || !w.config.Slack.NotifyStart {
+		return
+	}
+	if err := w.notifier.Start(toNotifyPlanInfo(info)); err != nil {
+		log.Warn("Failed to send start notification: %v", err)
+	}
+}
+
+func (w *Worker) sendCompleteNotification(info *PlanInfo, prURL string) {
+	if w.config == nil || !w.config.Slack.NotifyComplete {
+		return
+	}
+	if err := w.notifier.Complete(toNotifyPlanInfo(info), prURL); err != nil {
+		log.Warn("Failed to send complete notification: %v", err)
+	}
+}
+
+func (w *Worker) sendBlockerNotification(info *PlanInfo, blocker *runner.Blocker) {
+	if w.config == nil || !w.config.Slack.NotifyBlocker {
+		return
+	}
+	if err := w.notifier.BlockerNotify(toNotifyPlanInfo(info), toNotifyBlocker(blocker)); err != nil {
+		log.Warn("Failed to send blocker notification: %v", err)
+	}
+}
+
+func (w *Worker) notifyError(info *PlanInfo, err error) {
+	if w.config == nil || !w.config.Slack.NotifyError {
+		return
+	}
+	if notifyErr := w.notifier.Error(toNotifyPlanInfo(info), err); notifyErr != nil {
+		log.Warn("Failed to send error notification: %v", notifyErr)
+	}
+}
+
+func (w *Worker) sendIterationNotification(info *PlanInfo, iteration, maxIterations int) {
+	if w.config == nil || !w.config.Slack.NotifyIteration {
+		return
+	}
+	if err := w.notifier.Iteration(toNotifyPlanInfo(info), iteration, maxIterations); err != nil {
+		log.Warn("Failed to send iteration notification: %v", err)
+	}
+}
+
+// branchToWorktreeName converts a branch name to a safe worktree directory name.
+func branchToWorktreeName(branch string) string {
+	return strings.ReplaceAll(branch, "/", "-")
 }

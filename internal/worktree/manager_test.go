@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/arvesolland/ralph/internal/git"
-	"github.com/arvesolland/ralph/internal/plan"
 )
 
 // mockGit implements git.Git interface for testing.
@@ -42,7 +41,7 @@ func (m *mockGit) Pull() error                                         { return 
 func (m *mockGit) PullRebase() error                                   { return nil }
 func (m *mockGit) CurrentBranch() (string, error)                      { return "main", nil }
 func (m *mockGit) CreateBranch(name string) error                      { m.branches[name] = true; return nil }
-func (m *mockGit) DeleteBranch(name string, force bool) error          {
+func (m *mockGit) DeleteBranch(name string, force bool) error {
 	if m.deleteBranchErr != nil {
 		return m.deleteBranchErr
 	}
@@ -52,13 +51,13 @@ func (m *mockGit) DeleteBranch(name string, force bool) error          {
 	delete(m.branches, name)
 	return nil
 }
-func (m *mockGit) DeleteRemoteBranch(remote, branch string) error      { return nil }
-func (m *mockGit) BranchExists(name string) (bool, error)              { return m.branches[name], nil }
-func (m *mockGit) Checkout(branch string) error                        { return nil }
-func (m *mockGit) Merge(branch string, noFastForward bool) error       { return nil }
-func (m *mockGit) RepoRoot() (string, error)                           { return m.repoRoot, nil }
-func (m *mockGit) IsClean() (bool, error)                              { return m.isClean, m.isCleanErr }
-func (m *mockGit) WorkDir() string                                     { return m.workDir }
+func (m *mockGit) DeleteRemoteBranch(remote, branch string) error { return nil }
+func (m *mockGit) BranchExists(name string) (bool, error)         { return m.branches[name], nil }
+func (m *mockGit) Checkout(branch string) error                   { return nil }
+func (m *mockGit) Merge(branch string, noFastForward bool) error  { return nil }
+func (m *mockGit) RepoRoot() (string, error)                      { return m.repoRoot, nil }
+func (m *mockGit) IsClean() (bool, error)                         { return m.isClean, m.isCleanErr }
+func (m *mockGit) WorkDir() string                                { return m.workDir }
 
 func (m *mockGit) CreateWorktree(path, branch string) error {
 	if m.createErr != nil {
@@ -146,8 +145,8 @@ func TestManager_Path(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.planName, func(t *testing.T) {
-			p := &plan.Plan{Name: tt.planName, Branch: tt.branch}
-			got := m.Path(p)
+			info := PlanInfo{Name: tt.planName, Branch: tt.branch}
+			got := m.Path(info)
 			if got != tt.want {
 				t.Errorf("Path() = %q, want %q", got, tt.want)
 			}
@@ -160,9 +159,9 @@ func TestManager_Exists_NotExists(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-	if m.Exists(p) {
+	if m.Exists(info) {
 		t.Error("Exists() = true, want false for non-existent worktree")
 	}
 }
@@ -172,14 +171,14 @@ func TestManager_Exists_AfterCreate(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-	_, err := m.Create(p)
+	_, err := m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	if !m.Exists(p) {
+	if !m.Exists(info) {
 		t.Error("Exists() = false, want true after Create")
 	}
 }
@@ -189,9 +188,9 @@ func TestManager_Create(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-	wt, err := m.Create(p)
+	wt, err := m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -220,16 +219,16 @@ func TestManager_Create_AlreadyExists(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
 	// First create should succeed
-	_, err := m.Create(p)
+	_, err := m.Create(info)
 	if err != nil {
 		t.Fatalf("First Create failed: %v", err)
 	}
 
 	// Second create should fail
-	_, err = m.Create(p)
+	_, err = m.Create(info)
 	if !errors.Is(err, ErrWorktreeExists) {
 		t.Errorf("Second Create error = %v, want ErrWorktreeExists", err)
 	}
@@ -241,9 +240,9 @@ func TestManager_Create_BranchCheckedOut(t *testing.T) {
 	g.createErr = git.ErrBranchAlreadyCheckedOut
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-	_, err := m.Create(p)
+	_, err := m.Create(info)
 	if err == nil {
 		t.Error("Create should have failed with branch checked out error")
 	}
@@ -254,9 +253,9 @@ func TestManager_Get_NotExists(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-	wt, err := m.Get(p)
+	wt, err := m.Get(info)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -271,11 +270,11 @@ func TestManager_Get_AfterCreate(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-	created, _ := m.Create(p)
+	created, _ := m.Create(info)
 
-	got, err := m.Get(p)
+	got, err := m.Get(info)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -298,27 +297,27 @@ func TestManager_Remove(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
 	// Create first
-	_, err := m.Create(p)
+	_, err := m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
 	// Remove without deleting branch
-	err = m.Remove(p, false)
+	err = m.Remove(info, false)
 	if err != nil {
 		t.Fatalf("Remove failed: %v", err)
 	}
 
 	// Verify worktree no longer exists
-	if m.Exists(p) {
+	if m.Exists(info) {
 		t.Error("Worktree should not exist after Remove")
 	}
 
 	// Branch should still exist
-	if !g.branches[p.Branch] {
+	if !g.branches[info.Branch] {
 		t.Error("Branch should still exist when deleteBranch=false")
 	}
 }
@@ -328,22 +327,22 @@ func TestManager_Remove_WithDeleteBranch(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
 	// Create first
-	_, err := m.Create(p)
+	_, err := m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
 	// Remove with branch deletion
-	err = m.Remove(p, true)
+	err = m.Remove(info, true)
 	if err != nil {
 		t.Fatalf("Remove failed: %v", err)
 	}
 
 	// Branch should be deleted
-	if g.branches[p.Branch] {
+	if g.branches[info.Branch] {
 		t.Error("Branch should be deleted when deleteBranch=true")
 	}
 }
@@ -353,9 +352,9 @@ func TestManager_Remove_NotExists(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	info := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-	err := m.Remove(p, false)
+	err := m.Remove(info, false)
 	if !errors.Is(err, ErrWorktreeNotFound) {
 		t.Errorf("Remove error = %v, want ErrWorktreeNotFound", err)
 	}
@@ -387,26 +386,26 @@ func TestManager_FullLifecycle(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	p := &plan.Plan{Name: "lifecycle-plan", Branch: "feat/lifecycle-plan"}
+	info := PlanInfo{Name: "lifecycle-plan", Branch: "feat/lifecycle-plan"}
 
 	// Initially should not exist
-	if m.Exists(p) {
+	if m.Exists(info) {
 		t.Error("Worktree should not exist initially")
 	}
 
 	// Create
-	wt, err := m.Create(p)
+	wt, err := m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
 	// Should exist now
-	if !m.Exists(p) {
+	if !m.Exists(info) {
 		t.Error("Worktree should exist after Create")
 	}
 
 	// Get should return same info
-	got, err := m.Get(p)
+	got, err := m.Get(info)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -415,18 +414,18 @@ func TestManager_FullLifecycle(t *testing.T) {
 	}
 
 	// Remove
-	err = m.Remove(p, true)
+	err = m.Remove(info, true)
 	if err != nil {
 		t.Fatalf("Remove failed: %v", err)
 	}
 
 	// Should not exist after remove
-	if m.Exists(p) {
+	if m.Exists(info) {
 		t.Error("Worktree should not exist after Remove")
 	}
 
 	// Get should return nil
-	got, err = m.Get(p)
+	got, err = m.Get(info)
 	if err != nil {
 		t.Fatalf("Get after Remove failed: %v", err)
 	}
@@ -442,26 +441,16 @@ func TestManager_Cleanup_NoOrphans(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, ".ralph/worktrees")
 
-	// Create plans directory structure
-	plansDir := filepath.Join(tmpDir, "plans")
-	os.MkdirAll(filepath.Join(plansDir, "pending"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "current"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "complete"), 0755)
-
-	// Create a plan in current
-	currentPlan := filepath.Join(plansDir, "current", "my-plan.md")
-	os.WriteFile(currentPlan, []byte("# Plan\n**Status:** in_progress"), 0644)
-
-	// Create a worktree for this plan
-	p := &plan.Plan{Name: "my-plan", Branch: "feat/my-plan", Path: currentPlan}
-	_, err := m.Create(p)
+	// Create a worktree
+	info := PlanInfo{Name: "my-plan", Branch: "feat/my-plan"}
+	_, err := m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	// Run cleanup
-	queue := plan.NewQueue(plansDir)
-	results, err := m.Cleanup(queue)
+	// Run cleanup with this plan as active
+	activePlans := map[string]bool{"my-plan": true}
+	results, err := m.Cleanup(activePlans)
 	if err != nil {
 		t.Fatalf("Cleanup failed: %v", err)
 	}
@@ -472,15 +461,12 @@ func TestManager_Cleanup_NoOrphans(t *testing.T) {
 	}
 
 	// Worktree should still exist
-	if !m.Exists(p) {
+	if !m.Exists(info) {
 		t.Error("Worktree should still exist (not orphaned)")
 	}
 }
 
 func TestManager_Cleanup_RemovesOrphan(t *testing.T) {
-	// This test requires real git operations to verify cleanup behavior
-	// It tests that orphaned worktrees (with no matching plans) are removed
-
 	tmpDir := t.TempDir()
 
 	// Initialize a real git repo
@@ -505,12 +491,6 @@ func TestManager_Cleanup_RemovesOrphan(t *testing.T) {
 		t.Fatalf("git commit failed: %v", err)
 	}
 
-	// Create plans directory structure (empty - no plans)
-	plansDir := filepath.Join(tmpDir, "plans")
-	os.MkdirAll(filepath.Join(plansDir, "pending"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "current"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "complete"), 0755)
-
 	// Create manager with real git
 	worktreesDir := ".ralph/worktrees"
 	m, err := NewManager(realGit, worktreesDir)
@@ -519,20 +499,20 @@ func TestManager_Cleanup_RemovesOrphan(t *testing.T) {
 	}
 
 	// Create a worktree (but no corresponding plan - orphan!)
-	p := &plan.Plan{Name: "orphan-plan", Branch: "feat/orphan-plan"}
-	_, err = m.Create(p)
+	info := PlanInfo{Name: "orphan-plan", Branch: "feat/orphan-plan"}
+	_, err = m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
 	// Verify worktree was created
-	if !m.Exists(p) {
+	if !m.Exists(info) {
 		t.Fatal("Worktree should exist after Create")
 	}
 
-	// Run cleanup
-	queue := plan.NewQueue(plansDir)
-	results, err := m.Cleanup(queue)
+	// Run cleanup with empty active plans
+	activePlans := map[string]bool{}
+	results, err := m.Cleanup(activePlans)
 	if err != nil {
 		t.Fatalf("Cleanup failed: %v", err)
 	}
@@ -552,7 +532,7 @@ func TestManager_Cleanup_RemovesOrphan(t *testing.T) {
 	}
 
 	// Worktree should no longer exist
-	if m.Exists(p) {
+	if m.Exists(info) {
 		t.Error("Orphaned worktree should have been removed")
 	}
 }
@@ -564,12 +544,6 @@ func execCommand(name string, args ...string) *exec.Cmd {
 
 func TestManager_Cleanup_SkipsUncommittedChanges(t *testing.T) {
 	tmpDir := t.TempDir()
-
-	// Create plans directory structure (empty - no plans)
-	plansDir := filepath.Join(tmpDir, "plans")
-	os.MkdirAll(filepath.Join(plansDir, "pending"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "current"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "complete"), 0755)
 
 	// Create worktrees directory
 	worktreesDir := filepath.Join(tmpDir, ".ralph/worktrees")
@@ -583,17 +557,9 @@ func TestManager_Cleanup_SkipsUncommittedChanges(t *testing.T) {
 	g := newMockGit(tmpDir)
 	m, _ := NewManager(g, worktreesDir)
 
-	// The Cleanup function creates a new Git instance for each worktree to check IsClean.
-	// Since we can't mock that easily, we'll test this by checking that
-	// the result correctly reports what happened.
-
-	// For this test, we need to use real git. Let's create a test that
-	// verifies the skip logic by checking behavior.
-
-	// Run cleanup - the directory will be detected but IsClean check will fail
-	// (since it's not a real git repo)
-	queue := plan.NewQueue(plansDir)
-	results, err := m.Cleanup(queue)
+	// Run cleanup with empty active plans
+	activePlans := map[string]bool{}
+	results, err := m.Cleanup(activePlans)
 	if err != nil {
 		t.Fatalf("Cleanup failed: %v", err)
 	}
@@ -625,11 +591,8 @@ func TestManager_Cleanup_NoWorktreesDir(t *testing.T) {
 	// Don't create worktrees directory
 	m, _ := NewManager(g, filepath.Join(tmpDir, ".ralph/worktrees"))
 
-	plansDir := filepath.Join(tmpDir, "plans")
-	os.MkdirAll(filepath.Join(plansDir, "pending"), 0755)
-	queue := plan.NewQueue(plansDir)
-
-	results, err := m.Cleanup(queue)
+	activePlans := map[string]bool{}
+	results, err := m.Cleanup(activePlans)
 	if err != nil {
 		t.Fatalf("Cleanup failed: %v", err)
 	}
@@ -640,50 +603,7 @@ func TestManager_Cleanup_NoWorktreesDir(t *testing.T) {
 	}
 }
 
-func TestManager_Cleanup_PendingPlanNotOrphaned(t *testing.T) {
-	tmpDir := t.TempDir()
-	g := newMockGit(tmpDir)
-	m, _ := NewManager(g, ".ralph/worktrees")
-
-	// Create plans directory structure
-	plansDir := filepath.Join(tmpDir, "plans")
-	os.MkdirAll(filepath.Join(plansDir, "pending"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "current"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "complete"), 0755)
-
-	// Create a plan in PENDING (not current)
-	pendingPlan := filepath.Join(plansDir, "pending", "pending-plan.md")
-	os.WriteFile(pendingPlan, []byte("# Plan\n**Status:** pending"), 0644)
-
-	// Create a worktree for this plan
-	p := &plan.Plan{Name: "pending-plan", Branch: "feat/pending-plan", Path: pendingPlan}
-	_, err := m.Create(p)
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-
-	// Run cleanup
-	queue := plan.NewQueue(plansDir)
-	results, err := m.Cleanup(queue)
-	if err != nil {
-		t.Fatalf("Cleanup failed: %v", err)
-	}
-
-	// Should have no orphans (pending plan's worktree is valid)
-	if len(results) != 0 {
-		t.Errorf("Cleanup returned %d results, want 0 (pending plan worktree should not be orphaned)", len(results))
-	}
-
-	// Worktree should still exist
-	if !m.Exists(p) {
-		t.Error("Worktree for pending plan should still exist")
-	}
-}
-
 func TestManager_Cleanup_CompletePlanIsOrphaned(t *testing.T) {
-	// This test requires real git operations
-	// Complete plans should have their worktrees cleaned up
-
 	tmpDir := t.TempDir()
 
 	// Initialize a real git repo
@@ -708,16 +628,6 @@ func TestManager_Cleanup_CompletePlanIsOrphaned(t *testing.T) {
 		t.Fatalf("git commit failed: %v", err)
 	}
 
-	// Create plans directory structure
-	plansDir := filepath.Join(tmpDir, "plans")
-	os.MkdirAll(filepath.Join(plansDir, "pending"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "current"), 0755)
-	os.MkdirAll(filepath.Join(plansDir, "complete"), 0755)
-
-	// Create a plan in COMPLETE (not pending or current)
-	completePlan := filepath.Join(plansDir, "complete", "done-plan.md")
-	os.WriteFile(completePlan, []byte("# Plan\n**Status:** complete"), 0644)
-
 	// Create manager with real git
 	worktreesDir := ".ralph/worktrees"
 	m, err := NewManager(realGit, worktreesDir)
@@ -725,16 +635,16 @@ func TestManager_Cleanup_CompletePlanIsOrphaned(t *testing.T) {
 		t.Fatalf("NewManager failed: %v", err)
 	}
 
-	// Create a worktree for this plan (shouldn't exist for complete plans)
-	p := &plan.Plan{Name: "done-plan", Branch: "feat/done-plan", Path: completePlan}
-	_, err = m.Create(p)
+	// Create a worktree for a "completed" plan
+	info := PlanInfo{Name: "done-plan", Branch: "feat/done-plan"}
+	_, err = m.Create(info)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	// Run cleanup
-	queue := plan.NewQueue(plansDir)
-	results, err := m.Cleanup(queue)
+	// Run cleanup - done-plan is NOT in active plans
+	activePlans := map[string]bool{}
+	results, err := m.Cleanup(activePlans)
 	if err != nil {
 		t.Fatalf("Cleanup failed: %v", err)
 	}
@@ -750,7 +660,7 @@ func TestManager_Cleanup_CompletePlanIsOrphaned(t *testing.T) {
 	}
 
 	// Worktree should no longer exist
-	if m.Exists(p) {
+	if m.Exists(info) {
 		t.Error("Worktree for complete plan should have been removed")
 	}
 }

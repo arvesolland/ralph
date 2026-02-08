@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
-	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
 	"github.com/arvesolland/ralph/internal/worker"
@@ -37,31 +35,30 @@ var (
 
 var workerCmd = &cobra.Command{
 	Use:   "worker",
-	Short: "Process plans from the queue",
-	Long: `Run the worker loop to process plans from the pending queue.
+	Short: "Process plans from the ATM queue",
+	Long: `Run the worker loop to process plans from the ATM queue.
 
 The worker will:
-1. Take the first plan from pending/ and move it to current/
-2. Create a git worktree for the plan's branch
-3. Run the iteration loop until completion or max iterations
-4. On completion: create PR (default), merge directly, or push branch only
-5. Move the plan to complete/ and clean up the worktree
-6. Repeat for the next pending plan
+1. Poll ATM for ready plans
+2. Activate the first ready plan
+3. Create a git worktree for the plan's branch
+4. Run the iteration loop until completion or max iterations
+5. On completion: create PR (default), merge directly, or push branch only
+6. Clean up the worktree
+7. Repeat for the next ready plan
 
 With --once, it processes a single plan and exits.
 Without --once, it runs continuously, polling for new plans.
 
 With --sync, it pulls from remote before each queue check, enabling
-a "push-to-deploy" workflow where plans are pushed to the repo and
-workers automatically pick them up.
+a "push-to-deploy" workflow.
 
 Example:
   ralph worker                    # continuous mode
   ralph worker --once             # single plan mode
   ralph worker --merge            # merge directly instead of creating PR
   ralph worker --branch           # push to branch only, no PR
-  ralph worker --sync             # pull from remote before each check
-  ralph worker --sync --once      # pull once, process one plan, exit`,
+  ralph worker --sync             # pull from remote before each check`,
 	RunE: runWorker,
 }
 
@@ -88,7 +85,6 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	if workerBranchMode {
 		completionMode = "branch"
 	}
-	// --branch takes precedence, then --merge, then --pr (default)
 
 	// Load configuration
 	cfg, err := config.LoadWithDefaults(GetConfigPath())
@@ -102,11 +98,19 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		completionMode = cfg.Completion.Mode
 	}
 
+	// Determine project slug
+	projectSlug := cfg.ATM.ProjectSlug
+	if projectSlug == "" {
+		return fmt.Errorf("atm.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
+	}
+
+	// Create ATM client
+	atmClient := cfg.ATMClient()
+
 	// Determine sync settings (flags take precedence over config)
 	syncEnabled := workerSync
 	syncInterval := workerSyncInterval
 
-	// If not set via flags, check config
 	if !cmd.Flags().Changed("sync") && cfg.Worker.Sync {
 		syncEnabled = cfg.Worker.Sync
 	}
@@ -135,31 +139,21 @@ func runWorker(cmd *cobra.Command, args []string) error {
 
 	// Set up paths
 	configDir := filepath.Join(repoRoot, ".ralph")
-	plansDir := filepath.Join(repoRoot, "plans")
 	worktreesDir := filepath.Join(configDir, "worktrees")
 
-	// Ensure directories exist
-	if err := os.MkdirAll(filepath.Join(plansDir, "pending"), 0755); err != nil {
-		return fmt.Errorf("creating plans/pending: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Join(plansDir, "current"), 0755); err != nil {
-		return fmt.Errorf("creating plans/current: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Join(plansDir, "complete"), 0755); err != nil {
-		return fmt.Errorf("creating plans/complete: %w", err)
-	}
+	// Ensure worktrees directory exists
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
 		return fmt.Errorf("creating worktrees directory: %w", err)
 	}
-
-	// Initialize queue
-	queue := plan.NewQueue(plansDir)
 
 	// Initialize worktree manager
 	wtManager, err := worktree.NewManager(g, worktreesDir)
 	if err != nil {
 		return fmt.Errorf("initializing worktree manager: %w", err)
 	}
+
+	// Create adapter to satisfy worker.WorktreeManager interface
+	wtAdapter := &worktreeAdapter{manager: wtManager}
 
 	// Initialize prompt builder
 	promptsDir := filepath.Join(configDir, "prompts")
@@ -170,10 +164,11 @@ func runWorker(cmd *cobra.Command, args []string) error {
 
 	// Create worker
 	w := worker.NewWorker(worker.WorkerConfig{
-		Queue:            queue,
+		ATM:              atmClient,
+		ProjectSlug:      projectSlug,
 		Config:           cfg,
 		ConfigDir:        configDir,
-		WorktreeManager:  wtManager,
+		WorktreeManager:  wtAdapter,
 		Git:              g,
 		MainWorktreePath: mainWorktreePath,
 		Runner:           claudeRunner,
@@ -181,26 +176,26 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		PollInterval:     workerInterval,
 		MaxIterations:    workerMaxIter,
 		CompletionMode:   completionMode,
-		SyncEnabled:        syncEnabled,
-		SyncInterval:       syncInterval,
+		SyncEnabled:      syncEnabled,
+		SyncInterval:     syncInterval,
 		PushAfterIteration: workerPush,
-		OnPlanStart: func(p *plan.Plan) {
-			log.Success("=== Starting plan: %s ===", p.Name)
-			log.Info("Branch: %s", p.Branch)
+		OnPlanStart: func(info *worker.PlanInfo) {
+			log.Success("=== Starting plan: %s ===", info.Name)
+			log.Info("Branch: %s", info.Branch)
 		},
-		OnPlanComplete: func(p *plan.Plan, result *runner.LoopResult) {
-			log.Success("=== Plan complete: %s ===", p.Name)
+		OnPlanComplete: func(info *worker.PlanInfo, result *runner.LoopResult) {
+			log.Success("=== Plan complete: %s ===", info.Name)
 			log.Info("Iterations: %d", result.Iterations)
 			if result.Completed {
 				log.Success("Verified complete!")
 			}
 		},
-		OnPlanError: func(p *plan.Plan, err error) {
-			log.Error("=== Plan error: %s ===", p.Name)
+		OnPlanError: func(info *worker.PlanInfo, err error) {
+			log.Error("=== Plan error: %s ===", info.Name)
 			log.Error("Error: %v", err)
 		},
-		OnBlocker: func(p *plan.Plan, blocker *runner.Blocker) {
-			log.Warn("=== Blocker detected in %s ===", p.Name)
+		OnBlocker: func(info *worker.PlanInfo, blocker *runner.Blocker) {
+			log.Warn("=== Blocker detected in %s ===", info.Name)
 			log.Warn("Description: %s", blocker.Description)
 			if blocker.Action != "" {
 				log.Info("Action required: %s", blocker.Action)
@@ -225,23 +220,9 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	cleanupNotifications := w.SetupNotifications(ctx)
 	defer cleanupNotifications()
 
-	// Check for API key - warn if verification won't work
-	if !runner.IsAPIKeyAvailable() {
-		log.Warn("ANTHROPIC_API_KEY not set - plan verification will be skipped")
-		log.Warn("Plans may be marked complete without AI verification")
-		fmt.Print("Continue without verification? [y/N]: ")
-
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(strings.ToLower(input))
-		if input != "y" && input != "yes" {
-			log.Info("Set ANTHROPIC_API_KEY and try again")
-			return nil
-		}
-	}
-
 	// Run the worker
 	log.Info("Worker starting...")
+	log.Info("Project: %s", projectSlug)
 	log.Info("Completion mode: %s", completionMode)
 	log.Info("Poll interval: %v", workerInterval)
 	log.Info("Max iterations: %d", workerMaxIter)
@@ -292,4 +273,64 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// worktreeAdapter adapts worktree.WorktreeManager to the worker.WorktreeManager interface.
+type worktreeAdapter struct {
+	manager *worktree.WorktreeManager
+}
+
+func (a *worktreeAdapter) Create(name, branch string) (string, error) {
+	info := worktree.PlanInfo{Name: name, Branch: branch}
+	wt, err := a.manager.Create(info)
+	if err != nil {
+		return "", err
+	}
+	return wt.Path, nil
+}
+
+func (a *worktreeAdapter) Get(name string) (string, error) {
+	// We need the branch to construct the PlanInfo. Use name as branch
+	// since the worker passes branchToWorktreeName(branch) as name.
+	// Reconstruct branch from name by reversing the transformation.
+	branch := nameToWorktreeBranch(name)
+	info := worktree.PlanInfo{Name: name, Branch: branch}
+	wt, err := a.manager.Get(info)
+	if err != nil {
+		return "", err
+	}
+	if wt == nil {
+		return "", nil
+	}
+	return wt.Path, nil
+}
+
+func (a *worktreeAdapter) Remove(name string, deleteBranch bool) error {
+	branch := nameToWorktreeBranch(name)
+	info := worktree.PlanInfo{Name: name, Branch: branch}
+	return a.manager.Remove(info, deleteBranch)
+}
+
+func (a *worktreeAdapter) Exists(name string) bool {
+	branch := nameToWorktreeBranch(name)
+	info := worktree.PlanInfo{Name: name, Branch: branch}
+	return a.manager.Exists(info)
+}
+
+// nameToWorktreeBranch reverses the branchToWorktreeName transformation.
+// branchToWorktreeName replaces "/" with "-", so we reverse: "feat-my-feature" -> "feat/my-feature".
+// Since the worktree.WorktreeManager.Path uses strings.TrimPrefix(branch, "feat/"),
+// the name passed here IS the directory name (which is the branch without "feat/" prefix).
+// So the branch is "feat/" + name.
+func nameToWorktreeBranch(name string) string {
+	// The worker's branchToWorktreeName does: strings.ReplaceAll(branch, "/", "-")
+	// So "feat/my-feature" becomes "feat-my-feature"
+	// We need to get back from "feat-my-feature" to "feat/my-feature"
+	// Since the worktree manager uses the branch to build the path
+	// via strings.TrimPrefix(branch, "feat/"), the simplest approach
+	// is to reconstruct: if name starts with "feat-", it was "feat/..."
+	if strings.HasPrefix(name, "feat-") {
+		return "feat/" + name[5:]
+	}
+	return name
 }

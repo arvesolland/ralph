@@ -169,6 +169,41 @@ func runInit(cmd *cobra.Command, args []string) error {
 		log.Info("Project name: %s (set ANTHROPIC_API_KEY for AI extraction)", cfg.Project.Name)
 	}
 
+	// ATM configuration
+	fmt.Println()
+	log.Info("ATM Task Management Configuration")
+	log.Info("(Leave blank to skip - can be configured later in .ralph/config.yaml)")
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("ATM Project Slug: ")
+	if slug, err := reader.ReadString('\n'); err == nil {
+		slug = strings.TrimSpace(slug)
+		if slug != "" {
+			cfg.ATM.ProjectSlug = slug
+			log.Info("  Project slug: %s", slug)
+		}
+	}
+
+	fmt.Print("ATM API URL (e.g., https://atm.example.com/api): ")
+	if apiURL, err := reader.ReadString('\n'); err == nil {
+		apiURL = strings.TrimSpace(apiURL)
+		if apiURL != "" {
+			cfg.ATM.APIURL = apiURL
+			log.Info("  API URL: %s", apiURL)
+		}
+	}
+
+	fmt.Print("ATM API Token: ")
+	if token, err := reader.ReadString('\n'); err == nil {
+		token = strings.TrimSpace(token)
+		if token != "" {
+			cfg.ATM.APIToken = token
+			log.Info("  API token: (set)")
+		}
+	}
+
 	// Write config file
 	configData, err := yaml.Marshal(cfg)
 	if err != nil {
@@ -208,8 +243,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Edit .ralph/config.yaml to customize settings")
-	fmt.Println("  2. Create a plan: ralph plan create <name>")
-	fmt.Println("  3. Run 'ralph worker' to start processing")
+	fmt.Println("  2. Configure ATM: set atm.project_slug, atm.api_url, atm.api_token")
+	fmt.Println("  3. Create plans via atm-cli: atm-cli plan create <project-slug> --title <name>")
+	fmt.Println("  4. Run 'ralph worker' to start processing")
 
 	return nil
 }

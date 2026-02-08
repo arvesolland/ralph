@@ -3,17 +3,14 @@ package runner
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"time"
 
+	"github.com/arvesolland/ralph/internal/atm"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
-	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
-	"github.com/arvesolland/ralph/internal/state"
 )
 
 // IterationCooldown is the delay between iterations to avoid overwhelming the API.
@@ -37,11 +34,20 @@ type LoopResult struct {
 	Error error
 }
 
+// MaxFalseCompletions is the number of consecutive false completion claims before halting.
+const MaxFalseCompletions = 5
+
 // IterationLoop manages the main execution loop for plan completion.
-// It orchestrates: prompt building → Claude execution → verification → commit.
+// It orchestrates: prompt building -> Claude execution -> verification -> commit.
 type IterationLoop struct {
-	// plan is the plan being executed
-	plan *plan.Plan
+	// atm is the ATM client for task management
+	atm atm.ATM
+
+	// planID is the ATM plan ID being executed
+	planID int
+
+	// projectSlug is the ATM project slug
+	projectSlug string
 
 	// ctx is the execution context
 	ctx *Context
@@ -64,7 +70,10 @@ type IterationLoop struct {
 	// iterationTimeout is the timeout for each iteration
 	iterationTimeout time.Duration
 
-	// onBeforeIteration is called before each iteration (for syncing files)
+	// falseCompletions tracks consecutive false completion claims
+	falseCompletions int
+
+	// onBeforeIteration is called before each iteration
 	onBeforeIteration func()
 
 	// onIteration is called after each iteration (for testing/hooks)
@@ -75,21 +84,19 @@ type IterationLoop struct {
 
 	// onAfterCommit is called after a successful commit (for pushing to remote)
 	onAfterCommit func()
-
-	// lastState is the most recently loaded state.yaml (nil if plan has no structured state).
-	// Updated at the start and end of each iteration.
-	lastState *state.PlanState
 }
 
 // LoopConfig holds configuration for creating an IterationLoop.
 type LoopConfig struct {
-	Plan             *plan.Plan
-	Context          *Context
-	Config           *config.Config
-	Runner           Runner
-	Git              git.Git
-	PromptBuilder    *prompt.Builder
-	WorktreePath     string
+	ATM               atm.ATM
+	PlanID            int
+	ProjectSlug       string
+	Context           *Context
+	Config            *config.Config
+	Runner            Runner
+	Git               git.Git
+	PromptBuilder     *prompt.Builder
+	WorktreePath      string
 	IterationTimeout  time.Duration
 	OnBeforeIteration func()
 	OnIteration       func(iteration int, result *Result)
@@ -105,7 +112,9 @@ func NewIterationLoop(cfg LoopConfig) *IterationLoop {
 	}
 
 	return &IterationLoop{
-		plan:              cfg.Plan,
+		atm:               cfg.ATM,
+		planID:            cfg.PlanID,
+		projectSlug:       cfg.ProjectSlug,
 		ctx:               cfg.Context,
 		config:            cfg.Config,
 		runner:            cfg.Runner,
@@ -125,8 +134,11 @@ func NewIterationLoop(cfg LoopConfig) *IterationLoop {
 func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 	result := &LoopResult{}
 
-	// Auto-init state.yaml if plan is a bundle and state.yaml doesn't exist yet.
-	l.autoInitState(ctx)
+	// Validate plan ID before entering loop
+	if l.atm != nil && l.planID <= 0 {
+		result.Error = fmt.Errorf("invalid plan ID: %d (must be > 0)", l.planID)
+		return result
+	}
 
 	for !l.ctx.IsMaxReached() {
 		// Check for context cancellation
@@ -139,7 +151,7 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 
 		log.Info("Starting iteration %d/%d", l.ctx.Iteration, l.ctx.MaxIterations)
 
-		// Call before-iteration hook (for syncing feedback files)
+		// Call before-iteration hook
 		if l.onBeforeIteration != nil {
 			l.onBeforeIteration()
 		}
@@ -169,59 +181,32 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 			// Continue - agent may have worked on other tasks
 		}
 
-		// Check for completion
+		// Check for completion via ATM stats
 		if iterResult.IsComplete {
-			log.Info("Completion marker detected, verifying...")
+			log.Info("Completion marker detected, checking ATM stats...")
 
-			if l.lastState != nil && len(l.lastState.Tasks) > 0 {
-				// Criteria-gated verification: check if all tasks are done in state.yaml
-				if l.isStateComplete() {
-					log.Success("Plan verified complete (all tasks done in state.yaml)")
-					result.Completed = true
-					return result
-				}
-				// State exists but not all tasks done — fall back to LLM verification
-				log.Warn("State.yaml incomplete, falling back to LLM verification...")
-				verifyCtx, cancel := context.WithTimeout(ctx, VerificationTimeout)
-				verifyResult, verifyErr := Verify(verifyCtx, l.plan, l.runner, l.config.Completion.VerificationModel)
-				cancel()
-
-				if verifyErr != nil {
-					log.Warn("LLM verification failed: %v", verifyErr)
-				} else if verifyResult.Verified {
-					log.Success("Plan verified complete by LLM (state.yaml was stale)")
-					result.Completed = true
-					return result
-				} else {
-					log.Warn("LLM verification failed: %s", verifyResult.Reason)
-					combinedReason := fmt.Sprintf(
-						"LLM verification: %s\n\nstate.yaml also shows: %s\n\n"+
-							"If `ralph task` commands are failing, edit state.yaml directly to update task statuses.",
-						verifyResult.Reason, l.stateIncompleteReason())
-					if err := l.writeFeedback(combinedReason); err != nil {
-						log.Error("Failed to write verification feedback: %v", err)
-					}
-				}
-			} else {
-				// Fallback: LLM verification for plans without state.yaml
-				verifyCtx, cancel := context.WithTimeout(ctx, VerificationTimeout)
-				verifyResult, verifyErr := Verify(verifyCtx, l.plan, l.runner, l.config.Completion.VerificationModel)
-				cancel()
-
-				if verifyErr != nil {
-					log.Warn("Verification failed: %v", verifyErr)
-					// Continue anyway - let next iteration try again
-				} else if verifyResult.Verified {
-					log.Success("Plan verified complete!")
-					result.Completed = true
-					return result
-				} else {
-					log.Warn("Verification failed: %s", verifyResult.Reason)
-					if err := l.writeFeedback(verifyResult.Reason); err != nil {
-						log.Error("Failed to write verification feedback: %v", err)
-					}
-				}
+			if l.isATMComplete(ctx) {
+				log.Success("Plan verified complete (all tasks done in ATM)")
+				result.Completed = true
+				return result
 			}
+
+			// Track consecutive false completions
+			l.falseCompletions++
+			log.Warn("ATM stats show plan is not yet complete (false completion %d/%d)", l.falseCompletions, MaxFalseCompletions)
+
+			if l.falseCompletions >= MaxFalseCompletions {
+				result.Error = fmt.Errorf("agent claimed completion %d times but ATM stats never confirmed — halting", l.falseCompletions)
+				return result
+			}
+
+			feedback := fmt.Sprintf("Agent claimed completion but ATM stats show tasks remain. This is false completion attempt %d/%d. Use `atm-cli plan context %d --format text` to see which tasks are still incomplete.", l.falseCompletions, MaxFalseCompletions, l.planID)
+			if err := l.addATMFeedback(ctx, feedback); err != nil {
+				log.Error("Failed to add ATM feedback: %v", err)
+			}
+		} else {
+			// Reset false completion counter on non-completion iterations
+			l.falseCompletions = 0
 		}
 
 		// Increment iteration for next round
@@ -251,29 +236,27 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 }
 
 // runIteration executes a single iteration of the loop.
-// Debug logging throughout helps diagnose hangs and performance issues in production.
 func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 	log.Debug("Building prompt for iteration %d", l.ctx.Iteration)
 
-	// Load state.yaml if plan is a bundle (for structured context injection)
-	bundleDir := l.resolveBundleDir()
-	if bundleDir != "" {
-		st, loadErr := state.LoadState(bundleDir)
-		if loadErr != nil {
-			log.Warn("Failed to load state.yaml: %v", loadErr)
-		} else if st != nil {
-			l.lastState = st
-			log.Debug("Loaded state.yaml with %d tasks", len(st.Tasks))
+	// Fetch fresh context from ATM as structured text (for prompt injection)
+	var contextText string
+	if l.atm != nil && l.planID > 0 {
+		var err error
+		contextText, err = l.atm.PlanContextText(l.planID)
+		if err != nil {
+			return nil, fmt.Errorf("fetching ATM plan context (plan %d): %w", l.planID, err)
 		}
+		log.Debug("Fetched ATM plan context text (%d bytes)", len(contextText))
 	}
 
-	// Build the prompt (includes structured context JSON if state.yaml exists)
-	prompt, err := l.buildPrompt(l.lastState)
+	// Build the prompt
+	promptContent, err := l.buildPrompt(contextText)
 	if err != nil {
 		return nil, fmt.Errorf("building prompt: %w", err)
 	}
 
-	log.Debug("Prompt built successfully (%d bytes)", len(prompt))
+	log.Debug("Prompt built successfully (%d bytes)", len(promptContent))
 
 	// Set up options for Claude
 	opts := DefaultOptions()
@@ -287,7 +270,7 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 	defer cancel()
 
 	// Run Claude
-	result, err := l.runner.Run(iterCtx, prompt, opts)
+	result, err := l.runner.Run(iterCtx, promptContent, opts)
 	if err != nil {
 		log.Debug("Claude execution failed: %v", err)
 		return result, fmt.Errorf("claude execution: %w", err)
@@ -295,38 +278,19 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 
 	log.Debug("Claude execution completed (duration: %v, complete: %v)", result.Duration, result.IsComplete)
 
-	// Reload the plan to get updated content from the working directory
-	// The agent updates the plan file, so we must read it to get current task state
-	// Use PlanDir from context - it's the loadable path for plan.Load()
-	// Fallback to PlanFile for backward compatibility with old context.json files
-	planLoadPath := l.ctx.PlanDir
-	if planLoadPath == "" {
-		planLoadPath = l.ctx.PlanFile
-	}
-	planLoadPath = filepath.Join(l.worktreePath, planLoadPath)
-	updatedPlan, err := plan.Load(planLoadPath)
-	if err != nil {
-		log.Warn("Failed to reload plan from %s: %v", planLoadPath, err)
-		// Continue with existing plan
-	} else {
-		l.plan = updatedPlan
-	}
-
-	// Reload state.yaml — agent may have updated it via ralph task/feedback CLI commands
-	if bundleDir != "" {
-		reloadedState, reloadErr := state.LoadState(bundleDir)
-		if reloadErr != nil {
-			log.Warn("Failed to reload state.yaml: %v", reloadErr)
-		} else if reloadedState != nil {
-			l.lastState = reloadedState
-			log.Debug("Reloaded state.yaml after iteration")
+	// Add progress to ATM
+	if l.atm != nil && l.planID > 0 {
+		progressBody := fmt.Sprintf("Iteration %d completed in %v.", l.ctx.Iteration, result.Duration)
+		if result.IsComplete {
+			progressBody += " Completion marker detected."
 		}
-	}
+		if result.Blocker != nil {
+			progressBody += fmt.Sprintf(" Blocker: %s", result.Blocker.Description)
+		}
 
-	// Append to progress file
-	if err := l.appendProgress(result); err != nil {
-		log.Error("Failed to append progress: %v", err)
-		// Non-fatal, continue
+		if _, err := l.atm.AddProgress(l.planID, "ralph", progressBody); err != nil {
+			log.Warn("Failed to add ATM progress: %v", err)
+		}
 	}
 
 	// Commit changes
@@ -339,35 +303,21 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 }
 
 // buildPrompt builds the prompt for Claude using the template builder.
-// If planState is non-nil, structured context JSON is injected via the {{CONTEXT_JSON}} placeholder.
-func (l *IterationLoop) buildPrompt(planState *state.PlanState) (string, error) {
-	// Compute PlanDir for prompt - fallback to parent of PlanFile for old contexts
-	planDir := l.ctx.PlanDir
-	if planDir == "" {
-		// Backward compatibility: derive from PlanFile
-		// For bundles, this would be wrong, but old contexts should only exist for flat files
-		planDir = filepath.Dir(l.ctx.PlanFile)
-	}
-
+func (l *IterationLoop) buildPrompt(contextText string) (string, error) {
 	// Build context overrides for placeholders
 	overrides := map[string]string{
 		"ITERATION":      fmt.Sprintf("%d", l.ctx.Iteration),
 		"MAX_ITERATIONS": fmt.Sprintf("%d", l.ctx.MaxIterations),
 		"FEATURE_BRANCH": l.ctx.FeatureBranch,
 		"BASE_BRANCH":    l.ctx.BaseBranch,
-		"PLAN_FILE":      l.ctx.PlanFile,
-		"PLAN_DIR":       planDir,
+		"PLAN_ID":        fmt.Sprintf("%d", l.planID),
 	}
 
-	// If structured state exists, build and inject context JSON
-	if planState != nil {
-		payload := state.BuildContext(planState)
-		contextJSON, err := json.MarshalIndent(payload, "", "  ")
-		if err != nil {
-			log.Warn("Failed to marshal context payload: %v", err)
-		} else {
-			overrides["CONTEXT_JSON"] = string(contextJSON)
-		}
+	// Inject ATM plan context as structured text
+	if contextText != "" {
+		overrides["ATM_CONTEXT"] = contextText
+	} else {
+		overrides["ATM_CONTEXT"] = "[No plan context available. Run `atm-cli plan context " + fmt.Sprintf("%d", l.planID) + " --format text` to fetch it manually.]"
 	}
 
 	// Build the main prompt
@@ -377,22 +327,6 @@ func (l *IterationLoop) buildPrompt(planState *state.PlanState) (string, error) 
 	}
 
 	return content, nil
-}
-
-// appendProgress appends iteration results to the progress file.
-func (l *IterationLoop) appendProgress(result *Result) error {
-	// Build progress entry
-	content := fmt.Sprintf("Claude execution completed in %v.\n", result.Duration)
-
-	if result.IsComplete {
-		content += "Completion marker detected.\n"
-	}
-
-	if result.Blocker != nil {
-		content += fmt.Sprintf("Blocker: %s\n", result.Blocker.Description)
-	}
-
-	return plan.AppendProgress(l.plan, l.ctx.Iteration, content)
 }
 
 // commitChanges commits all changes after an iteration.
@@ -408,8 +342,10 @@ func (l *IterationLoop) commitChanges() error {
 		return nil
 	}
 
-	// Stage tracked changes only (not untracked — they may be gitignored)
-	allFiles := append(status.Staged, status.Unstaged...)
+	// Stage tracked changes only (not untracked -- they may be gitignored)
+	allFiles := make([]string, 0, len(status.Staged)+len(status.Unstaged))
+	allFiles = append(allFiles, status.Staged...)
+	allFiles = append(allFiles, status.Unstaged...)
 	if err := l.git.Add(allFiles...); err != nil {
 		return fmt.Errorf("staging changes: %w", err)
 	}
@@ -432,128 +368,55 @@ func (l *IterationLoop) commitChanges() error {
 	return nil
 }
 
-// resolveBundleDir returns the absolute bundle directory path inside the worktree,
-// or empty string if the plan is not a bundle.
-func (l *IterationLoop) resolveBundleDir() string {
-	if !l.plan.IsBundle() {
-		return ""
-	}
-	planDir := l.ctx.PlanDir
-	if planDir == "" {
-		return ""
-	}
-	return filepath.Join(l.worktreePath, planDir)
-}
-
-// autoInitState generates state.yaml from plan.md if the plan is a bundle
-// and state.yaml doesn't exist yet. After regex-based init, it runs an LLM
-// review loop to fix any gaps.
-func (l *IterationLoop) autoInitState(ctx context.Context) {
-	bundleDir := l.resolveBundleDir()
-	if bundleDir == "" {
-		return
+// isATMComplete checks if the plan is complete via ATM stats.
+// Fail-closed: returns false if ATM is unreachable (retries 3 times).
+func (l *IterationLoop) isATMComplete(ctx context.Context) bool {
+	if l.atm == nil || l.planID == 0 {
+		// No ATM configured, treat completion marker as sufficient
+		return true
 	}
 
-	// Check if state.yaml already exists with tasks
-	existing, err := state.LoadState(bundleDir)
+	// Retry up to 3 times with backoff
+	var agentCtx *atm.AgentContext
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		agentCtx, err = l.atm.PlanContext(l.planID)
+		if err == nil {
+			break
+		}
+		log.Warn("ATM completion check attempt %d/3 failed: %v", attempt, err)
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return false
+			case <-time.After(time.Duration(attempt*5) * time.Second):
+			}
+		}
+	}
 	if err != nil {
-		log.Warn("Failed to check state.yaml: %v", err)
-		return
-	}
-	if existing != nil && len(existing.Tasks) > 0 {
-		return // Already has state with tasks
-	}
-
-	// Generate state.yaml from plan.md (first time, or re-init if tasks are empty)
-	if existing != nil && len(existing.Tasks) == 0 {
-		log.Info("Re-initializing state.yaml (exists but has 0 tasks)")
-	} else {
-		log.Info("Auto-generating state.yaml from plan.md")
-	}
-	st, err := state.InitStateFromPlan(l.plan.Content, l.plan.Name)
-	if err != nil {
-		log.Warn("Failed to init state from plan: %v", err)
-		return
-	}
-
-	if err := state.SaveState(st, bundleDir); err != nil {
-		log.Warn("Failed to save auto-generated state.yaml: %v", err)
-		return
-	}
-
-	log.Info("Auto-generated state.yaml with %d tasks", len(st.Tasks))
-
-	// Run LLM review loop to fix gaps in regex-parsed state
-	reviewCfg := state.ReviewConfig{
-		PromptBuilder: l.promptBuilder,
-		Model:         l.config.Completion.VerificationModel,
-		MaxAttempts:   5,
-	}
-	adapter := &reviewRunnerAdapter{runner: l.runner}
-	result, reviewErr := state.ReviewState(ctx, adapter, l.plan.Content, bundleDir, reviewCfg)
-	if reviewErr != nil {
-		log.Warn("State review failed: %v (continuing with regex-parsed state)", reviewErr)
-		return
-	}
-	log.Info("State review: %d iterations, aligned=%v, changes=%d",
-		result.Iterations, result.Aligned, result.Changes)
-}
-
-// reviewRunnerAdapter adapts runner.Runner to state.ReviewRunner.
-type reviewRunnerAdapter struct {
-	runner Runner
-}
-
-func (a *reviewRunnerAdapter) Run(ctx context.Context, prompt string, opts state.ReviewRunnerOptions) (*state.ReviewRunnerResult, error) {
-	runnerOpts := Options{
-		Model:         opts.Model,
-		Print:         opts.Print,
-		OutputFormat:  opts.OutputFormat,
-		NoPermissions: true,
-	}
-	result, err := a.runner.Run(ctx, prompt, runnerOpts)
-	if err != nil {
-		return nil, err
-	}
-	return &state.ReviewRunnerResult{
-		TextContent: result.TextContent,
-	}, nil
-}
-
-// isStateComplete returns true if the plan's state.yaml indicates all tasks are done or skipped.
-func (l *IterationLoop) isStateComplete() bool {
-	if l.lastState == nil || len(l.lastState.Tasks) == 0 {
+		log.Error("Failed to verify ATM completion after 3 attempts: %v", err)
+		// Fail-closed: do NOT trust the completion marker when ATM is unreachable
 		return false
 	}
-	for _, t := range l.lastState.Tasks {
-		if t.Status != state.TaskStatusDone && t.Status != state.TaskStatusSkipped {
-			return false
-		}
+
+	stats := agentCtx.Stats
+	if stats.TotalTasks == 0 {
+		// No tasks tracked in ATM, trust the completion marker
+		return true
 	}
-	return true
+
+	completed := stats.Done + stats.Skipped
+	log.Debug("ATM stats: %d/%d tasks done (done=%d, skipped=%d)",
+		completed, stats.TotalTasks, stats.Done, stats.Skipped)
+
+	return completed == stats.TotalTasks
 }
 
-// stateIncompleteReason builds a human-readable reason explaining which tasks are not yet done.
-func (l *IterationLoop) stateIncompleteReason() string {
-	if l.lastState == nil {
-		return "no state.yaml loaded"
+// addATMFeedback adds feedback to the plan via ATM.
+func (l *IterationLoop) addATMFeedback(ctx context.Context, reason string) error {
+	if l.atm == nil || l.planID == 0 {
+		return nil
 	}
-	var incomplete []string
-	for _, t := range l.lastState.Tasks {
-		if t.Status != state.TaskStatusDone && t.Status != state.TaskStatusSkipped {
-			incomplete = append(incomplete, fmt.Sprintf("%s (%s)", t.ID, t.Status))
-		}
-	}
-	if len(incomplete) == 0 {
-		return ""
-	}
-	return fmt.Sprintf("Tasks not complete in state.yaml: %s. "+
-		"Use `ralph task complete` after verifying all criteria, then output the completion marker.",
-		fmt.Sprintf("%v", incomplete))
-}
-
-// writeFeedback writes verification failure reason to the feedback file.
-func (l *IterationLoop) writeFeedback(reason string) error {
-	content := fmt.Sprintf("**Verification failed:**\n%s", reason)
-	return plan.AppendFeedback(l.plan, "verification", content)
+	_, err := l.atm.AddFeedback(l.planID, "ralph-verification", reason)
+	return err
 }

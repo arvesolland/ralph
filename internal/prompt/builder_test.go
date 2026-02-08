@@ -175,8 +175,8 @@ func TestBuilder_Build_EmbeddedPrompt(t *testing.T) {
 	}
 
 	// Should have processed the template (contains expected text from prompt.md)
-	if !contains(result, "Ralph Agent") {
-		t.Errorf("Expected result to contain 'Ralph Agent', got:\n%s", result)
+	if !contains(result, "You are Ralph") {
+		t.Errorf("Expected result to contain 'You are Ralph', got:\n%s", result)
 	}
 }
 

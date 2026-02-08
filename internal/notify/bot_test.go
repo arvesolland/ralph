@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/arvesolland/ralph/internal/plan"
 )
 
 func TestNewSocketModeBot_MissingBotToken(t *testing.T) {
@@ -546,36 +544,14 @@ func contains(s, substr string) bool {
 	return false
 }
 
-func TestWriteFeedback_Integration(t *testing.T) {
+func TestWriteFeedback_FlatFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create thread tracker
-	trackerPath := filepath.Join(tmpDir, "threads.json")
-	tracker, err := NewThreadTracker(trackerPath)
-	if err != nil {
-		t.Fatalf("failed to create tracker: %v", err)
-	}
-
-	// Set up a thread
-	if err := tracker.Set("integration-plan", &ThreadInfo{
-		ThreadTS:  "1234567890.123456",
-		ChannelID: "C123",
-	}); err != nil {
-		t.Fatalf("failed to set thread: %v", err)
-	}
-
-	// Create plan base path
-	planDir := filepath.Join(tmpDir, "plans", "current")
-	if err := os.MkdirAll(planDir, 0755); err != nil {
-		t.Fatalf("failed to create plan dir: %v", err)
-	}
-
 	cfg := BotConfig{
-		BotToken:      "xoxb-test",
-		AppToken:      "xapp-test",
-		ChannelID:     "C123",
-		ThreadTracker: tracker,
-		PlanBasePath:  planDir,
+		BotToken:     "xoxb-test",
+		AppToken:     "xapp-test",
+		ChannelID:    "C123",
+		PlanBasePath: tmpDir,
 	}
 
 	bot := NewSocketModeBot(cfg)
@@ -583,48 +559,29 @@ func TestWriteFeedback_Integration(t *testing.T) {
 		t.Fatal("expected non-nil bot")
 	}
 
-	// Write feedback
-	err = bot.writeFeedback("integration-plan", "U456", "Integration test message")
+	// Write feedback for a flat plan (no bundle directory)
+	err := bot.writeFeedback("flat-plan", "U456", "Flat file feedback")
 	if err != nil {
 		t.Fatalf("writeFeedback failed: %v", err)
 	}
 
-	// Verify feedback file
-	p := &plan.Plan{
-		Name: "integration-plan",
-		Path: filepath.Join(planDir, "integration-plan.md"),
-	}
-	feedbackContent, err := plan.ReadFeedback(p)
+	// Verify feedback file at legacy location
+	feedbackPath := filepath.Join(tmpDir, "flat-plan.feedback.md")
+	content, err := os.ReadFile(feedbackPath)
 	if err != nil {
-		t.Fatalf("ReadFeedback failed: %v", err)
+		t.Fatalf("failed to read feedback file: %v", err)
 	}
 
-	if !contains(feedbackContent, "Integration test message") {
-		t.Errorf("feedback should contain message, got: %s", feedbackContent)
+	if !contains(string(content), "Flat file feedback") {
+		t.Errorf("feedback should contain message, got: %s", string(content))
 	}
 }
 
 func TestWriteFeedback_Bundle(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create thread tracker
-	trackerPath := filepath.Join(tmpDir, "threads.json")
-	tracker, err := NewThreadTracker(trackerPath)
-	if err != nil {
-		t.Fatalf("failed to create tracker: %v", err)
-	}
-
-	// Set up a thread
-	if err := tracker.Set("bundle-plan", &ThreadInfo{
-		ThreadTS:  "1234567890.123456",
-		ChannelID: "C123",
-	}); err != nil {
-		t.Fatalf("failed to set thread: %v", err)
-	}
-
 	// Create plan base path with a bundle directory
-	planDir := filepath.Join(tmpDir, "plans", "current")
-	bundleDir := filepath.Join(planDir, "bundle-plan")
+	bundleDir := filepath.Join(tmpDir, "bundle-plan")
 	if err := os.MkdirAll(bundleDir, 0755); err != nil {
 		t.Fatalf("failed to create bundle dir: %v", err)
 	}
@@ -636,11 +593,10 @@ func TestWriteFeedback_Bundle(t *testing.T) {
 	}
 
 	cfg := BotConfig{
-		BotToken:      "xoxb-test",
-		AppToken:      "xapp-test",
-		ChannelID:     "C123",
-		ThreadTracker: tracker,
-		PlanBasePath:  planDir,
+		BotToken:     "xoxb-test",
+		AppToken:     "xapp-test",
+		ChannelID:    "C123",
+		PlanBasePath: tmpDir,
 	}
 
 	bot := NewSocketModeBot(cfg)
@@ -649,34 +605,24 @@ func TestWriteFeedback_Bundle(t *testing.T) {
 	}
 
 	// Write feedback
-	err = bot.writeFeedback("bundle-plan", "U456", "Bundle test message")
+	err := bot.writeFeedback("bundle-plan", "U456", "Bundle test message")
 	if err != nil {
 		t.Fatalf("writeFeedback failed: %v", err)
 	}
 
 	// Verify feedback file is in the bundle directory
 	feedbackPath := filepath.Join(bundleDir, "feedback.md")
-	if _, err := os.Stat(feedbackPath); err != nil {
+	content, err := os.ReadFile(feedbackPath)
+	if err != nil {
 		t.Fatalf("feedback.md should be in bundle dir: %v", err)
 	}
 
-	// Read and verify content
-	p := &plan.Plan{
-		Name:      "bundle-plan",
-		Path:      planPath,
-		BundleDir: bundleDir,
-	}
-	feedbackContent, err := plan.ReadFeedback(p)
-	if err != nil {
-		t.Fatalf("ReadFeedback failed: %v", err)
-	}
-
-	if !contains(feedbackContent, "Bundle test message") {
-		t.Errorf("feedback should contain message, got: %s", feedbackContent)
+	if !contains(string(content), "Bundle test message") {
+		t.Errorf("feedback should contain message, got: %s", string(content))
 	}
 
 	// Verify it was NOT written to the legacy location
-	legacyPath := filepath.Join(planDir, "bundle-plan.feedback.md")
+	legacyPath := filepath.Join(tmpDir, "bundle-plan.feedback.md")
 	if _, err := os.Stat(legacyPath); err == nil {
 		t.Error("feedback should NOT be at legacy path")
 	}

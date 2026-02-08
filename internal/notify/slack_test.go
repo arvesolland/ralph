@@ -2,6 +2,7 @@ package notify
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/plan"
-	"github.com/arvesolland/ralph/internal/runner"
 	"github.com/slack-go/slack"
 )
 
@@ -70,7 +69,6 @@ func newMockSlackServer() *mockSlackServer {
 		m.messages = append(m.messages, msg)
 
 		// Return a successful response with a timestamp
-		// Use a simple map for the response
 		resp := map[string]interface{}{
 			"ok":      true,
 			"ts":      "1234567890.123456",
@@ -205,10 +203,8 @@ func TestSlackNotifier_Start(t *testing.T) {
 	server := newMockSlackServer()
 	defer server.Close()
 
-	// Create a client that uses our mock server
 	client := slack.New("xoxb-test-token", slack.OptionAPIURL(server.URL+"/"))
 
-	// Create a temp file for thread tracking
 	tmpDir := t.TempDir()
 	tracker, err := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
 	if err != nil {
@@ -221,7 +217,7 @@ func TestSlackNotifier_Start(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -277,7 +273,7 @@ func TestSlackNotifier_Complete(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -301,7 +297,7 @@ func TestSlackNotifier_Complete(t *testing.T) {
 	}
 }
 
-func TestSlackNotifier_Blocker(t *testing.T) {
+func TestSlackNotifier_BlockerNotify(t *testing.T) {
 	server := newMockSlackServer()
 	defer server.Close()
 
@@ -326,12 +322,12 @@ func TestSlackNotifier_Blocker(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
 
-	blocker := &runner.Blocker{
+	blocker := &Blocker{
 		Content:     "Package needs to be made public",
 		Description: "Package needs to be made public",
 		Action:      "Go to GitHub and make it public",
@@ -339,7 +335,7 @@ func TestSlackNotifier_Blocker(t *testing.T) {
 		Hash:        "abc12345",
 	}
 
-	err = notifier.Blocker(p, blocker)
+	err = notifier.BlockerNotify(p, blocker)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -358,7 +354,7 @@ func TestSlackNotifier_Blocker(t *testing.T) {
 	}
 }
 
-func TestSlackNotifier_Blocker_Deduplication(t *testing.T) {
+func TestSlackNotifier_BlockerNotify_Deduplication(t *testing.T) {
 	server := newMockSlackServer()
 	defer server.Close()
 
@@ -384,17 +380,17 @@ func TestSlackNotifier_Blocker_Deduplication(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
 
-	blocker := &runner.Blocker{
+	blocker := &Blocker{
 		Content: "Package needs to be made public",
 		Hash:    "abc12345", // Same hash as already notified
 	}
 
-	err = notifier.Blocker(p, blocker)
+	err = notifier.BlockerNotify(p, blocker)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -408,7 +404,7 @@ func TestSlackNotifier_Blocker_Deduplication(t *testing.T) {
 	}
 }
 
-func TestSlackNotifier_Blocker_Nil(t *testing.T) {
+func TestSlackNotifier_BlockerNotify_Nil(t *testing.T) {
 	server := newMockSlackServer()
 	defer server.Close()
 
@@ -419,12 +415,12 @@ func TestSlackNotifier_Blocker_Nil(t *testing.T) {
 		channel: "C12345",
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
 
-	err := notifier.Blocker(p, nil)
+	err := notifier.BlockerNotify(p, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -449,12 +445,12 @@ func TestSlackNotifier_Error(t *testing.T) {
 		channel: "C12345",
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
 
-	err := notifier.Error(p, runner.ErrRateLimit)
+	err := notifier.Error(p, errors.New("rate limit exceeded"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -479,7 +475,7 @@ func TestSlackNotifier_Error_TruncatesLongMessage(t *testing.T) {
 		channel: "C12345",
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -518,7 +514,7 @@ func TestSlackNotifier_Iteration(t *testing.T) {
 		channel: "C12345",
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -549,7 +545,7 @@ func TestSlackNotifier_PostMessageInThread_NoThread(t *testing.T) {
 		channel: "C12345",
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -575,11 +571,11 @@ func TestSlackNotifier_PostMessageInThread_NoThread(t *testing.T) {
 
 func TestSlackNotifierConfig(t *testing.T) {
 	tests := []struct {
-		name       string
-		cfg        SlackNotifierConfig
-		isSlack    bool
-		isWebhook  bool
-		isNoop     bool
+		name      string
+		cfg       SlackNotifierConfig
+		isSlack   bool
+		isWebhook bool
+		isNoop    bool
 	}{
 		{
 			name: "bot token and channel",
@@ -673,7 +669,7 @@ func TestSlackNotifier_CompleteWithoutPR(t *testing.T) {
 		channel: "C12345",
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -703,7 +699,7 @@ func TestSlackNotifier_Error_Nil(t *testing.T) {
 		channel: "C12345",
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -742,7 +738,7 @@ func TestSlackNotifier_ThreadTrackerPersistence(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -802,7 +798,7 @@ func TestSlackNotifier_UpdateProgress(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -873,7 +869,7 @@ func TestSlackNotifier_UpdateProgress_Deduplication(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -919,7 +915,7 @@ func TestSlackNotifier_UpdateProgress_NoThread(t *testing.T) {
 		threadTracker: tracker,
 	}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -949,10 +945,10 @@ func TestBuildProgressBlocks(t *testing.T) {
 	notifier := &SlackNotifier{}
 
 	testCases := []struct {
-		name           string
-		phase          ProgressPhase
-		expectedEmoji  string
-		expectedPhase  string
+		name          string
+		phase         ProgressPhase
+		expectedEmoji string
+		expectedPhase string
 	}{
 		{"initializing", PhaseInitializing, ":rocket:", "Initializing"},
 		{"running", PhaseRunning, ":hourglass_flowing_sand:", "Running"},
@@ -964,7 +960,7 @@ func TestBuildProgressBlocks(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			p := &plan.Plan{
+			p := PlanInfo{
 				Name:   "test-plan",
 				Branch: "feat/test-plan",
 			}
@@ -1001,7 +997,7 @@ func TestBuildProgressBlocks(t *testing.T) {
 func TestBuildProgressBlocks_ProgressBar(t *testing.T) {
 	notifier := &SlackNotifier{}
 
-	p := &plan.Plan{
+	p := PlanInfo{
 		Name:   "test-plan",
 		Branch: "feat/test-plan",
 	}
@@ -1011,14 +1007,14 @@ func TestBuildProgressBlocks_ProgressBar(t *testing.T) {
 		maxIterations int
 		expectedBar   string
 	}{
-		{0, 10, "░░░░░░░░░░"},
-		{5, 10, "█████░░░░░"},
-		{10, 10, "██████████"},
-		{3, 30, "█░░░░░░░░░"},
+		{0, 10, "\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591"},
+		{5, 10, "\u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591"},
+		{10, 10, "\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588"},
+		{3, 30, "\u2588\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591"},
 	}
 
 	for _, tc := range testCases {
-		t.Run(strings.ReplaceAll(tc.expectedBar, "░", "0"), func(t *testing.T) {
+		t.Run(strings.ReplaceAll(tc.expectedBar, "\u2591", "0"), func(t *testing.T) {
 			status := &ProgressStatus{
 				Iteration:     tc.iteration,
 				MaxIterations: tc.maxIterations,

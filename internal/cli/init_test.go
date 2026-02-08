@@ -3,8 +3,28 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// withStdinNewlines replaces os.Stdin with a pipe that provides newlines
+// for the ATM config prompts (3 prompts: slug, URL, token).
+func withStdinNewlines(t *testing.T) func() {
+	t.Helper()
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	// Write 3 newlines for 3 ATM prompts
+	w.WriteString("\n\n\n")
+	w.Close()
+	return func() {
+		os.Stdin = oldStdin
+		r.Close()
+	}
+}
 
 func TestRunInit_CreatesDirectoryStructure(t *testing.T) {
 	// Create temp directory
@@ -27,6 +47,10 @@ func TestRunInit_CreatesDirectoryStructure(t *testing.T) {
 
 	// Reset detect flag
 	detectFlag = false
+
+	// Provide stdin for ATM prompts
+	cleanup := withStdinNewlines(t)
+	defer cleanup()
 
 	// Run init
 	if err := runInit(nil, nil); err != nil {
@@ -99,6 +123,10 @@ func TestRunInit_WithDetection(t *testing.T) {
 	detectFlag = true
 	defer func() { detectFlag = false }()
 
+	// Provide stdin for ATM prompts
+	cleanup := withStdinNewlines(t)
+	defer cleanup()
+
 	// Run init
 	if err := runInit(nil, nil); err != nil {
 		t.Fatalf("runInit failed: %v", err)
@@ -113,10 +141,10 @@ func TestRunInit_WithDetection(t *testing.T) {
 	configStr := string(configData)
 
 	// Verify detected commands are in config
-	if !contains(configStr, "npm test") {
+	if !strings.Contains(configStr, "npm test") {
 		t.Error("Config should contain 'npm test' command")
 	}
-	if !contains(configStr, "npm run lint") {
+	if !strings.Contains(configStr, "npm run lint") {
 		t.Error("Config should contain 'npm run lint' command")
 	}
 }
@@ -154,6 +182,10 @@ func TestRunInit_PreservesExistingSpecs(t *testing.T) {
 
 	// Reset detect flag
 	detectFlag = false
+
+	// Provide stdin for ATM prompts
+	cleanup := withStdinNewlines(t)
+	defer cleanup()
 
 	// Run init
 	if err := runInit(nil, nil); err != nil {
@@ -203,22 +235,8 @@ func TestSpecsIndexContent(t *testing.T) {
 	}
 
 	for _, section := range expectedSections {
-		if !contains(contentStr, section) {
+		if !strings.Contains(contentStr, section) {
 			t.Errorf("INDEX.md should contain section: %s", section)
 		}
 	}
-}
-
-// contains checks if s contains substr
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

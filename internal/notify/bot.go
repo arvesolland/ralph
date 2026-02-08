@@ -1,4 +1,3 @@
-// Package notify provides notification functionality for Ralph.
 package notify
 
 import (
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/arvesolland/ralph/internal/log"
-	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
@@ -357,38 +355,42 @@ func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
 		}
 	}
 
-	// Check if plan is a bundle (directory) or flat file
+	// Determine feedback file path - check if plan is a bundle (directory)
 	bundleDir := filepath.Join(b.planBasePath, planName)
-	var p *plan.Plan
+	var feedbackPath string
 
 	log.Debug("writeFeedback: checking bundle at %s", bundleDir)
 	if info, err := os.Stat(bundleDir); err == nil && info.IsDir() {
 		// Bundle: feedback goes in {bundleDir}/feedback.md
 		log.Debug("writeFeedback: found bundle directory")
-		p = &plan.Plan{
-			Name:      planName,
-			Path:      filepath.Join(bundleDir, "plan.md"),
-			BundleDir: bundleDir,
-		}
+		feedbackPath = filepath.Join(bundleDir, "feedback.md")
 	} else {
 		// Legacy flat file: feedback goes in {planBasePath}/{planName}.feedback.md
 		log.Debug("writeFeedback: bundle not found (err=%v), using legacy path", err)
-		p = &plan.Plan{
-			Name: planName,
-			Path: filepath.Join(b.planBasePath, planName+".md"),
-		}
+		feedbackPath = filepath.Join(b.planBasePath, planName+".feedback.md")
 	}
 
-	// Append to feedback file
+	// Build feedback entry
 	source := fmt.Sprintf("Slack reply from %s", userName)
-	log.Debug("writeFeedback: appending to feedback file for plan at %s", p.Path)
-	err := plan.AppendFeedback(p, source, text)
+	timestamp := time.Now().Format("2006-01-02 15:04")
+	entry := fmt.Sprintf("\n- [%s] (%s) %s\n", timestamp, source, text)
+
+	// Append to feedback file (create if needed)
+	log.Debug("writeFeedback: appending to %s", feedbackPath)
+	f, err := os.OpenFile(feedbackPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Error("writeFeedback: AppendFeedback failed: %v", err)
-	} else {
-		log.Debug("writeFeedback: successfully wrote feedback")
+		log.Error("writeFeedback: failed to open feedback file: %v", err)
+		return err
 	}
-	return err
+	defer f.Close()
+
+	if _, err := f.WriteString(entry); err != nil {
+		log.Error("writeFeedback: failed to write feedback: %v", err)
+		return err
+	}
+
+	log.Debug("writeFeedback: successfully wrote feedback")
+	return nil
 }
 
 // LoadGlobalBotConfig loads bot configuration from the global location (~/.ralph/slack.env).

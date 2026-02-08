@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/arvesolland/ralph/internal/git"
-	"github.com/arvesolland/ralph/internal/plan"
 )
 
 // Common errors returned by WorktreeManager operations.
@@ -17,6 +16,12 @@ var (
 	ErrWorktreeExists   = errors.New("worktree already exists")
 	ErrWorktreeNotFound = errors.New("worktree not found")
 )
+
+// PlanInfo holds the minimal info needed to manage a worktree.
+type PlanInfo struct {
+	Name   string // Plan name, used for worktree directory naming
+	Branch string // Git branch name for the worktree
+}
 
 // Worktree represents an existing worktree for a plan.
 type Worktree struct {
@@ -64,29 +69,29 @@ func NewManager(g git.Git, baseDir string) (*WorktreeManager, error) {
 
 // Path returns the worktree path for a plan.
 // The path is: <baseDir>/<branch-name> (without feat/ prefix for cleaner directory names).
-func (m *WorktreeManager) Path(p *plan.Plan) string {
+func (m *WorktreeManager) Path(info PlanInfo) string {
 	// Use branch name without the feat/ prefix for shorter directory names
-	dirName := strings.TrimPrefix(p.Branch, "feat/")
+	dirName := strings.TrimPrefix(info.Branch, "feat/")
 	return filepath.Join(m.baseDir, dirName)
 }
 
 // Exists checks if a worktree exists for the given plan.
-func (m *WorktreeManager) Exists(p *plan.Plan) bool {
-	worktreePath := m.Path(p)
-	info, err := os.Stat(worktreePath)
+func (m *WorktreeManager) Exists(info PlanInfo) bool {
+	worktreePath := m.Path(info)
+	fi, err := os.Stat(worktreePath)
 	if err != nil {
 		return false
 	}
-	return info.IsDir()
+	return fi.IsDir()
 }
 
 // Get returns the worktree for a plan if it exists, or nil if not.
-func (m *WorktreeManager) Get(p *plan.Plan) (*Worktree, error) {
-	if !m.Exists(p) {
+func (m *WorktreeManager) Get(info PlanInfo) (*Worktree, error) {
+	if !m.Exists(info) {
 		return nil, nil
 	}
 
-	worktreePath := m.Path(p)
+	worktreePath := m.Path(info)
 
 	// Verify it's actually a git worktree by listing worktrees
 	worktrees, err := m.git.ListWorktrees()
@@ -109,7 +114,7 @@ func (m *WorktreeManager) Get(p *plan.Plan) (*Worktree, error) {
 			return &Worktree{
 				Path:     wt.Path,
 				Branch:   wt.Branch,
-				PlanName: p.Name,
+				PlanName: info.Name,
 			}, nil
 		}
 	}
@@ -122,9 +127,9 @@ func (m *WorktreeManager) Get(p *plan.Plan) (*Worktree, error) {
 // Returns the Worktree on success.
 // Returns ErrWorktreeExists if a worktree already exists for this plan.
 // Returns git.ErrBranchAlreadyCheckedOut if the branch is checked out elsewhere.
-func (m *WorktreeManager) Create(p *plan.Plan) (*Worktree, error) {
+func (m *WorktreeManager) Create(info PlanInfo) (*Worktree, error) {
 	// Check if worktree already exists
-	if m.Exists(p) {
+	if m.Exists(info) {
 		return nil, ErrWorktreeExists
 	}
 
@@ -133,28 +138,28 @@ func (m *WorktreeManager) Create(p *plan.Plan) (*Worktree, error) {
 		return nil, fmt.Errorf("creating base directory: %w", err)
 	}
 
-	worktreePath := m.Path(p)
+	worktreePath := m.Path(info)
 
 	// Create the worktree using git
-	if err := m.git.CreateWorktree(worktreePath, p.Branch); err != nil {
+	if err := m.git.CreateWorktree(worktreePath, info.Branch); err != nil {
 		return nil, fmt.Errorf("creating worktree: %w", err)
 	}
 
 	return &Worktree{
 		Path:     worktreePath,
-		Branch:   p.Branch,
-		PlanName: p.Name,
+		Branch:   info.Branch,
+		PlanName: info.Name,
 	}, nil
 }
 
 // Remove removes the worktree for the given plan.
 // If deleteBranch is true, also deletes the git branch.
 // Returns ErrWorktreeNotFound if no worktree exists for this plan.
-func (m *WorktreeManager) Remove(p *plan.Plan, deleteBranch bool) error {
-	worktreePath := m.Path(p)
+func (m *WorktreeManager) Remove(info PlanInfo, deleteBranch bool) error {
+	worktreePath := m.Path(info)
 
 	// Check if worktree exists
-	if !m.Exists(p) {
+	if !m.Exists(info) {
 		return ErrWorktreeNotFound
 	}
 
@@ -171,7 +176,7 @@ func (m *WorktreeManager) Remove(p *plan.Plan, deleteBranch bool) error {
 
 	// Optionally delete the branch
 	if deleteBranch {
-		if err := m.git.DeleteBranch(p.Branch, true); err != nil {
+		if err := m.git.DeleteBranch(info.Branch, true); err != nil {
 			// Branch not found is not an error (may have been deleted)
 			if !errors.Is(err, git.ErrBranchNotFound) {
 				return fmt.Errorf("deleting branch: %w", err)
@@ -207,12 +212,11 @@ type CleanupResult struct {
 	SkipReason string
 }
 
-// Cleanup removes orphaned worktrees that no longer have associated plans.
-// A worktree is orphaned if it exists in .ralph/worktrees/ but has no matching
-// plan in pending/ or current/.
+// Cleanup removes orphaned worktrees that are not in the activePlans set.
+// activePlans should map worktree directory names (branch without feat/ prefix) to true.
 // Worktrees with uncommitted changes are NOT removed (safety check).
 // Returns the list of cleanup results (removed and skipped worktrees).
-func (m *WorktreeManager) Cleanup(queue *plan.Queue) ([]CleanupResult, error) {
+func (m *WorktreeManager) Cleanup(activePlans map[string]bool) ([]CleanupResult, error) {
 	var results []CleanupResult
 
 	// List all directories in baseDir
@@ -223,28 +227,6 @@ func (m *WorktreeManager) Cleanup(queue *plan.Queue) ([]CleanupResult, error) {
 			return results, nil
 		}
 		return nil, fmt.Errorf("reading worktrees directory: %w", err)
-	}
-
-	// Get active plan names (from pending and current)
-	activePlans := make(map[string]bool)
-
-	pending, err := queue.Pending()
-	if err != nil {
-		return nil, fmt.Errorf("listing pending plans: %w", err)
-	}
-	for _, p := range pending {
-		// Map plan name to directory name (matches Path() logic)
-		dirName := strings.TrimPrefix(p.Branch, "feat/")
-		activePlans[dirName] = true
-	}
-
-	current, err := queue.Current()
-	if err != nil {
-		return nil, fmt.Errorf("getting current plan: %w", err)
-	}
-	if current != nil {
-		dirName := strings.TrimPrefix(current.Branch, "feat/")
-		activePlans[dirName] = true
 	}
 
 	// Check each directory in baseDir
@@ -262,12 +244,9 @@ func (m *WorktreeManager) Cleanup(queue *plan.Queue) ([]CleanupResult, error) {
 		}
 
 		// This worktree appears orphaned - check for uncommitted changes
-		// Create a Git instance for this worktree to check its status
 		wtGit := git.NewGit(worktreePath)
 		isClean, err := wtGit.IsClean()
 		if err != nil {
-			// If we can't check status (e.g., not a valid git worktree),
-			// skip it to be safe and log the reason
 			results = append(results, CleanupResult{
 				Path:       worktreePath,
 				PlanName:   dirName,
@@ -290,10 +269,7 @@ func (m *WorktreeManager) Cleanup(queue *plan.Queue) ([]CleanupResult, error) {
 
 		// Safe to remove - use git worktree remove
 		if err := m.git.RemoveWorktree(worktreePath); err != nil {
-			// If git remove fails, try to clean up the directory directly
-			// This can happen if the worktree metadata is corrupted
 			if errors.Is(err, git.ErrWorktreeNotFound) {
-				// Not a valid worktree, just remove the directory
 				if removeErr := os.RemoveAll(worktreePath); removeErr != nil {
 					results = append(results, CleanupResult{
 						Path:       worktreePath,

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/arvesolland/ralph/internal/atm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,6 +19,15 @@ type Config struct {
 	Worktree   WorktreeConfig   `yaml:"worktree"`
 	Completion CompletionConfig `yaml:"completion"`
 	Worker     WorkerRunConfig  `yaml:"worker"`
+	ATM        ATMConfig        `yaml:"atm"`
+}
+
+// ATMConfig contains settings for the ATM task management service.
+type ATMConfig struct {
+	ProjectSlug string `yaml:"project_slug"`
+	APIURL      string `yaml:"api_url"`
+	APIToken    string `yaml:"api_token"`
+	BinPath     string `yaml:"bin_path"`
 }
 
 // ProjectConfig contains project identification settings.
@@ -157,6 +167,15 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// ATMClient returns a new ATM client configured from this config.
+func (c *Config) ATMClient() atm.ATM {
+	return atm.NewClient(atm.ClientConfig{
+		BinPath:  c.ATM.BinPath,
+		APIURL:   c.ATM.APIURL,
+		APIToken: c.ATM.APIToken,
+	})
+}
+
 // mergeConfig merges values from src into dst.
 // Only non-zero values from src overwrite dst.
 func mergeConfig(dst, src *Config) {
@@ -237,5 +256,19 @@ func mergeConfig(dst, src *Config) {
 	}
 	if src.Worker.SyncInterval != "" {
 		dst.Worker.SyncInterval = src.Worker.SyncInterval
+	}
+
+	// ATM
+	if src.ATM.ProjectSlug != "" {
+		dst.ATM.ProjectSlug = src.ATM.ProjectSlug
+	}
+	if src.ATM.APIURL != "" {
+		dst.ATM.APIURL = src.ATM.APIURL
+	}
+	if src.ATM.APIToken != "" {
+		dst.ATM.APIToken = src.ATM.APIToken
+	}
+	if src.ATM.BinPath != "" {
+		dst.ATM.BinPath = src.ATM.BinPath
 	}
 }

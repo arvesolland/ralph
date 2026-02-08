@@ -8,9 +8,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/arvesolland/ralph/internal/plan"
-	"github.com/arvesolland/ralph/internal/runner"
 )
 
 func TestNewWebhookNotifier_EmptyURL(t *testing.T) {
@@ -50,7 +47,7 @@ func TestWebhookNotifier_Start(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	p := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
 	err := n.Start(p)
 	if err != nil {
@@ -95,7 +92,7 @@ func TestWebhookNotifier_Complete_WithPR(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	p := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
 	err := n.Complete(p, "https://github.com/owner/repo/pull/123")
 	if err != nil {
@@ -144,7 +141,7 @@ func TestWebhookNotifier_Complete_NoPR(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+	p := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
 	err := n.Complete(p, "")
 	if err != nil {
@@ -165,7 +162,7 @@ func TestWebhookNotifier_Complete_NoPR(t *testing.T) {
 	}
 }
 
-func TestWebhookNotifier_Blocker(t *testing.T) {
+func TestWebhookNotifier_BlockerNotify(t *testing.T) {
 	var received slackMessage
 	var mu sync.Mutex
 	done := make(chan struct{})
@@ -180,8 +177,8 @@ func TestWebhookNotifier_Blocker(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
-	blocker := &runner.Blocker{
+	p := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
+	blocker := &Blocker{
 		Content:     "Full blocker content",
 		Description: "Need human input",
 		Action:      "Click the button",
@@ -189,7 +186,7 @@ func TestWebhookNotifier_Blocker(t *testing.T) {
 		Hash:        "abc12345",
 	}
 
-	err := n.Blocker(p, blocker)
+	err := n.BlockerNotify(p, blocker)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -209,7 +206,7 @@ func TestWebhookNotifier_Blocker(t *testing.T) {
 	}
 }
 
-func TestWebhookNotifier_Blocker_Nil(t *testing.T) {
+func TestWebhookNotifier_BlockerNotify_Nil(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("should not send request for nil blocker")
 		w.WriteHeader(http.StatusOK)
@@ -217,9 +214,9 @@ func TestWebhookNotifier_Blocker_Nil(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan"}
+	p := PlanInfo{Name: "test-plan"}
 
-	err := n.Blocker(p, nil)
+	err := n.BlockerNotify(p, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -243,7 +240,7 @@ func TestWebhookNotifier_Error(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan"}
+	p := PlanInfo{Name: "test-plan"}
 
 	err := n.Error(p, errors.New("something went wrong"))
 	if err != nil {
@@ -272,7 +269,7 @@ func TestWebhookNotifier_Error_Nil(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan"}
+	p := PlanInfo{Name: "test-plan"}
 
 	err := n.Error(p, nil)
 	if err != nil {
@@ -297,7 +294,7 @@ func TestWebhookNotifier_Error_TruncatesLongMessage(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan"}
+	p := PlanInfo{Name: "test-plan"}
 
 	// Create error message > 500 chars
 	longErr := make([]byte, 600)
@@ -348,7 +345,7 @@ func TestWebhookNotifier_Iteration(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan"}
+	p := PlanInfo{Name: "test-plan"}
 
 	err := n.Iteration(p, 5, 30)
 	if err != nil {
@@ -376,7 +373,7 @@ func TestWebhookNotifier_ServerError(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan"}
+	p := PlanInfo{Name: "test-plan"}
 
 	// Should not return error (async and swallowed)
 	err := n.Start(p)
@@ -400,7 +397,7 @@ func TestWebhookNotifier_Send_ContentType(t *testing.T) {
 	defer server.Close()
 
 	n := NewWebhookNotifier(server.URL)
-	p := &plan.Plan{Name: "test-plan"}
+	p := PlanInfo{Name: "test-plan"}
 
 	n.Start(p)
 
@@ -417,7 +414,7 @@ func TestWebhookNotifier_Send_ContentType(t *testing.T) {
 
 func TestNoopNotifier(t *testing.T) {
 	n := &NoopNotifier{}
-	p := &plan.Plan{Name: "test"}
+	p := PlanInfo{Name: "test"}
 
 	if err := n.Start(p); err != nil {
 		t.Errorf("Start: unexpected error: %v", err)
@@ -425,8 +422,8 @@ func TestNoopNotifier(t *testing.T) {
 	if err := n.Complete(p, ""); err != nil {
 		t.Errorf("Complete: unexpected error: %v", err)
 	}
-	if err := n.Blocker(p, &runner.Blocker{}); err != nil {
-		t.Errorf("Blocker: unexpected error: %v", err)
+	if err := n.BlockerNotify(p, &Blocker{}); err != nil {
+		t.Errorf("BlockerNotify: unexpected error: %v", err)
 	}
 	if err := n.Error(p, errors.New("test")); err != nil {
 		t.Errorf("Error: unexpected error: %v", err)
@@ -442,107 +439,55 @@ func TestNotifierInterface(t *testing.T) {
 	var _ Notifier = (*NoopNotifier)(nil)
 }
 
-// TestBlockerFlow_ClaudeOutputToSlackMessage tests the complete flow from
-// Claude output containing <blocker> tags through to the final Slack message.
-// This is an integration test that verifies:
-// 1. Blocker is correctly parsed from Claude output
-// 2. Parsed blocker is sent to Slack webhook
-// 3. Slack message contains all blocker fields (Description, Action, Resume)
-func TestBlockerFlow_ClaudeOutputToSlackMessage(t *testing.T) {
+// TestBlockerNotify_FullFlow tests the notification flow with all blocker fields.
+func TestBlockerNotify_FullFlow(t *testing.T) {
 	tests := []struct {
 		name           string
-		claudeOutput   string
-		wantDesc       string
-		wantAction     string
-		wantResume     string
+		blocker        *Blocker
 		wantBlockCount int // minimum number of blocks in Slack message
 	}{
 		{
 			name: "full structured blocker",
-			claudeOutput: `I've analyzed the codebase and found an issue.
-
-<blocker>
-The GitHub package needs to be made public before we can proceed.
-Action: Go to https://github.com/org/repo/packages → Settings → Change visibility to Public
-Resume: Once public, I will verify anonymous pull works and complete the deployment.
-</blocker>
-
-I'll wait for this to be resolved.`,
-			wantDesc:       "The GitHub package needs to be made public before we can proceed.",
-			wantAction:     "Go to https://github.com/org/repo/packages → Settings → Change visibility to Public",
-			wantResume:     "Once public, I will verify anonymous pull works and complete the deployment.",
+			blocker: &Blocker{
+				Content:     "The GitHub package needs to be made public before we can proceed.\nAction: Go to settings\nResume: Once public, continue.",
+				Description: "The GitHub package needs to be made public before we can proceed.",
+				Action:      "Go to https://github.com/org/repo/packages, Settings, Change visibility to Public",
+				Resume:      "Once public, I will verify anonymous pull works and complete the deployment.",
+				Hash:        "abc123",
+			},
 			wantBlockCount: 4, // header + desc + action + resume
 		},
 		{
-			name: "blocker with explicit Description field",
-			claudeOutput: `<blocker>
-Description: The API credentials have expired.
-Action: Generate new credentials at https://api.example.com/settings
-Resume: Will update the config and retry the API call.
-</blocker>`,
-			wantDesc:       "The API credentials have expired.",
-			wantAction:     "Generate new credentials at https://api.example.com/settings",
-			wantResume:     "Will update the config and retry the API call.",
-			wantBlockCount: 4,
-		},
-		{
 			name: "blocker with multiline description",
-			claudeOutput: `<blocker>
-The deployment is blocked for multiple reasons:
-1. The secret key is missing
-2. The database needs migration
-3. The cache needs to be cleared
-Action: Run the setup script: ./scripts/setup.sh
-Resume: Will continue with deployment after setup completes.
-</blocker>`,
-			wantDesc:       "The deployment is blocked for multiple reasons:\n1. The secret key is missing\n2. The database needs migration\n3. The cache needs to be cleared",
-			wantAction:     "Run the setup script: ./scripts/setup.sh",
-			wantResume:     "Will continue with deployment after setup completes.",
+			blocker: &Blocker{
+				Description: "The deployment is blocked for multiple reasons:\n1. The secret key is missing\n2. The database needs migration\n3. The cache needs to be cleared",
+				Action:      "Run the setup script: ./scripts/setup.sh",
+				Resume:      "Will continue with deployment after setup completes.",
+				Hash:        "def456",
+			},
 			wantBlockCount: 4,
 		},
 		{
 			name: "blocker with only description and action",
-			claudeOutput: `<blocker>
-Need approval to proceed with the merge.
-Action: Review and approve the PR at https://github.com/org/repo/pull/123
-</blocker>`,
-			wantDesc:       "Need approval to proceed with the merge.",
-			wantAction:     "Review and approve the PR at https://github.com/org/repo/pull/123",
-			wantResume:     "",
+			blocker: &Blocker{
+				Description: "Need approval to proceed with the merge.",
+				Action:      "Review and approve the PR at https://github.com/org/repo/pull/123",
+				Hash:        "ghi789",
+			},
 			wantBlockCount: 3, // header + desc + action (no resume)
 		},
 		{
 			name: "simple blocker without structured fields",
-			claudeOutput: `<blocker>
-Waiting for human confirmation to delete the production database.
-</blocker>`,
-			wantDesc:       "Waiting for human confirmation to delete the production database.",
-			wantAction:     "",
-			wantResume:     "",
+			blocker: &Blocker{
+				Description: "Waiting for human confirmation to delete the production database.",
+				Hash:        "jkl012",
+			},
 			wantBlockCount: 2, // header + desc only
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Step 1: Parse blocker from Claude output (simulates runner behavior)
-			blocker := runner.ExtractBlocker(tt.claudeOutput)
-			if blocker == nil {
-				t.Fatal("expected blocker to be extracted from Claude output")
-			}
-
-			// Verify parsing is correct
-			if blocker.Description != tt.wantDesc {
-				t.Errorf("parsed Description = %q, want %q", blocker.Description, tt.wantDesc)
-			}
-			if blocker.Action != tt.wantAction {
-				t.Errorf("parsed Action = %q, want %q", blocker.Action, tt.wantAction)
-			}
-			if blocker.Resume != tt.wantResume {
-				t.Errorf("parsed Resume = %q, want %q", blocker.Resume, tt.wantResume)
-			}
-
-			// Step 2: Send to Slack webhook and capture the message
 			var received slackMessage
 			var mu sync.Mutex
 			done := make(chan struct{})
@@ -559,12 +504,11 @@ Waiting for human confirmation to delete the production database.
 			defer server.Close()
 
 			notifier := NewWebhookNotifier(server.URL)
-			p := &plan.Plan{Name: "test-plan", Branch: "feat/test-plan"}
+			p := PlanInfo{Name: "test-plan", Branch: "feat/test-plan"}
 
-			// Step 3: Send the blocker notification
-			err := notifier.Blocker(p, blocker)
+			err := notifier.BlockerNotify(p, tt.blocker)
 			if err != nil {
-				t.Fatalf("Blocker notification failed: %v", err)
+				t.Fatalf("BlockerNotify failed: %v", err)
 			}
 
 			// Wait for async send
@@ -577,7 +521,6 @@ Waiting for human confirmation to delete the production database.
 			mu.Lock()
 			defer mu.Unlock()
 
-			// Step 4: Verify Slack message structure
 			if len(received.Blocks) < tt.wantBlockCount {
 				t.Errorf("expected at least %d blocks, got %d", tt.wantBlockCount, len(received.Blocks))
 			}
@@ -586,23 +529,21 @@ Waiting for human confirmation to delete the production database.
 			msgJSON, _ := json.Marshal(received)
 			msgStr := string(msgJSON)
 
-			// For multiline descriptions, check for key parts rather than exact match
-			// (JSON encoding escapes newlines)
-			if tt.wantDesc != "" {
+			if tt.blocker.Description != "" {
 				// Check for first line of description
-				firstLine := tt.wantDesc
-				if idx := indexOf(tt.wantDesc, "\n"); idx > 0 {
-					firstLine = tt.wantDesc[:idx]
+				firstLine := tt.blocker.Description
+				if idx := indexOf(tt.blocker.Description, "\n"); idx > 0 {
+					firstLine = tt.blocker.Description[:idx]
 				}
 				if !containsString(msgStr, firstLine) {
 					t.Errorf("Slack message should contain description starting with %q", firstLine)
 				}
 			}
-			if tt.wantAction != "" && !containsString(msgStr, tt.wantAction) {
-				t.Errorf("Slack message should contain action %q", tt.wantAction)
+			if tt.blocker.Action != "" && !containsString(msgStr, tt.blocker.Action) {
+				t.Errorf("Slack message should contain action %q", tt.blocker.Action)
 			}
-			if tt.wantResume != "" && !containsString(msgStr, tt.wantResume) {
-				t.Errorf("Slack message should contain resume %q", tt.wantResume)
+			if tt.blocker.Resume != "" && !containsString(msgStr, tt.blocker.Resume) {
+				t.Errorf("Slack message should contain resume %q", tt.blocker.Resume)
 			}
 
 			// Verify it mentions the plan

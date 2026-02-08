@@ -2,18 +2,17 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/arvesolland/ralph/internal/atm"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
-	"github.com/arvesolland/ralph/internal/plan"
 	"github.com/arvesolland/ralph/internal/prompt"
-	"github.com/arvesolland/ralph/internal/state"
 )
 
 // MockRunner implements Runner for testing.
@@ -55,45 +54,22 @@ func (m *MockRunner) Run(ctx context.Context, prompt string, opts Options) (*Res
 }
 
 func TestIterationLoop_Run_MaxIterations(t *testing.T) {
-	// Set up temp directories
 	tempDir := t.TempDir()
-	planDir := filepath.Join(tempDir, "plans", "current")
-	os.MkdirAll(planDir, 0755)
-
-	// Create a simple test plan
-	planPath := filepath.Join(planDir, "test-plan.md")
-	planContent := `# Plan: Test
-**Status:** open
-## Tasks
-- [ ] Task 1
-- [ ] Task 2
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
-	// Initialize git repo
 	gitRepo := setupTestGitRepo(t, tempDir)
 
-	// Load the plan
-	p, err := plan.Load(planPath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
-
-	// Create context with max 2 iterations (paths relative to tempDir)
-	ctx := NewContext(p, "main", 2, tempDir)
+	// Create context with max 2 iterations
+	ctx := NewContext(1, "feat/test", "main", 2)
 
 	// Mock runner that never completes
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
 			{TextContent: "Working on task 1..."},
 			{TextContent: "Working on task 2..."},
-			{TextContent: "Still working..."}, // This won't be reached
+			{TextContent: "Still working..."}, // Won't be reached
 		},
 	}
 
-	// Create loop
 	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -103,10 +79,8 @@ func TestIterationLoop_Run_MaxIterations(t *testing.T) {
 		IterationTimeout: 1 * time.Second,
 	})
 
-	// Run loop
 	result := loop.Run(context.Background())
 
-	// Should reach max iterations
 	if result.Completed {
 		t.Error("Expected loop to not complete")
 	}
@@ -123,42 +97,20 @@ func TestIterationLoop_Run_MaxIterations(t *testing.T) {
 
 func TestIterationLoop_Run_CompletesSuccessfully(t *testing.T) {
 	tempDir := t.TempDir()
-	planDir := filepath.Join(tempDir, "plans", "current")
-	os.MkdirAll(planDir, 0755)
-
-	planPath := filepath.Join(planDir, "test-plan.md")
-	// Plan has checked boxes - simulates agent having updated the plan before claiming completion
-	planContent := `# Plan: Test
-**Status:** complete
-## Tasks
-- [x] Task 1
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
 	gitRepo := setupTestGitRepo(t, tempDir)
 
-	p, err := plan.Load(planPath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
+	ctx := NewContext(1, "feat/test", "main", 10)
 
-	ctx := NewContext(p, "main", 10, tempDir)
-
-	// Mock runner that completes on iteration 3
-	// First two iterations: normal work
-	// Third iteration: completion marker
-	// Verification: YES
+	// No ATM client configured, so completion marker is trusted directly
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
 			{TextContent: "Working on task 1..."},
 			{TextContent: "Almost done..."},
 			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
-			{TextContent: "YES", IsComplete: false}, // Verification response
 		},
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -180,25 +132,9 @@ func TestIterationLoop_Run_CompletesSuccessfully(t *testing.T) {
 
 func TestIterationLoop_Run_HandlesBlocker(t *testing.T) {
 	tempDir := t.TempDir()
-	planDir := filepath.Join(tempDir, "plans", "current")
-	os.MkdirAll(planDir, 0755)
-
-	planPath := filepath.Join(planDir, "test-plan.md")
-	planContent := `# Plan: Test
-**Status:** open
-## Tasks
-- [ ] Task 1
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
 	gitRepo := setupTestGitRepo(t, tempDir)
 
-	p, err := plan.Load(planPath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
-
-	ctx := NewContext(p, "main", 2, tempDir)
+	ctx := NewContext(1, "feat/test", "main", 2)
 
 	blocker := &Blocker{
 		Description: "Need API key",
@@ -218,7 +154,6 @@ func TestIterationLoop_Run_HandlesBlocker(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -234,8 +169,7 @@ func TestIterationLoop_Run_HandlesBlocker(t *testing.T) {
 
 	result := loop.Run(context.Background())
 
-	// Should continue after blocker but eventually hit max iterations
-	if blockerCallbackCalled == false {
+	if !blockerCallbackCalled {
 		t.Error("Expected blocker callback to be called")
 	}
 	if receivedBlocker == nil || receivedBlocker.Hash != "abc12345" {
@@ -248,25 +182,9 @@ func TestIterationLoop_Run_HandlesBlocker(t *testing.T) {
 
 func TestIterationLoop_Run_ContextCancellation(t *testing.T) {
 	tempDir := t.TempDir()
-	planDir := filepath.Join(tempDir, "plans", "current")
-	os.MkdirAll(planDir, 0755)
-
-	planPath := filepath.Join(planDir, "test-plan.md")
-	planContent := `# Plan: Test
-**Status:** open
-## Tasks
-- [ ] Task 1
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
 	gitRepo := setupTestGitRepo(t, tempDir)
 
-	p, err := plan.Load(planPath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
-
-	ctx := NewContext(p, "main", 100, tempDir)
+	ctx := NewContext(1, "feat/test", "main", 100)
 
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
@@ -275,7 +193,6 @@ func TestIterationLoop_Run_ContextCancellation(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -285,7 +202,6 @@ func TestIterationLoop_Run_ContextCancellation(t *testing.T) {
 		IterationTimeout: 1 * time.Second,
 	})
 
-	// Create a context that cancels quickly
 	cancelCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -298,25 +214,9 @@ func TestIterationLoop_Run_ContextCancellation(t *testing.T) {
 
 func TestIterationLoop_Run_OnIterationCallback(t *testing.T) {
 	tempDir := t.TempDir()
-	planDir := filepath.Join(tempDir, "plans", "current")
-	os.MkdirAll(planDir, 0755)
-
-	planPath := filepath.Join(planDir, "test-plan.md")
-	planContent := `# Plan: Test
-**Status:** open
-## Tasks
-- [ ] Task 1
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
 	gitRepo := setupTestGitRepo(t, tempDir)
 
-	p, err := plan.Load(planPath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
-
-	ctx := NewContext(p, "main", 3, tempDir)
+	ctx := NewContext(1, "feat/test", "main", 3)
 
 	var iterations []int
 	var results []*Result
@@ -330,7 +230,6 @@ func TestIterationLoop_Run_OnIterationCallback(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -356,68 +255,6 @@ func TestIterationLoop_Run_OnIterationCallback(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_Run_VerificationFails(t *testing.T) {
-	tempDir := t.TempDir()
-	planDir := filepath.Join(tempDir, "plans", "current")
-	os.MkdirAll(planDir, 0755)
-
-	planPath := filepath.Join(planDir, "test-plan.md")
-	planContent := `# Plan: Test
-**Status:** open
-## Tasks
-- [ ] Task 1
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
-	gitRepo := setupTestGitRepo(t, tempDir)
-
-	p, err := plan.Load(planPath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
-
-	ctx := NewContext(p, "main", 3, tempDir)
-
-	// Mock runner: first iteration claims complete, verification fails, continues
-	mockRunner := &MockRunner{
-		Responses: []MockResponse{
-			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
-			{TextContent: "NO: Task 1 is still unchecked"}, // Verification response
-			{TextContent: "Working more..."},
-			{TextContent: "Still working..."},
-		},
-	}
-
-	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
-		Context:          ctx,
-		Config:           config.Defaults(),
-		Runner:           mockRunner,
-		Git:              gitRepo,
-		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
-		WorktreePath:     tempDir,
-		IterationTimeout: 1 * time.Second,
-	})
-
-	result := loop.Run(context.Background())
-
-	// Should NOT complete since verification failed
-	if result.Completed {
-		t.Error("Expected loop to not complete after verification failure")
-	}
-	// Should hit max iterations
-	if result.Error == nil || !strings.Contains(result.Error.Error(), "max iterations") {
-		t.Errorf("Expected max iterations error, got: %v", result.Error)
-	}
-
-	// Check that feedback file was written
-	feedbackPath := plan.FeedbackPath(p)
-	content, err := os.ReadFile(feedbackPath)
-	if err == nil && !strings.Contains(string(content), "Task 1 is still unchecked") {
-		t.Log("Feedback file content:", string(content))
-	}
-}
-
 func TestNewIterationLoop_DefaultTimeout(t *testing.T) {
 	loop := NewIterationLoop(LoopConfig{})
 
@@ -437,56 +274,13 @@ func TestNewIterationLoop_CustomTimeout(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_CriteriaGatedCompletion(t *testing.T) {
-	// Set up a plan bundle with state.yaml where all tasks are done.
-	// Completion should succeed via criteria gate WITHOUT LLM verification.
+func TestIterationLoop_CompletesWithNoATM(t *testing.T) {
+	// Without ATM client, completion marker should be trusted directly
 	tempDir := t.TempDir()
-	bundlePath := filepath.Join(tempDir, "plans", "current", "test-plan")
-	os.MkdirAll(bundlePath, 0755)
-
-	planPath := filepath.Join(bundlePath, "plan.md")
-	planContent := `# Plan: Test
-**Status:** active
-## Tasks
-### T1: Do something
-**Status:** complete
-**Done when:**
-- [x] Something is done
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
-	// Create state.yaml with all tasks done
-	now := time.Now()
-	st := &state.PlanState{
-		ID:     "test-plan",
-		Title:  "Test",
-		Status: state.PlanStatusActive,
-		Tasks: []state.TaskState{
-			{
-				ID:     "T1",
-				Title:  "Do something",
-				Status: state.TaskStatusDone,
-				Criteria: []state.Criterion{
-					{Text: "Something is done", Done: true, DoneAt: &now},
-				},
-			},
-		},
-	}
-	if err := state.SaveState(st, bundlePath); err != nil {
-		t.Fatalf("Failed to save state: %v", err)
-	}
-
 	gitRepo := setupTestGitRepo(t, tempDir)
 
-	p, err := plan.Load(bundlePath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
+	ctx := NewContext(1, "feat/test", "main", 10)
 
-	ctx := NewContext(p, "main", 10, tempDir)
-
-	// Mock runner: only one call needed (the iteration that claims complete).
-	// NO verification call should happen (criteria gate handles it).
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
 			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
@@ -494,7 +288,7 @@ func TestIterationLoop_CriteriaGatedCompletion(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
+		// No ATM client
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -507,89 +301,150 @@ func TestIterationLoop_CriteriaGatedCompletion(t *testing.T) {
 	result := loop.Run(context.Background())
 
 	if !result.Completed {
-		t.Errorf("Expected criteria-gated completion to succeed, error: %v", result.Error)
+		t.Errorf("Expected completion with no ATM, error: %v", result.Error)
 	}
 	if result.Iterations != 1 {
 		t.Errorf("Expected 1 iteration, got %d", result.Iterations)
 	}
-	// Only 1 runner call (the iteration itself) — no verification LLM call
+	// Only 1 runner call (the iteration) - no separate verification call
 	if len(mockRunner.RecordedOpts) != 1 {
-		t.Errorf("Expected 1 runner call (no LLM verification), got %d", len(mockRunner.RecordedOpts))
+		t.Errorf("Expected 1 runner call, got %d", len(mockRunner.RecordedOpts))
 	}
 }
 
-func TestIterationLoop_CriteriaGatedCompletion_NotAllDone(t *testing.T) {
-	// Set up a plan bundle with state.yaml where NOT all tasks are done.
-	// Agent claims complete, state.yaml incomplete, LLM fallback also says NO.
+func TestIterationLoop_ATMContextFailure_HardError(t *testing.T) {
+	// PlanContextText failure should be a hard error that terminates the iteration
 	tempDir := t.TempDir()
-	bundlePath := filepath.Join(tempDir, "plans", "current", "test-plan")
-	os.MkdirAll(bundlePath, 0755)
-
-	planPath := filepath.Join(bundlePath, "plan.md")
-	planContent := `# Plan: Test
-**Status:** active
-## Tasks
-### T1: Do something
-**Status:** complete
-**Done when:**
-- [x] First thing
-### T2: Do another thing
-**Status:** open
-**Done when:**
-- [ ] Second thing
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
-	// Create state.yaml with T1 done, T2 still todo
-	now := time.Now()
-	st := &state.PlanState{
-		ID:     "test-plan",
-		Title:  "Test",
-		Status: state.PlanStatusActive,
-		Tasks: []state.TaskState{
-			{
-				ID:     "T1",
-				Title:  "Do something",
-				Status: state.TaskStatusDone,
-				Criteria: []state.Criterion{
-					{Text: "First thing", Done: true, DoneAt: &now},
-				},
-			},
-			{
-				ID:     "T2",
-				Title:  "Do another thing",
-				Status: state.TaskStatusTodo,
-				Criteria: []state.Criterion{
-					{Text: "Second thing", Done: false},
-				},
-			},
-		},
-	}
-	if err := state.SaveState(st, bundlePath); err != nil {
-		t.Fatalf("Failed to save state: %v", err)
-	}
-
 	gitRepo := setupTestGitRepo(t, tempDir)
 
-	p, err := plan.Load(bundlePath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
+	ctx := NewContext(42, "feat/test", "main", 10)
+
+	mockATM := atm.NewMockATM()
+	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+		return "", fmt.Errorf("connection refused")
 	}
 
-	ctx := NewContext(p, "main", 2, tempDir)
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "Should not reach this"},
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		ATM:              mockATM,
+		PlanID:           42,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	if result.Completed {
+		t.Error("Expected loop to not complete")
+	}
+	if result.Error == nil {
+		t.Fatal("Expected error from ATM context failure")
+	}
+	if !strings.Contains(result.Error.Error(), "fetching ATM plan context") {
+		t.Errorf("Expected ATM context error, got: %v", result.Error)
+	}
+	// Runner should not have been called since PlanContextText failed first
+	if len(mockRunner.RecordedOpts) != 0 {
+		t.Errorf("Expected 0 runner calls, got %d", len(mockRunner.RecordedOpts))
+	}
+}
+
+func TestIterationLoop_ATMCompletionCheck_AllDone(t *testing.T) {
+	// When ATM stats show all tasks done, loop should complete
+	tempDir := t.TempDir()
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	ctx := NewContext(42, "feat/test", "main", 10)
+
+	mockATM := atm.NewMockATM()
+	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Plan Context\nAll tasks listed here.", nil
+	}
+	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
+		return &atm.AgentContext{
+			Stats: atm.Stats{
+				TotalTasks: 3,
+				Done:       2,
+				Skipped:    1,
+			},
+		}, nil
+	}
+
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "All done! <promise>COMPLETE</promise>", IsComplete: true},
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		ATM:              mockATM,
+		PlanID:           42,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	if !result.Completed {
+		t.Errorf("Expected completion, got error: %v", result.Error)
+	}
+	if result.Iterations != 1 {
+		t.Errorf("Expected 1 iteration, got %d", result.Iterations)
+	}
+}
+
+func TestIterationLoop_ATMCompletionCheck_NotDone(t *testing.T) {
+	// When ATM stats show tasks remain, should be a false completion and AddFeedback called
+	tempDir := t.TempDir()
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	ctx := NewContext(42, "feat/test", "main", 2)
+
+	mockATM := atm.NewMockATM()
+	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Plan Context", nil
+	}
+	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
+		return &atm.AgentContext{
+			Stats: atm.Stats{
+				TotalTasks: 5,
+				Done:       2,
+				Skipped:    0,
+			},
+		}, nil
+	}
+
+	var feedbackCalls []string
+	mockATM.AddFeedbackFunc = func(planID int, author, body string) (*atm.Feedback, error) {
+		feedbackCalls = append(feedbackCalls, body)
+		return &atm.Feedback{}, nil
+	}
 
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
 			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
-			// LLM verification: Verify() does programmatic checkbox check first.
-			// Plan has unchecked boxes so checkCheckboxes() short-circuits before LLM call.
-			// The NO response is returned by the programmatic check, not a runner call.
 			{TextContent: "Still working..."},
 		},
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
+		ATM:              mockATM,
+		PlanID:           42,
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -601,174 +456,173 @@ func TestIterationLoop_CriteriaGatedCompletion_NotAllDone(t *testing.T) {
 
 	result := loop.Run(context.Background())
 
-	// Should NOT complete — both state.yaml and LLM verification say incomplete
 	if result.Completed {
-		t.Error("Expected verification to reject incomplete plan")
+		t.Error("Expected loop to not complete since tasks remain")
 	}
-	// Should hit max iterations
+	// Should have called AddFeedback with a descriptive message
+	if len(feedbackCalls) != 1 {
+		t.Fatalf("Expected 1 AddFeedback call, got %d", len(feedbackCalls))
+	}
+	if !strings.Contains(feedbackCalls[0], "false completion attempt 1/5") {
+		t.Errorf("Expected false completion feedback, got: %s", feedbackCalls[0])
+	}
+}
+
+func TestIterationLoop_FalseCompletionCircuitBreaker(t *testing.T) {
+	// After MaxFalseCompletions (5) consecutive false completions, loop should halt
+	tempDir := t.TempDir()
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	ctx := NewContext(42, "feat/test", "main", 100)
+
+	mockATM := atm.NewMockATM()
+	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Plan", nil
+	}
+	// Always report incomplete
+	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
+		return &atm.AgentContext{
+			Stats: atm.Stats{TotalTasks: 3, Done: 1},
+		}, nil
+	}
+
+	// Every iteration claims completion
+	responses := make([]MockResponse, MaxFalseCompletions)
+	for i := range responses {
+		responses[i] = MockResponse{TextContent: "Done!", IsComplete: true}
+	}
+	mockRunner := &MockRunner{Responses: responses}
+
+	loop := NewIterationLoop(LoopConfig{
+		ATM:              mockATM,
+		PlanID:           42,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	if result.Completed {
+		t.Error("Expected loop to NOT complete (circuit breaker)")
+	}
+	if result.Error == nil {
+		t.Fatal("Expected error from circuit breaker")
+	}
+	if !strings.Contains(result.Error.Error(), "claimed completion 5 times") {
+		t.Errorf("Expected circuit breaker error, got: %v", result.Error)
+	}
+	if result.Iterations != MaxFalseCompletions {
+		t.Errorf("Expected %d iterations, got %d", MaxFalseCompletions, result.Iterations)
+	}
+}
+
+func TestIterationLoop_ATMCompletionCheck_Unreachable(t *testing.T) {
+	// When PlanContext fails all 3 retries, should fail-closed (not trust completion marker)
+	tempDir := t.TempDir()
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	ctx := NewContext(42, "feat/test", "main", 2)
+
+	mockATM := atm.NewMockATM()
+	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Plan", nil
+	}
+	// PlanContext always fails (unreachable)
+	planContextCalls := 0
+	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
+		planContextCalls++
+		return nil, fmt.Errorf("connection timeout")
+	}
+
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
+			{TextContent: "Working..."},
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		ATM:              mockATM,
+		PlanID:           42,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	// Use a context that will cancel during the retry backoff to speed up the test
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	result := loop.Run(cancelCtx)
+
+	// Should NOT complete (fail-closed: ATM unreachable means don't trust marker)
+	if result.Completed {
+		t.Error("Expected loop to not complete when ATM is unreachable (fail-closed)")
+	}
+	// PlanContext should have been called multiple times (retries)
+	if planContextCalls < 2 {
+		t.Errorf("Expected multiple PlanContext retry calls, got %d", planContextCalls)
+	}
+}
+
+func TestIterationLoop_ATMProgressTracking(t *testing.T) {
+	// AddProgress should be called after each iteration; failure is non-fatal
+	tempDir := t.TempDir()
+	gitRepo := setupTestGitRepo(t, tempDir)
+
+	ctx := NewContext(42, "feat/test", "main", 2)
+
+	mockATM := atm.NewMockATM()
+	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Plan", nil
+	}
+
+	var progressCalls []string
+	mockATM.AddProgressFunc = func(planID int, author, body string) (*atm.Progress, error) {
+		progressCalls = append(progressCalls, body)
+		return nil, fmt.Errorf("progress write failed") // Non-fatal error
+	}
+
+	mockRunner := &MockRunner{
+		Responses: []MockResponse{
+			{TextContent: "Working on task 1..."},
+			{TextContent: "Working on task 2..."},
+		},
+	}
+
+	loop := NewIterationLoop(LoopConfig{
+		ATM:              mockATM,
+		PlanID:           42,
+		Context:          ctx,
+		Config:           config.Defaults(),
+		Runner:           mockRunner,
+		Git:              gitRepo,
+		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
+		WorktreePath:     tempDir,
+		IterationTimeout: 1 * time.Second,
+	})
+
+	result := loop.Run(context.Background())
+
+	// Should reach max iterations (not fail due to progress error)
 	if result.Error == nil || !strings.Contains(result.Error.Error(), "max iterations") {
-		t.Errorf("Expected max iterations error, got: %v", result.Error)
+		t.Errorf("Expected max iterations error (progress failure is non-fatal), got: %v", result.Error)
 	}
-	// 2 runner calls: iteration + next iteration (LLM verify was short-circuited by checkbox check)
-	if len(mockRunner.RecordedOpts) != 2 {
-		t.Errorf("Expected 2 runner calls (iteration + iteration; LLM verify short-circuited), got %d", len(mockRunner.RecordedOpts))
+	// AddProgress should have been called for each iteration
+	if len(progressCalls) != 2 {
+		t.Errorf("Expected 2 AddProgress calls, got %d", len(progressCalls))
 	}
-
-	// Check that combined feedback was written
-	feedbackPath := plan.FeedbackPath(p)
-	content, err := os.ReadFile(feedbackPath)
-	if err != nil {
-		t.Logf("Could not read feedback file: %v", err)
-	} else if !strings.Contains(string(content), "state.yaml also shows") {
-		t.Errorf("Expected combined feedback with state.yaml info, got: %s", string(content))
-	}
-}
-
-func TestIterationLoop_StateYamlFallbackToLLM(t *testing.T) {
-	// Plan bundle with state.yaml where T2 is still todo, but plan.md has all
-	// checkboxes checked (agent did the work but couldn't update state.yaml).
-	// Agent claims COMPLETE → state.yaml incomplete → LLM fallback says YES → loop completes.
-	tempDir := t.TempDir()
-	bundlePath := filepath.Join(tempDir, "plans", "current", "test-plan")
-	os.MkdirAll(bundlePath, 0755)
-
-	planPath := filepath.Join(bundlePath, "plan.md")
-	planContent := `# Plan: Test
-**Status:** complete
-## Tasks
-### T1: Do something
-**Status:** complete
-**Done when:**
-- [x] First thing
-### T2: Do another thing
-**Status:** complete
-**Done when:**
-- [x] Second thing
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
-	// Create state.yaml with T1 done, T2 still todo (stale)
-	now := time.Now()
-	st := &state.PlanState{
-		ID:     "test-plan",
-		Title:  "Test",
-		Status: state.PlanStatusActive,
-		Tasks: []state.TaskState{
-			{
-				ID:     "T1",
-				Title:  "Do something",
-				Status: state.TaskStatusDone,
-				Criteria: []state.Criterion{
-					{Text: "First thing", Done: true, DoneAt: &now},
-				},
-			},
-			{
-				ID:     "T2",
-				Title:  "Do another thing",
-				Status: state.TaskStatusTodo,
-				Criteria: []state.Criterion{
-					{Text: "Second thing", Done: false},
-				},
-			},
-		},
-	}
-	if err := state.SaveState(st, bundlePath); err != nil {
-		t.Fatalf("Failed to save state: %v", err)
-	}
-
-	gitRepo := setupTestGitRepo(t, tempDir)
-
-	p, err := plan.Load(bundlePath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
-
-	ctx := NewContext(p, "main", 10, tempDir)
-
-	mockRunner := &MockRunner{
-		Responses: []MockResponse{
-			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
-			{TextContent: "YES"}, // LLM verification fallback says complete
-		},
-	}
-
-	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
-		Context:          ctx,
-		Config:           config.Defaults(),
-		Runner:           mockRunner,
-		Git:              gitRepo,
-		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
-		WorktreePath:     tempDir,
-		IterationTimeout: 1 * time.Second,
-	})
-
-	result := loop.Run(context.Background())
-
-	// Should complete — LLM overrides stale state.yaml
-	if !result.Completed {
-		t.Errorf("Expected LLM fallback to verify completion, error: %v", result.Error)
-	}
-	if result.Iterations != 1 {
-		t.Errorf("Expected 1 iteration, got %d", result.Iterations)
-	}
-	// 2 runner calls: iteration + LLM verify fallback
-	if len(mockRunner.RecordedOpts) != 2 {
-		t.Errorf("Expected 2 runner calls (iteration + LLM verify), got %d", len(mockRunner.RecordedOpts))
-	}
-}
-
-func TestIterationLoop_FallbackLLMVerification(t *testing.T) {
-	// Plan WITHOUT state.yaml should fall back to LLM verification (existing behavior).
-	tempDir := t.TempDir()
-	planDir := filepath.Join(tempDir, "plans", "current")
-	os.MkdirAll(planDir, 0755)
-
-	// Flat file plan (not a bundle) — no state.yaml
-	planPath := filepath.Join(planDir, "test-plan.md")
-	planContent := `# Plan: Test
-**Status:** complete
-## Tasks
-- [x] Task 1
-`
-	os.WriteFile(planPath, []byte(planContent), 0644)
-
-	gitRepo := setupTestGitRepo(t, tempDir)
-
-	p, err := plan.Load(planPath)
-	if err != nil {
-		t.Fatalf("Failed to load plan: %v", err)
-	}
-
-	ctx := NewContext(p, "main", 10, tempDir)
-
-	// Iteration + LLM verification call
-	mockRunner := &MockRunner{
-		Responses: []MockResponse{
-			{TextContent: "Done! <promise>COMPLETE</promise>", IsComplete: true},
-			{TextContent: "YES"}, // LLM verification response
-		},
-	}
-
-	loop := NewIterationLoop(LoopConfig{
-		Plan:             p,
-		Context:          ctx,
-		Config:           config.Defaults(),
-		Runner:           mockRunner,
-		Git:              gitRepo,
-		PromptBuilder:    prompt.NewBuilder(config.Defaults(), "", ""),
-		WorktreePath:     tempDir,
-		IterationTimeout: 1 * time.Second,
-	})
-
-	result := loop.Run(context.Background())
-
-	if !result.Completed {
-		t.Errorf("Expected LLM verification to pass, error: %v", result.Error)
-	}
-	// Should have 2 runner calls: 1 iteration + 1 LLM verification
-	if len(mockRunner.RecordedOpts) != 2 {
-		t.Errorf("Expected 2 runner calls (iteration + LLM verify), got %d", len(mockRunner.RecordedOpts))
+	if !strings.Contains(progressCalls[0], "Iteration 1") {
+		t.Errorf("Expected iteration info in progress body, got: %s", progressCalls[0])
 	}
 }
 
@@ -778,7 +632,6 @@ func setupTestGitRepo(t *testing.T, dir string) git.Git {
 
 	gitRepo := git.NewGit(dir)
 
-	// Initialize git repo
 	cmd := "git init && git config user.email test@test.com && git config user.name Test && git commit --allow-empty -m 'initial'"
 	if err := runShellCommand(dir, cmd); err != nil {
 		t.Fatalf("Failed to init git repo: %v", err)
@@ -791,5 +644,6 @@ func setupTestGitRepo(t *testing.T, dir string) git.Git {
 func runShellCommand(dir, cmd string) error {
 	c := exec.Command("sh", "-c", cmd)
 	c.Dir = dir
+	c.Stderr = os.Stderr
 	return c.Run()
 }

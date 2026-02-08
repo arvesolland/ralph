@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/arvesolland/ralph/internal/log"
-	"github.com/arvesolland/ralph/internal/plan"
-	"github.com/arvesolland/ralph/internal/runner"
 	"github.com/slack-go/slack"
 )
 
@@ -62,11 +60,11 @@ func NewSlackNotifier(cfg SlackNotifierConfig) Notifier {
 }
 
 // Start sends a notification when a plan starts and creates a new thread.
-func (s *SlackNotifier) Start(p *plan.Plan) error {
+func (s *SlackNotifier) Start(p PlanInfo) error {
 	// Build initial status card with progress display
 	status := &ProgressStatus{
 		Iteration:     1,
-		MaxIterations: 30, // Default, will be updated on first UpdateProgress
+		MaxIterations: 30,
 		Phase:         PhaseInitializing,
 	}
 	blocks := s.buildProgressBlocks(p, status)
@@ -75,7 +73,7 @@ func (s *SlackNotifier) Start(p *plan.Plan) error {
 	_, ts, err := s.postMessage(blocks)
 	if err != nil {
 		log.Debug("Failed to send Slack start notification: %v", err)
-		return nil // Don't fail plan execution for notification errors
+		return nil
 	}
 
 	// Save thread info for future messages and updates
@@ -84,7 +82,7 @@ func (s *SlackNotifier) Start(p *plan.Plan) error {
 			PlanName:      p.Name,
 			ThreadTS:      ts,
 			ChannelID:     s.channel,
-			MessageTS:     ts, // Same as ThreadTS - this is the message we'll update
+			MessageTS:     ts,
 			LastPhase:     string(PhaseInitializing),
 			LastIteration: 1,
 		}
@@ -97,7 +95,7 @@ func (s *SlackNotifier) Start(p *plan.Plan) error {
 }
 
 // Complete sends a notification when a plan completes.
-func (s *SlackNotifier) Complete(p *plan.Plan, prURL string) error {
+func (s *SlackNotifier) Complete(p PlanInfo, prURL string) error {
 	var text string
 	if s.repoName != "" {
 		text = fmt.Sprintf(":white_check_mark: *Plan Complete*\n`%s` · `%s`", s.repoName, p.Name)
@@ -129,9 +127,8 @@ func (s *SlackNotifier) Complete(p *plan.Plan, prURL string) error {
 	return nil
 }
 
-// Blocker sends a notification when a blocker is encountered.
-// Uses blocker hash deduplication to prevent duplicate notifications.
-func (s *SlackNotifier) Blocker(p *plan.Plan, blocker *runner.Blocker) error {
+// BlockerNotify sends a notification when a blocker is encountered.
+func (s *SlackNotifier) BlockerNotify(p PlanInfo, blocker *Blocker) error {
 	if blocker == nil {
 		return nil
 	}
@@ -194,7 +191,7 @@ func (s *SlackNotifier) Blocker(p *plan.Plan, blocker *runner.Blocker) error {
 }
 
 // Error sends a notification when an error occurs.
-func (s *SlackNotifier) Error(p *plan.Plan, err error) error {
+func (s *SlackNotifier) Error(p PlanInfo, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -227,8 +224,7 @@ func (s *SlackNotifier) Error(p *plan.Plan, err error) error {
 }
 
 // Iteration sends a notification for each iteration (if enabled).
-// Note: Consider using UpdateProgress instead for cleaner thread display.
-func (s *SlackNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) error {
+func (s *SlackNotifier) Iteration(p PlanInfo, iteration, maxIterations int) error {
 	blocks := []slack.Block{
 		slack.NewSectionBlock(
 			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf(":hourglass_flowing_sand: *Iteration %d/%d*\n`%s`", iteration, maxIterations, p.Name), false, false),
@@ -241,8 +237,7 @@ func (s *SlackNotifier) Iteration(p *plan.Plan, iteration, maxIterations int) er
 }
 
 // UpdateProgress updates the parent message with current progress status.
-// This provides a "living status card" that shows the current state without flooding the thread.
-func (s *SlackNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) error {
+func (s *SlackNotifier) UpdateProgress(p PlanInfo, status *ProgressStatus) error {
 	if s.threadTracker == nil {
 		return nil
 	}
@@ -257,7 +252,6 @@ func (s *SlackNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) err
 	changed, err := s.threadTracker.UpdateProgress(p.Name, status.Iteration, string(status.Phase))
 	if err != nil {
 		log.Debug("Failed to check progress change: %v", err)
-		// Continue anyway - we'll try to update
 	}
 	if !changed {
 		log.Debug("Progress unchanged, skipping update")
@@ -283,8 +277,7 @@ func (s *SlackNotifier) UpdateProgress(p *plan.Plan, status *ProgressStatus) err
 }
 
 // buildProgressBlocks creates the Block Kit blocks for a progress status card.
-func (s *SlackNotifier) buildProgressBlocks(p *plan.Plan, status *ProgressStatus) []slack.Block {
-	// Choose emoji based on phase
+func (s *SlackNotifier) buildProgressBlocks(p PlanInfo, status *ProgressStatus) []slack.Block {
 	var emoji string
 	var phaseText string
 	switch status.Phase {
@@ -318,9 +311,9 @@ func (s *SlackNotifier) buildProgressBlocks(p *plan.Plan, status *ProgressStatus
 		if filled > 10 {
 			filled = 10
 		}
-		progressBar = strings.Repeat("█", filled) + strings.Repeat("░", 10-filled)
+		progressBar = strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", 10-filled)
 	} else {
-		progressBar = "░░░░░░░░░░"
+		progressBar = "\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591"
 	}
 
 	// Build header text
@@ -337,7 +330,6 @@ func (s *SlackNotifier) buildProgressBlocks(p *plan.Plan, status *ProgressStatus
 		slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Progress:*\n%s %d/%d", progressBar, status.Iteration, status.MaxIterations), false, false),
 	}
 
-	// Add message field if present
 	if status.Message != "" {
 		fields = append(fields, slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Status:*\n%s", status.Message), false, false))
 	}
@@ -363,7 +355,6 @@ func (s *SlackNotifier) postMessage(blocks []slack.Block) (string, string, error
 }
 
 // postMessageInThread posts a message as a reply to the plan's thread.
-// If no thread exists for the plan, posts to the channel directly.
 func (s *SlackNotifier) postMessageInThread(planName string, blocks []slack.Block) {
 	go func() {
 		var threadTS string

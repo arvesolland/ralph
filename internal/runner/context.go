@@ -6,21 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/arvesolland/ralph/internal/plan"
 )
 
 // Context represents the execution state for a plan iteration.
 // It is persisted as context.json in the worktree to maintain state between iterations.
-// All paths are relative to the working directory (worktree root or repo root).
 type Context struct {
-	// PlanFile is the relative path to the plan file (e.g., "plans/current/my-plan/plan.md")
-	PlanFile string `json:"planFile"`
-
-	// PlanDir is the relative path to the plan bundle directory (e.g., "plans/current/my-plan")
-	// For bundles, this contains plan.md, progress.md, and feedback.md.
-	// For legacy flat files, this is the directory containing the plan file.
-	PlanDir string `json:"planDir"`
+	// PlanID is the ATM plan ID.
+	PlanID int `json:"planId"`
 
 	// FeatureBranch is the git branch for this plan (e.g., "feat/go-rewrite")
 	FeatureBranch string `json:"featureBranch"`
@@ -41,54 +33,19 @@ const DefaultMaxIterations = 30
 // ContextFilename is the filename for context files in worktrees
 const ContextFilename = "context.json"
 
-// NewContext creates a new Context from a plan with paths relative to workDir.
-// The context is initialized for the first iteration with the specified base branch and max iterations.
-// workDir should be the worktree path (for worker) or repo root (for ralph run).
-func NewContext(p *plan.Plan, baseBranch string, maxIterations int, workDir string) *Context {
+// NewContext creates a new Context for a plan with the given parameters.
+func NewContext(planID int, featureBranch, baseBranch string, maxIterations int) *Context {
 	if maxIterations <= 0 {
 		maxIterations = DefaultMaxIterations
 	}
 
-	// Compute relative paths from workDir
-	planFile := computeRelativePath(p.Path, workDir)
-	planDir := computePlanDir(p, workDir)
-
 	return &Context{
-		PlanFile:      planFile,
-		PlanDir:       planDir,
-		FeatureBranch: p.Branch,
+		PlanID:        planID,
+		FeatureBranch: featureBranch,
 		BaseBranch:    baseBranch,
 		Iteration:     1,
 		MaxIterations: maxIterations,
 	}
-}
-
-// computeRelativePath computes a relative path from workDir to absPath.
-// Falls back to the original path if it can't be made relative.
-func computeRelativePath(absPath, workDir string) string {
-	if workDir == "" {
-		return absPath
-	}
-	relPath, err := filepath.Rel(workDir, absPath)
-	if err != nil {
-		return absPath
-	}
-	return relPath
-}
-
-// computePlanDir computes the relative path to load the plan via plan.Load().
-// For bundles: returns the bundle directory path relative to workDir.
-// For flat files: returns the file path (same as PlanFile) since plan.Load() handles files.
-// This ensures plan.Load(PlanDir) works correctly for both bundle and flat file cases.
-func computePlanDir(p *plan.Plan, workDir string) string {
-	var absPath string
-	if p.IsBundle() {
-		absPath = p.BundleDir
-	} else {
-		// For flat files, return the file path so plan.Load() works correctly
-		absPath = p.Path
-	}
-	return computeRelativePath(absPath, workDir)
 }
 
 // LoadContext reads a context from a JSON file.
@@ -145,8 +102,7 @@ func ContextPath(worktreePath string) string {
 // Increment increments the iteration count and returns a copy of the context.
 func (c *Context) Increment() *Context {
 	return &Context{
-		PlanFile:      c.PlanFile,
-		PlanDir:       c.PlanDir,
+		PlanID:        c.PlanID,
 		FeatureBranch: c.FeatureBranch,
 		BaseBranch:    c.BaseBranch,
 		Iteration:     c.Iteration + 1,
