@@ -31,6 +31,7 @@ var (
 	workerSync         bool
 	workerSyncInterval time.Duration
 	workerPush         bool
+	workerTimeout      time.Duration
 )
 
 var workerCmd = &cobra.Command{
@@ -74,6 +75,7 @@ func init() {
 	workerCmd.Flags().BoolVar(&workerSync, "sync", false, "pull from remote before each queue check")
 	workerCmd.Flags().DurationVar(&workerSyncInterval, "sync-interval", 0, "minimum time between syncs (e.g., 60s)")
 	workerCmd.Flags().BoolVar(&workerPush, "push", false, "push to remote after each iteration (prevents work loss on spot instances)")
+	workerCmd.Flags().DurationVar(&workerTimeout, "timeout", 0, "timeout per iteration (e.g., 90m, 2h) (default from config or 60m)")
 }
 
 func runWorker(cmd *cobra.Command, args []string) error {
@@ -121,6 +123,17 @@ func runWorker(cmd *cobra.Command, args []string) error {
 			log.Warn("Invalid worker.sync_interval in config: %v", parseErr)
 		}
 	}
+
+	// Determine iteration timeout (flag > config > default)
+	iterationTimeout := workerTimeout
+	if iterationTimeout == 0 && cfg.Runner.IterationTimeout != "" {
+		if parsed, parseErr := time.ParseDuration(cfg.Runner.IterationTimeout); parseErr == nil {
+			iterationTimeout = parsed
+		} else {
+			log.Warn("Invalid runner.iteration_timeout in config: %v", parseErr)
+		}
+	}
+	// 0 means WorkerConfig will use runner.IterationTimeout default
 
 	// Get working directory (main worktree)
 	mainWorktreePath, err := os.Getwd()
@@ -179,6 +192,7 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		SyncEnabled:      syncEnabled,
 		SyncInterval:     syncInterval,
 		PushAfterIteration: workerPush,
+		IterationTimeout:   iterationTimeout,
 		OnPlanStart: func(info *worker.PlanInfo) {
 			log.Success("=== Starting plan: %s ===", info.Name)
 			log.Info("Branch: %s", info.Branch)

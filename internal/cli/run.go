@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/arvesolland/ralph/internal/atm"
 	"github.com/arvesolland/ralph/internal/config"
@@ -30,6 +31,7 @@ var (
 	runMaxIterations  int
 	runCompletionMode string
 	runPush           bool
+	runTimeout        time.Duration
 )
 
 var runCmd = &cobra.Command{
@@ -61,6 +63,7 @@ func init() {
 	runCmd.Flags().IntVar(&runMaxIterations, "max", runner.DefaultMaxIterations, "maximum iterations before stopping")
 	runCmd.Flags().StringVar(&runCompletionMode, "completion-mode", "", "completion mode: pr, merge, or branch (default from config)")
 	runCmd.Flags().BoolVar(&runPush, "push", false, "push to remote after each iteration")
+	runCmd.Flags().DurationVar(&runTimeout, "timeout", 0, "timeout per iteration (e.g., 90m, 2h) (default from config or 60m)")
 	_ = runCmd.MarkFlagRequired("plan")
 }
 
@@ -90,6 +93,19 @@ func runRun(cmd *cobra.Command, args []string) error {
 		completionMode = "pr"
 	}
 
+	// Determine iteration timeout (flag > config > default)
+	iterationTimeout := runTimeout
+	if iterationTimeout == 0 && cfg.Runner.IterationTimeout != "" {
+		if parsed, parseErr := time.ParseDuration(cfg.Runner.IterationTimeout); parseErr == nil {
+			iterationTimeout = parsed
+		} else {
+			log.Warn("Invalid runner.iteration_timeout in config: %v", parseErr)
+		}
+	}
+	if iterationTimeout == 0 {
+		iterationTimeout = runner.IterationTimeout
+	}
+
 	// Fetch plan details
 	plan, err := atmClient.GetPlan(runPlanID)
 	if err != nil {
@@ -102,6 +118,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	log.Info("Plan: %s (ID: %d, status: %s)", plan.Title, plan.ID, plan.Status)
 	log.Info("Branch: %s", branch)
 	log.Info("Max iterations: %d", runMaxIterations)
+	log.Info("Iteration timeout: %v", iterationTimeout)
 	log.Info("Completion mode: %s", completionMode)
 
 	// Set plan status to active if not already
@@ -229,7 +246,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		Git:              wtGit,
 		PromptBuilder:    promptBuilder,
 		WorktreePath:     worktreePath,
-		IterationTimeout: runner.IterationTimeout,
+		IterationTimeout: iterationTimeout,
 		OnIteration: func(iteration int, result *runner.Result) {
 			log.Info("Iteration %d/%d complete", iteration, runMaxIterations)
 			if result.IsComplete {

@@ -68,6 +68,7 @@ type WorkerConfig struct {
 	SyncEnabled        bool
 	SyncInterval       time.Duration
 	PushAfterIteration bool
+	IterationTimeout   time.Duration
 
 	// Callbacks
 	OnPlanStart    func(info *PlanInfo)
@@ -95,6 +96,7 @@ type Worker struct {
 	syncInterval       time.Duration
 	lastSyncTime       time.Time
 	pushAfterIteration bool
+	iterationTimeout   time.Duration
 
 	// Callbacks
 	onPlanStart    func(info *PlanInfo)
@@ -122,6 +124,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		syncEnabled:        cfg.SyncEnabled,
 		syncInterval:       cfg.SyncInterval,
 		pushAfterIteration: cfg.PushAfterIteration,
+		iterationTimeout:   cfg.IterationTimeout,
 		onPlanStart:        cfg.OnPlanStart,
 		onPlanComplete:     cfg.OnPlanComplete,
 		onPlanError:        cfg.OnPlanError,
@@ -137,6 +140,9 @@ func NewWorker(cfg WorkerConfig) *Worker {
 	}
 	if w.completionMode == "" {
 		w.completionMode = "pr"
+	}
+	if w.iterationTimeout == 0 {
+		w.iterationTimeout = runner.IterationTimeout
 	}
 	if w.notifier == nil {
 		w.notifier = &notify.NoopNotifier{}
@@ -287,7 +293,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 		Git:              git.NewGit(worktreePath),
 		PromptBuilder:    w.promptBuilder,
 		WorktreePath:     worktreePath,
-		IterationTimeout: runner.IterationTimeout,
+		IterationTimeout: w.iterationTimeout,
 		OnIteration: func(iteration int, result *runner.Result) {
 			w.sendIterationNotification(info, iteration, w.maxIterations)
 		},

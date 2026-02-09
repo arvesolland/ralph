@@ -18,6 +18,7 @@ type Config struct {
 	Slack      SlackConfig      `yaml:"slack"`
 	Worktree   WorktreeConfig   `yaml:"worktree"`
 	Completion CompletionConfig `yaml:"completion"`
+	Runner     RunnerConfig     `yaml:"runner"`
 	Worker     WorkerRunConfig  `yaml:"worker"`
 	ATM        ATMConfig        `yaml:"atm"`
 }
@@ -72,6 +73,11 @@ type WorktreeConfig struct {
 // CompletionConfig contains plan completion settings.
 type CompletionConfig struct {
 	Mode string `yaml:"mode"` // "pr" or "merge"
+}
+
+// RunnerConfig contains iteration runner settings.
+type RunnerConfig struct {
+	IterationTimeout string `yaml:"iteration_timeout"` // Timeout per iteration (e.g., "90m", "2h")
 }
 
 // WorkerRunConfig contains worker runtime settings.
@@ -244,6 +250,11 @@ func mergeConfig(dst, src *Config) {
 	// Completion
 	if src.Completion.Mode != "" {
 		dst.Completion.Mode = src.Completion.Mode
+	}
+
+	// Runner
+	if src.Runner.IterationTimeout != "" {
+		dst.Runner.IterationTimeout = src.Runner.IterationTimeout
 	}
 
 	// Worker
