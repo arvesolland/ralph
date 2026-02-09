@@ -54,9 +54,10 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
-    # Integration tests require Claude CLI which isn't available in CI
-    # This job is a placeholder for when mock testing is implemented
-    if: false  # Disabled until mock claude is implemented
+    # Integration tests require Claude CLI in PATH.
+    # Uses fake atm-cli binary (built from test/integration/fake_atm/)
+    # and a fake ATM HTTP server for task management.
+    if: false  # Disabled - requires Claude CLI in CI
 
     steps:
       - uses: actions/checkout@v4
@@ -72,5 +73,3 @@ jobs:
 
       - name: Run integration tests
         run: make test-integration
-        env:
-          RALPH_MOCK_CLAUDE: "1"

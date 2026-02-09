@@ -71,8 +71,7 @@ type WorktreeConfig struct {
 
 // CompletionConfig contains plan completion settings.
 type CompletionConfig struct {
-	Mode              string `yaml:"mode"`               // "pr" or "merge"
-	VerificationModel string `yaml:"verification_model"` // model for plan verification (default: claude-3-5-haiku-latest)
+	Mode string `yaml:"mode"` // "pr" or "merge"
 }
 
 // WorkerRunConfig contains worker runtime settings.
@@ -245,9 +244,6 @@ func mergeConfig(dst, src *Config) {
 	// Completion
 	if src.Completion.Mode != "" {
 		dst.Completion.Mode = src.Completion.Mode
-	}
-	if src.Completion.VerificationModel != "" {
-		dst.Completion.VerificationModel = src.Completion.VerificationModel
 	}
 
 	// Worker

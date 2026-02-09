@@ -27,8 +27,8 @@ var initCmd = &cobra.Command{
 	Short: "Initialize a new Ralph project",
 	Long: `Initialize a new Ralph project in the current directory.
 
-Creates the .ralph/ configuration directory, plan queue directories,
-and specs directory structure. Optionally auto-detects project settings.`,
+Creates the .ralph/ configuration directory and specs directory structure.
+Optionally auto-detects project settings.`,
 	RunE: runInit,
 }
 
@@ -59,9 +59,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 		ralphDir,
 		filepath.Join(ralphDir, "worktrees"),
 		filepath.Join(ralphDir, "prompts"),
-		filepath.Join(cwd, "plans", "pending"),
-		filepath.Join(cwd, "plans", "current"),
-		filepath.Join(cwd, "plans", "complete"),
 		filepath.Join(cwd, "specs"),
 	}
 
@@ -234,10 +231,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println("    prompts/         - Customizable agent prompts")
 	fmt.Println("      prompt.md      - Main agent instructions (edit to customize)")
 	fmt.Println("    worktrees/       - Execution worktrees (gitignored)")
-	fmt.Println("  plans/")
-	fmt.Println("    pending/         - Plans waiting to be executed")
-	fmt.Println("    current/         - Currently executing plan")
-	fmt.Println("    complete/        - Completed plans")
 	fmt.Println("  specs/")
 	fmt.Println("    INDEX.md         - Specification index")
 	fmt.Println()

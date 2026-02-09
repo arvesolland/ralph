@@ -176,6 +176,12 @@ func TestSocketModeBot_FindPlanByThread_NilTracker(t *testing.T) {
 func TestSocketModeBot_WriteFeedback(t *testing.T) {
 	tmpDir := t.TempDir()
 
+	// Create plan bundle directory
+	bundleDir := filepath.Join(tmpDir, "test-plan")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatalf("failed to create bundle dir: %v", err)
+	}
+
 	cfg := BotConfig{
 		BotToken:     "xoxb-test",
 		AppToken:     "xapp-test",
@@ -193,8 +199,8 @@ func TestSocketModeBot_WriteFeedback(t *testing.T) {
 		t.Fatalf("writeFeedback failed: %v", err)
 	}
 
-	// Verify feedback file was created
-	feedbackPath := filepath.Join(tmpDir, "test-plan.feedback.md")
+	// Verify feedback file was created in bundle directory
+	feedbackPath := filepath.Join(bundleDir, "feedback.md")
 	content, err := os.ReadFile(feedbackPath)
 	if err != nil {
 		t.Fatalf("failed to read feedback file: %v", err)
@@ -542,39 +548,6 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
-}
-
-func TestWriteFeedback_FlatFile(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	cfg := BotConfig{
-		BotToken:     "xoxb-test",
-		AppToken:     "xapp-test",
-		ChannelID:    "C123",
-		PlanBasePath: tmpDir,
-	}
-
-	bot := NewSocketModeBot(cfg)
-	if bot == nil {
-		t.Fatal("expected non-nil bot")
-	}
-
-	// Write feedback for a flat plan (no bundle directory)
-	err := bot.writeFeedback("flat-plan", "U456", "Flat file feedback")
-	if err != nil {
-		t.Fatalf("writeFeedback failed: %v", err)
-	}
-
-	// Verify feedback file at legacy location
-	feedbackPath := filepath.Join(tmpDir, "flat-plan.feedback.md")
-	content, err := os.ReadFile(feedbackPath)
-	if err != nil {
-		t.Fatalf("failed to read feedback file: %v", err)
-	}
-
-	if !contains(string(content), "Flat file feedback") {
-		t.Errorf("feedback should contain message, got: %s", string(content))
-	}
 }
 
 func TestWriteFeedback_Bundle(t *testing.T) {

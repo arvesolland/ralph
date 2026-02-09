@@ -61,9 +61,6 @@ func TestRunInit_CreatesDirectoryStructure(t *testing.T) {
 	expectedDirs := []string{
 		".ralph",
 		".ralph/worktrees",
-		"plans/pending",
-		"plans/current",
-		"plans/complete",
 		"specs",
 	}
 

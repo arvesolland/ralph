@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -429,15 +428,4 @@ func createPR(title, workDir string) (string, error) {
 		output = strings.TrimSpace(stderr.String())
 	}
 	return output, nil
-}
-
-// parsePlanID parses a plan ID from a string argument.
-func parsePlanID(s string) (int, error) {
-	// Strip optional "#" prefix
-	s = strings.TrimPrefix(s, "#")
-	id, err := strconv.Atoi(s)
-	if err != nil {
-		return 0, fmt.Errorf("invalid plan ID %q: must be an integer", s)
-	}
-	return id, nil
 }

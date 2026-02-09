@@ -4,9 +4,9 @@ This file provides guidance to Claude Code when working on the Ralph repository.
 
 ## Overview
 
-Ralph is an autonomous AI development loop orchestration system implementing the "Ralph Wiggum technique" - fresh context per iteration with progress persisted in files and git.
+Ralph is an autonomous AI development loop orchestration system implementing the "Ralph Wiggum technique" - fresh context per iteration with progress persisted in ATM and git.
 
-Ralph is written in Go. The codebase lives in `cmd/` and `internal/` directories following standard Go project layout.
+Ralph is written in Go. The codebase lives in `cmd/` and `internal/` directories following standard Go project layout. Task management is handled via the ATM (Agent Task Manager) service, accessed through the `atm-cli` binary.
 
 ## Commands
 
@@ -16,21 +16,23 @@ make build              # Production build with version info
 make build-dev          # Fast development build
 
 # Run tests
-make test               # Run all unit tests
+make test               # Run all unit tests (verbose)
 make test-short         # Run tests without integration tests
 make test-race          # Run tests with race detector
+make test-coverage      # Run tests with coverage report
 go test ./... -v        # Verbose test output
 
 # Run ralph commands
-./ralph init --detect   # Initialize project with auto-detection
-./ralph status          # Show queue status
-./ralph run plans/current/my-plan  # Run implementation loop on a plan
-./ralph plan create my-feature     # Create new plan bundle
-./ralph worker          # Process queue (continuous)
-./ralph worker --once   # Process one plan and exit
-./ralph reset           # Move current plan back to pending
-./ralph cleanup         # Remove orphaned worktrees
-./ralph version         # Show version info
+./ralph init --detect          # Initialize project with auto-detection
+./ralph status                 # Show ATM project status
+./ralph run --plan <plan-id>   # Run iteration loop on a plan
+./ralph worker                 # Process ATM queue (continuous)
+./ralph worker --once          # Process one plan and exit
+./ralph cleanup                # Remove orphaned worktrees
+./ralph version                # Show version info
+
+# Linting
+make lint               # Run golangci-lint
 
 # Release (requires goreleaser)
 make release-snapshot   # Test release build
@@ -44,24 +46,37 @@ make release-dry-run    # Dry run release
 ```
 cmd/ralph/              # Main entry point
 internal/
-├── cli/                # Cobra commands (init, run, worker, status, reset, cleanup, plan, version)
+├── cli/                # Cobra commands (init, run, worker, status, cleanup, version)
 ├── config/             # Config loading, YAML parsing, project detection
-├── plan/               # Plan parsing, task extraction, queue management, bundles
-├── runner/             # Claude execution, streaming, retry logic, verification
-├── git/                # Git operations (commit, branch, worktree)
-├── worktree/           # Worktree management, file sync, hooks
-├── notify/             # Slack notifications (webhook, bot API, Socket Mode)
+├── atm/                # ATM client (shells out to atm-cli binary)
+├── runner/             # Claude execution, streaming, retry logic, iteration loop
+├── git/                # Git operations (commit, branch, worktree, status)
+├── worktree/           # Worktree management, dependency auto-detection, hooks
+├── worker/             # Queue processor orchestration, completion modes (PR/merge/branch)
+├── notify/             # Slack notifications (webhook, bot API, Socket Mode, threads)
 ├── prompt/             # Prompt template building with embedded defaults
 └── log/                # Structured logging with color support
 test/
 └── integration/        # End-to-end integration tests (requires Claude CLI)
+    └── fakeatm/        # Fake atm-cli binary for test isolation
 ```
 
 Key packages:
-- `internal/runner/loop.go` - Main iteration loop (prompt → Claude → verify → commit)
-- `internal/worker/worker.go` - Queue processor (pending → current → execute → complete)
-- `internal/worktree/manager.go` - Worktree creation, cleanup, file sync
-- `internal/notify/slack.go` - Slack Bot API with thread tracking
+- `internal/runner/loop.go` - Main iteration loop (prompt -> Claude -> verify ATM stats -> commit)
+- `internal/worker/worker.go` - Queue processor (poll ATM -> activate -> iterate -> complete)
+- `internal/atm/client.go` - ATM client wrapping atm-cli commands
+- `internal/worktree/manager.go` - Worktree creation, cleanup, dependency installation
+
+### ATM Integration
+
+Ralph uses ATM (Agent Task Manager) as its external task management backend. The `internal/atm/` package wraps the `atm-cli` binary:
+
+- **Plan lifecycle:** ready -> active -> complete (or blocked)
+- **Task lifecycle:** todo -> claimed -> doing -> done (or blocked/skipped)
+- **Agent context:** Single-call bootstrapping via `atm-cli plan context <id>`
+- **Progress/Feedback:** Append-only logs for inter-iteration memory
+
+The ATM client (`internal/atm/client.go`) shells out to `atm-cli` with `--api-url` and `--api-token` flags. Configuration is in `.ralph/config.yaml` under the `atm:` section.
 
 ### Worktree-Based Isolation
 
@@ -69,42 +84,18 @@ Each plan executes in an isolated git worktree, preventing branch-switching conf
 
 ```
 repo/                          # Main worktree (always on base branch)
-├── plans/
-│   ├── pending/              # Queue of plan bundles to run
-│   │   └── my-feature/       # Plan bundle (directory)
-│   │       ├── plan.md       # The plan itself
-│   │       ├── progress.md   # Iteration log
-│   │       └── feedback.md   # Human input
-│   ├── current/              # Currently active plan bundle
-│   └── complete/             # Archived plan bundles (with date suffix)
 ├── .ralph/
+│   ├── config.yaml           # Project configuration
+│   ├── prompts/              # Customizable agent prompts
 │   └── worktrees/            # Execution worktrees (gitignored)
 │       └── feat-my-feature/  # One per active plan
+└── specs/                    # Feature specifications
 ```
-
-**Concurrency Protection (Three-Layer Lock):**
-1. **File location lock**: Plan in `current/` = claimed (can't move same file twice)
-2. **Git worktree lock**: Branch checked out = locked (`fatal: '<branch>' is already checked out`)
-3. **Directory lock**: Worktree exists = execution in progress
 
 **Completion Modes:**
-- `--pr` (default): Push branch, create PR via `gh`, archive plan, clean up worktree
-- `--merge`: Merge directly to base branch, archive, delete branch + worktree
-- Config: `completion.mode: pr|merge` in `.ralph/config.yaml`
-
-**Automatic Recovery:**
-If a spot instance is terminated after PR creation but before plan archival, the worker automatically detects and recovers on restart:
-- On startup, checks if current plan has existing PR (via `gh pr list`)
-- If PR exists, auto-completes the plan (archives to `complete/`, cleans up worktree)
-- Prevents duplicate processing of already-completed plans
-- No manual intervention required
-
-**Commands:**
-```bash
-ralph cleanup     # Remove orphaned worktrees
-ralph status      # Show queue and worktree status
-ralph reset       # Reset current plan to pending (start over)
-```
+- `pr` (default): Push branch, create PR via `gh` CLI (or Claude-generated PR), clean up worktree
+- `merge`: Merge directly to base branch with `--no-ff`, push, delete feature branch + worktree
+- `branch`: Push branch to origin only, no PR or merge
 
 **Worktree Initialization:**
 
@@ -121,89 +112,58 @@ When a worktree is created, Ralph automatically initializes it:
    - Go: `go mod download`
    - Rust: `cargo fetch`
 
-Configure in `.ralph/config.yaml`:
-```yaml
-worktree:
-  # Files to copy from main worktree (default: .env)
-  copy_env_files: ".env, .env.local"
-
-  # Custom init commands (skips auto-detection)
-  init_commands: "npm ci && cp ../.env.example .env"
-```
-
-Or create `.ralph/hooks/worktree-init` (must be executable):
-```bash
-#!/bin/bash
-# Custom worktree initialization
-# $PWD = worktree path, $MAIN_WORKTREE = main repo path
-cp "$MAIN_WORKTREE/.env" .env
-npm ci
-php artisan key:generate
-```
-
 ### Prompt System
 
 Default prompts are embedded in the binary via `//go:embed` in `internal/prompt/templates.go`:
 
 ```
 internal/prompt/prompts/
-├── prompt.md                  # Worker agent instructions (main implementation)
-├── worker_prompt.md           # Alternative worker prompt
-├── plan_reviewer_prompt.md    # Plan optimization before execution
-└── plan-spec.md               # Plan format specification
+├── prompt.md                  # Main agent instructions (used each iteration)
+└── pr_creation_prompt.md      # PR description generation prompt
 ```
 
 Prompts use `{{PLACEHOLDER}}` syntax replaced by `prompt.Builder`:
 - `{{PROJECT_NAME}}`, `{{PROJECT_DESCRIPTION}}` - from config.yaml
-- `{{PRINCIPLES}}`, `{{PATTERNS}}`, `{{BOUNDARIES}}`, `{{TECH_STACK}}` - from .ralph/*.md files
-- `{{TEST_COMMAND}}`, `{{LINT_COMMAND}}` - from config.yaml commands
+- `{{TEST_COMMAND}}`, `{{LINT_COMMAND}}`, `{{BUILD_COMMAND}}`, `{{DEV_COMMAND}}` - from config.yaml
+- `{{ITERATION}}`, `{{MAX_ITERATIONS}}` - iteration state
+- `{{FEATURE_BRANCH}}`, `{{BASE_BRANCH}}` - git branch info
+- `{{PLAN_ID}}`, `{{ATM_CONTEXT}}` - ATM plan data injected into prompt
 
 Custom prompts can be placed in `.ralph/prompts/` to override embedded defaults.
 
 ### State Management
 
-Each iteration gets fresh context via `context.json`:
+Each iteration gets fresh context via `context.json` (stored at `.ralph/context.json` in the worktree):
+
 ```json
 {
-  "planFile": "path/to/plan.md",
-  "featureBranch": "feat/plan-name",
+  "planId": 42,
+  "featureBranch": "feat/my-feature",
   "baseBranch": "main",
   "iteration": 1,
   "maxIterations": 30
 }
 ```
 
-Progress persists in:
-- Plan file (checkbox updates, status changes)
-- `<plan>.progress.md` (gotchas/learnings)
-- Git commits
+Progress persists externally:
+- **ATM tasks** - Task status, acceptance criteria, progress entries, feedback
+- **Git commits** - Code changes committed after each iteration
+- **context.json** - Iteration counter (only state in the worktree)
 
 ### Completion Detection
 
-1. Agent outputs `<promise>COMPLETE</promise>` when all tasks done
-2. Haiku verification confirms plan is actually complete (prevents false positives)
-3. If verification fails, detailed reason is written to `<plan>.feedback.md` so agent can address it
-4. If plan is in `plans/current/`, triggers completion workflow (archive + optional PR)
-
-### Slack Notifications (Optional)
-
-Configure in `.ralph/config.yaml` to receive Slack notifications:
-
-```yaml
-slack:
-  webhook_url: "https://hooks.slack.com/services/..."
-  notify_start: true      # plan start (default: true)
-  notify_complete: true   # plan completion (default: true)
-  notify_iteration: false # each iteration (default: false)
-  notify_error: true      # errors/max iterations (default: true)
-  notify_blocker: true    # when human input needed (default: true)
-```
-
-Notifications are sent async and silently skip if `webhook_url` is not set.
+1. Agent outputs `<promise>COMPLETE</promise>` when it believes all tasks are done
+2. Ralph checks ATM stats: total tasks vs (done + skipped)
+3. If ATM confirms all tasks complete, the plan is verified done
+4. If ATM shows tasks remain, it's a false completion:
+   - Ralph adds feedback to ATM explaining which tasks are still incomplete
+   - Consecutive false completions are tracked (counter resets on non-completion iterations)
+   - After 5 consecutive false completions, Ralph halts with an error
+5. Completion triggers the configured workflow (PR creation, merge, or branch push)
 
 ### Human Input / Blockers
 
-When the agent encounters a task requiring human action (e.g., making a GitHub package public, approving a deployment), it signals a blocker:
+When the agent encounters a task requiring human action, it signals a blocker:
 
 ```
 <blocker>
@@ -216,25 +176,8 @@ Resume: What happens once resolved.
 **How it works:**
 1. Agent outputs `<blocker>` marker when stuck on human-required task
 2. Ralph detects the marker and sends Slack notification (if configured)
-3. Human provides input via `<plan>.feedback.md` file
-4. Agent reads feedback file next iteration and continues
-
-**Feedback file format** (`plans/current/<plan-name>/feedback.md`):
-```markdown
-# Feedback: plan-name
-
-## Pending
-- [2024-01-30 14:32] Package is now public, you can verify the pull
-
-## Processed
-<!-- Agent moves items here after reading -->
-```
-
-**Files involved:**
-- `<plan>/feedback.md` - Human writes here, agent reads and acts
-- `.ralph/slack_threads.json` - Maps Slack threads to plans (for reply tracking)
-
-Plan bundles are synced between queue directory and worktree. Feedback only syncs TO worktree (one-way).
+3. Human provides input via ATM feedback or Slack thread reply
+4. Agent reads feedback next iteration and continues
 
 ### Slack Notifications
 
@@ -250,12 +193,14 @@ slack:
   notify_complete: true
   notify_error: true
   notify_blocker: true
+  notify_iteration: false  # Per-iteration updates (verbose)
 ```
 
 The Go implementation in `internal/notify/` supports:
 - Webhook notifications (simple, no dependencies)
 - Bot API with thread tracking per plan
 - Socket Mode for bidirectional communication
+- Progress bar updates via message editing
 
 ### Skills (.claude/skills/)
 
@@ -273,26 +218,41 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/cli/root.go` | Cobra root command and global flags |
 | `internal/cli/run.go` | `ralph run` command |
 | `internal/cli/worker.go` | `ralph worker` command |
-| `internal/cli/plan.go` | `ralph plan create/migrate` commands |
+| `internal/cli/init.go` | `ralph init` command |
+| `internal/cli/status.go` | `ralph status` command |
+| `internal/cli/cleanup.go` | `ralph cleanup` command |
+| `internal/cli/version.go` | `ralph version` command |
+| `internal/config/config.go` | Config struct, YAML loading, validation |
+| `internal/config/defaults.go` | Default configuration values |
+| `internal/config/detect.go` | Project type auto-detection |
+| `internal/atm/interface.go` | ATM interface definition |
+| `internal/atm/client.go` | ATM client (shells out to atm-cli) |
+| `internal/atm/types.go` | ATM data types (Plan, Task, Criterion, etc.) |
+| `internal/atm/mock.go` | Mock ATM client for testing |
 | `internal/runner/loop.go` | Main iteration loop |
 | `internal/runner/runner.go` | Claude CLI execution with streaming |
-| `internal/runner/verify.go` | Plan completion verification via Haiku |
-| `internal/worker/worker.go` | Queue processor |
-| `internal/config/config.go` | Config struct and YAML loading |
-| `internal/config/detect.go` | Project type auto-detection |
-| `internal/plan/plan.go` | Plan parsing and task extraction |
-| `internal/plan/bundle.go` | Plan bundle scaffolding and migration |
-| `internal/plan/queue.go` | Plan queue management (pending/current/complete) |
-| `internal/git/git.go` | Git CLI wrapper |
+| `internal/runner/command.go` | Claude CLI argument builder |
+| `internal/runner/context.go` | Iteration context (context.json) |
+| `internal/runner/stream.go` | JSON stream parser for Claude output |
+| `internal/runner/retry.go` | Retry logic with exponential backoff |
+| `internal/runner/blocker.go` | Blocker extraction from Claude output |
+| `internal/git/git.go` | Git CLI wrapper (status, commit, branch, worktree) |
 | `internal/worktree/manager.go` | Worktree lifecycle management |
-| `internal/worktree/sync.go` | File sync between worktrees |
-| `internal/prompt/templates.go` | Embedded prompt templates |
+| `internal/worktree/deps.go` | Dependency auto-detection and installation |
+| `internal/worktree/hooks.go` | Worktree initialization hooks |
+| `internal/worker/worker.go` | Queue processor (ATM polling, plan lifecycle) |
+| `internal/worker/completion.go` | Completion modes (PR, merge, branch) |
+| `internal/prompt/templates.go` | Embedded prompt templates (go:embed) |
+| `internal/prompt/builder.go` | Prompt builder with placeholder substitution |
 | `internal/notify/slack.go` | Slack Bot API notifications |
 | `internal/notify/webhook.go` | Slack webhook notifications |
+| `internal/notify/bot.go` | Slack Bot with Socket Mode |
+| `internal/notify/threads.go` | Thread tracking for Slack notifications |
 | `internal/log/log.go` | Structured logging with color |
 | `.goreleaser.yaml` | Release configuration |
 | `Makefile` | Build targets |
 | `test/integration/integration_test.go` | End-to-end integration tests |
+| `test/integration/fakeatm/` | Fake atm-cli binary for test isolation |
 
 ## Testing
 
@@ -315,13 +275,13 @@ make test-short
 # Test coverage
 make test-coverage
 
-# Run integration tests (requires Claude CLI)
+# Run integration tests (requires Claude CLI + built ralph binary)
 make test-integration
 ```
 
 ### Unit Tests
 
-Unit test fixtures are in `internal/*/testdata/` directories. These tests mock external dependencies and run quickly.
+Unit test fixtures are in `internal/*/testdata/` directories. Tests use mock implementations (e.g., `internal/atm/mock.go`) for external dependencies.
 
 ### Integration Tests
 
@@ -329,18 +289,21 @@ Integration tests are in `test/integration/` and require:
 - Built ralph binary (`make build`)
 - Claude CLI available in PATH
 
-They test real end-to-end flows:
-- `TestSingleTask` - Basic task completion with `ralph run`
-- `TestDependencies` - Task dependency ordering
-- `TestProgressTracking` - Progress.md updates during execution
-- `TestWorkerQueue` - Worker queue with worktree isolation
-- `TestDirtyState` - Dirty main worktree handling
-- `TestWorktreeCleanup` - `ralph cleanup` command
-- `TestCorePrinciples` - Comprehensive verification of all Ralph principles
-- `TestPlanBundleCreate` - `ralph plan create` scaffolding
-- `TestReset` - `ralph reset` command
+They use a fake `atm-cli` binary (`test/integration/fakeatm/`) that stores state in a JSON file, providing full end-to-end testing without a real ATM server.
 
-Each test creates an isolated temp workspace with git repo and ralph structure.
+Test cases:
+- `TestSingleTask` - Basic single task completion with `ralph run --plan`
+- `TestDependencies` - Task dependency ordering
+- `TestProgressTracking` - ATM progress entries created during execution
+- `TestOneTaskPerIteration` - Verifies agent completes one task per iteration (separate commits)
+- `TestWorkerQueue` - Worker queue processing with `ralph worker --once --merge`
+- `TestDirtyState` - Dirty main worktree handling (worktree isolation)
+- `TestWorktreeCleanup` - `ralph cleanup` command
+- `TestCorePrinciples` - Comprehensive multi-task dependency chain with worker
+- `TestSlackNotifications` - Slack Bot API notifications with mock server
+- `TestATMContextFailure` - Error handling with invalid ATM configuration
+
+Each test creates an isolated temp workspace with git repo, local bare origin, and seeded ATM state.
 
 ## Development Patterns
 
@@ -354,32 +317,38 @@ Each test creates an isolated temp workspace with git repo and ralph structure.
 ### Adding New Prompts
 
 1. Add the prompt file to `internal/prompt/prompts/`
-2. Update `internal/prompt/templates.go` to embed it with `//go:embed`
-3. Add a method to `Builder` to build the new prompt type
+2. The `//go:embed prompts/*.md` directive in `templates.go` automatically includes it
+3. Use it via `promptBuilder.Build("my_prompt.md", overrides)`
 
 ### Modifying Claude Execution
 
 The runner package (`internal/runner/`) handles Claude CLI execution:
-- `command.go` - Builds CLI arguments
-- `runner.go` - Executes Claude with streaming output
-- `stream.go` - Parses JSON stream from Claude
-- `retry.go` - Retry logic for transient failures
-- `verify.go` - Plan completion verification via Haiku
+- `command.go` - Builds CLI arguments (model, output format, permissions)
+- `runner.go` - Executes Claude with streaming output and process lifecycle
+- `stream.go` - Parses JSON stream from Claude CLI (`stream-json` format)
+- `retry.go` - Retry logic with exponential backoff and jitter
+- `blocker.go` - Extracts blocker information from `<blocker>` tags
+- `loop.go` - Main iteration loop with ATM completion verification
+- `context.go` - Iteration context management (context.json)
 
 ### Branch Management
 
 Plans automatically get feature branches via worktree isolation:
-- Branch name: `feat/<plan-name>` (derived from plan filename)
-- Each plan runs in its own worktree at `.ralph/worktrees/feat-<plan>/`
+- Branch name comes from ATM plan's `feature_branch` field
+- Each plan runs in its own worktree at `.ralph/worktrees/<branch-name>/`
 - Main worktree stays on base branch (no stash/checkout needed)
 - Agent runs inside the worktree and is told branch name via context.json
-- On completion: PR created (default) or direct merge (`--merge` flag)
+- On completion: PR created (default), direct merge, or branch push only
 
 ### Error Handling
 
-- `set -e` in all scripts
-- `log_error`, `log_warn`, `log_success` for colored output
-- Exit codes: 0 = success, 1 = max iterations or error
+Ralph uses standard Go error handling patterns:
+- Sentinel errors for known conditions (e.g., `worker.ErrQueueEmpty`, `git.ErrMergeConflict`)
+- Error wrapping with `fmt.Errorf("context: %w", err)` for error chains
+- Non-retryable errors wrapped with `runner.WrapNonRetryable()` to skip retry logic
+- Retryable error detection via error message patterns (rate limits, network errors, server 5xx)
+- Graceful shutdown via context cancellation on SIGINT/SIGTERM
+- Non-fatal errors (e.g., notification failures) are logged but don't stop execution
 
 ## Releasing
 
@@ -391,28 +360,26 @@ make release-snapshot
 make release-dry-run
 
 # Create a release (requires git tag)
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
+git tag -a v2.0.0 -m "Release v2.0.0"
+git push origin v2.0.0
 
 # GoReleaser will automatically:
-# - Build binaries for all platforms (linux, darwin, windows × amd64, arm64)
+# - Build binaries for all platforms (linux, darwin, windows x amd64, arm64)
 # - Create GitHub release with binaries
-# - Update Homebrew formula (if configured)
+# - Update Homebrew cask formula
 ```
 
 Release configuration is in `.goreleaser.yaml`. CI/CD workflows are in `.github/workflows/`.
 
 ## Gotchas
 
-- **Plan bundles**: Plans are now directories (bundles) not single files. Use `ralph plan create <name>` to scaffold
-- **Plan validation removed**: Plans can be any markdown format; Claude handles parsing
-- **Feature branches**: Created via worktree by Ralph, not Claude - prompt just tells agent the branch name
-- **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion - Haiku verification catches this
-- **Verification failures**: When Haiku says plan is incomplete, detailed explanation is written to feedback file for agent to address
-- **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph cleanup`
-- **Plan file sync**: Plan bundle is copied into worktree; changes are synced back to `current/` after each iteration
-- **Build artifacts**: Binary is named `ralph` (no extension on Unix, `.exe` on Windows). Add `ralph` to `.gitignore`
-- **Test fixtures**: Unit tests in `internal/*/testdata/`, integration tests in `test/integration/`
-- **Embedded prompts**: Default prompts are embedded via `//go:embed` in `internal/prompt/templates.go`
-- **Claude CLI flags**: When using `--output-format=stream-json`, the `--print` and `--verbose` flags are required
-- **Completion archive**: Completed plans are archived with date suffix (e.g., `my-plan-20260201`) to prevent collisions
+- **ATM is required**: Ralph needs `atm-cli` in PATH and ATM configuration in `.ralph/config.yaml`. Run `ralph init` to set up.
+- **Feature branches come from ATM**: The `feature_branch` field on the ATM plan determines the branch name. Ralph creates the worktree on that branch.
+- **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion -- ATM stats verification catches this.
+- **False completion circuit breaker**: After 5 consecutive false completions (agent claims done but ATM disagrees), Ralph halts.
+- **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph cleanup`.
+- **Build artifacts**: Binary is named `ralph` (no extension on Unix, `.exe` on Windows). Add `ralph` to `.gitignore`.
+- **Embedded prompts**: Default prompts are embedded via `//go:embed` in `internal/prompt/templates.go`.
+- **Claude CLI flags**: When using `--output-format=stream-json`, the `--print` and `--verbose` flags are required.
+- **Worker max iterations**: Worker defaults to 200 max iterations (vs 30 for `ralph run`).
+- **Push after iteration**: Use `--push` flag to push after each iteration (prevents work loss on spot instances).

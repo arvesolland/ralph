@@ -355,20 +355,10 @@ func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
 		}
 	}
 
-	// Determine feedback file path - check if plan is a bundle (directory)
+	// Determine feedback file path - feedback goes in the bundle directory
 	bundleDir := filepath.Join(b.planBasePath, planName)
-	var feedbackPath string
-
-	log.Debug("writeFeedback: checking bundle at %s", bundleDir)
-	if info, err := os.Stat(bundleDir); err == nil && info.IsDir() {
-		// Bundle: feedback goes in {bundleDir}/feedback.md
-		log.Debug("writeFeedback: found bundle directory")
-		feedbackPath = filepath.Join(bundleDir, "feedback.md")
-	} else {
-		// Legacy flat file: feedback goes in {planBasePath}/{planName}.feedback.md
-		log.Debug("writeFeedback: bundle not found (err=%v), using legacy path", err)
-		feedbackPath = filepath.Join(b.planBasePath, planName+".feedback.md")
-	}
+	log.Debug("writeFeedback: using bundle at %s", bundleDir)
+	feedbackPath := filepath.Join(bundleDir, "feedback.md")
 
 	// Build feedback entry
 	source := fmt.Sprintf("Slack reply from %s", userName)

@@ -33,8 +33,7 @@ func Defaults() *Config {
 			InitCommands: "",
 		},
 		Completion: CompletionConfig{
-			Mode:              "pr",
-			VerificationModel: "opus",
+			Mode: "pr",
 		},
 	}
 }

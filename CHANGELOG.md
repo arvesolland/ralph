@@ -7,148 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Smart AI update: `ralph-update.sh --ai` regenerates only stub/placeholder config files
-- Auto-add new config sections (slack, worktree) to existing config.yaml during update
-- Slack bot files included in install.sh and ralph-update.sh
-- Slack configuration template in default config.yaml
-- Global Slack credentials detection during install
-- Human input/blocker system: agent can signal `<blocker>` when human action required
-- Slack notification for blockers (`notify_blocker` config option, default: true)
-- Feedback file (`<plan>.feedback.md`) for human responses to blockers
-- Blocker deduplication to avoid Slack notification spam
-- Slack Socket Mode bot for handling thread replies (`slack-bot/`)
-- Thread tracking for blocker notifications (enables Slack reply → feedback file)
-- Worktree initialization: auto-install dependencies when creating plan worktrees
-- Support for `.ralph/hooks/worktree-init` custom hook script
-- Auto-detection for npm, yarn, pnpm, bun, composer, pip, poetry, bundle, go, cargo
-- Automatic `.env` file copying to worktrees (configurable via `worktree.copy_env_files`)
-- Config option `worktree.init_commands` for custom initialization commands
-- `ralph-worker.sh --reset` to move current plan back to pending and start fresh
+## [2.0.0] - 2026-02-09
 
-### Fixed
-- correct gitignore to not exclude cmd/ralph directory
-- migrate from deprecated brews to homebrew_casks in goreleaser
-- use directory instead of deprecated folder in goreleaser config
-- use goreleaser v2 and enable homebrew tap token
-- Verification loop now writes detailed failure reasons to feedback file (prevents infinite "incomplete tasks" loops)
-- Handle Claude Code CLI hanging bug (GitHub Issue #19060) with timeout-based workaround
-- Add real-time streaming output using jq filtering (credit: Matt Pollock)
-- Add proper timeout handling for verification calls to prevent infinite hangs
+Complete rewrite from bash scripts to a Go binary with ATM (Agent Task Manager) integration.
+
+### Added
+- **ATM Integration** - Plans and tasks managed via ATM API instead of filesystem queue
+  - `internal/atm/` package wrapping `atm-cli` binary
+  - Plan lifecycle: ready -> active -> complete/blocked
+  - Task lifecycle: todo -> claimed -> doing -> done/blocked/skipped
+  - Agent context bootstrapping via `atm-cli plan context <id>`
+  - Progress and feedback entries for inter-iteration memory
+- **ATM-based completion verification** - Checks ATM task stats instead of Haiku LLM verification
+  - False completion circuit breaker (halts after 5 consecutive false claims)
+  - Automatic feedback to ATM when agent falsely claims completion
+- **`ralph run --plan <id>`** - Run iteration loop on a specific ATM plan
+  - `--completion-mode` flag: pr, merge, or branch
+  - `--push` flag: push to remote after each iteration
+- **`ralph worker`** - Continuous queue processor polling ATM for ready plans
+  - `--once` flag for single plan processing
+  - `--pr`, `--merge`, `--branch` completion mode flags
+  - `--sync` / `--sync-interval` for pull-from-remote workflow
+  - `--push` for push-after-iteration (spot instance safety)
+  - `--interval` for configurable poll interval
+  - `--max` for configurable max iterations (default 200)
+- **`ralph init`** - Interactive project initialization
+  - Auto-detection of project type and commands (`--detect`)
+  - AI-powered project name/description extraction
+  - ATM configuration prompts (project slug, API URL, API token)
+  - Specs directory scaffolding
+- **`ralph status`** - ATM project status display
+  - Active plan with task statistics
+  - Available and blocked tasks
+  - Recent progress and feedback entries
+  - Color output with terminal detection
+- **`ralph cleanup`** - Orphaned worktree removal
+  - `--dry-run` flag for safe preview
+  - Safety: won't remove worktrees with uncommitted changes
+- **Branch completion mode** - Push to remote without PR or merge
+- **Claude-generated PRs** - Uses Claude to create PR with intelligent description, falls back to basic PR
+- **Configurable ATM** - `atm:` config section (project_slug, api_url, api_token, bin_path)
+- **Worker config** - `worker:` config section (sync, sync_interval)
+- **Fake ATM test infrastructure** - `test/integration/fakeatm/` binary for isolated testing
+- **One-task-per-iteration test** - Verifies agent respects iteration boundaries
+- **Slack mock server test** - Integration test with captured Slack API requests
 
 ### Changed
-- auto-migrate flat plan files to bundles
-- archive completed plan-bundles plan
-- add debug logging and text output format support to runner
-- improve verification to check checkboxes before LLM verification
-- add --force flag to TestReset integration test
-- add integration test for blocker flow from Claude output to Slack
-- write Slack replies to correct feedback path for plan bundles
-- use Claude to create PRs with intelligent descriptions
-- correct context.json path and bundle file references in prompts
-- update for plan bundles and new integration tests
-- port integration tests to Go
-- add MigrateToBundles function for flat file to bundle conversion
-- add progress bar and task counts to status command
-- make sync bundle-aware using p.Name for paths
-- mark T6 complete, update task status
-- make queue.go bundle-aware for directory operations
-- make feedback.go bundle-aware with FeedbackPath()
-- make progress.go bundle-aware with progress in headers
-- mark T3 complete, update task status
-- add bundle scaffolding functions
-- mark T1 and T2 complete, update task status
-- add Progress type for task completion tracking
-- address code review findings
-- update CLAUDE.md and README.md for Go codebase
-- update all task checkboxes to reflect completed implementation
-- final completion verification for Go rewrite
-- complete T43 - Homebrew tap setup verified
-- update goreleaser homebrew_casks config with binaries field
-- sync plan checkboxes with actual state (T44-T46 complete)
-- update progress log for T43 blocker status
-- add integration test suite (T45)
-- update CLAUDE.md for Go version (T46)
-- comprehensive README for Go version (T44)
-- add Homebrew tap config to GoReleaser (T43 partial)
-- add GoReleaser and Makefile for builds (T42)
-- integrate notifications into worker (T41)
-- implement Slack Socket Mode bot for replies (T40)
-- implement Slack Bot API notifications (T39)
-- implement Slack thread tracking (T38)
-- implement Slack webhook notifications (T37)
-- add ralph reset command (T36)
-- add ralph worker command (T35)
-- implement completion workflow merge mode (T34)
-- implement completion workflow PR mode (T33)
-- implement worker queue loop (T32)
-- add ralph run command (T31)
-- implement iteration loop (T30)
-- implement iteration context management (T29)
-- implement completion verification with Haiku (T28)
-- implement blocker extraction (T27)
-- implement Runner interface with timeout handling (T25, T26)
-- implement retry logic with exponential backoff (T24)
-- implement streaming JSON parser (T23)
-- implement Claude CLI command builder (T22)
-- implement orphaned worktree cleanup (T21)
-- implement initialization hooks (T20)
-- implement file sync operations (T19)
-- implement dependency auto-detection (T18)
-- implement WorktreeManager (T17)
-- implement worktree operations (T16)
-- implement Git interface and basic operations
-- add ralph status command
-- implement feedback file handling
-- implement progress file handling
-- implement queue management for plan lifecycle
-- implement checkbox update and atomic save
-- implement task extraction from plans
-- implement Plan struct and parsing
-- add ralph init command
-- implement prompt template builder
-- implement project auto-detection
-- implement Config struct and YAML loading
-- implement structured logging with level filtering and color support
-- initialize Go module and project structure
-- Add Go rewrite spec and implementation plan
-- Add Slack notification when implementation phase starts
-- Use queue plan path for plan name in notifications
-- Sync .ralph/config.yaml to worktree during init
-- Add Slack notification for plan review start
-- Include PR URL in Slack completion notification
-- Handle inline YAML comments in config_get
-- macOS sed compatibility in Slack message escaping
-- Clarify worktree plan location in reviewer prompt
-- Update CHANGELOG for smart AI update feature
-- Add smart AI update to ralph-update.sh
-- Add Slack bot to install and update scripts
-- Auto-detect global Slack credentials
-- Add global Slack bot mode and auto-start
-- Add Slack bot for human input handling
-- Add worktree initialization and reset command
-- Add worktree-based plan isolation
-- Update CHANGELOG.md to include recent changes
-- Add git pull and --review to ralph-cron.sh
-- Add ralph-cron.sh wrapper for scheduled runs
-- Add Slack notifications section to CLAUDE.md
-- Add optional Slack webhook notifications
-- Merge base branch into existing feature branches
-- Stash untracked files during branch switch
-- Fix commit count check after merge-to-main flow
-- Let Claude attempt to resolve merge conflicts
-- Update worker-queue test for merge-to-main flow
-- Merge feature branch to main after plan completion
-- Increase default max iterations to 50
-- Add --review flag to worker for plan review
-- Simplify plan reviewer prompt and add spec alignment
-- Improve error detection and plan file preservation
-- Update prompt to commit plan and progress files together
-- Add retry logic and prevent progress files from being treated as plans
+- **Architecture**: Complete rewrite from bash scripts to Go binary
+- **Task management**: ATM API replaces filesystem-based plan queue (plans/pending, current, complete)
+- **Completion verification**: ATM task stats replace Haiku LLM verification
+- **Context format**: `context.json` uses `planId` (int) instead of `planFile` (string)
+- **Prompt placeholders**: Added `{{PLAN_ID}}` and `{{ATM_CONTEXT}}` for ATM data injection
+- **Worker defaults**: Max iterations increased to 200 (from 30) for worker mode
+- **Integration tests**: Rewritten with fake ATM binary, local bare git origin, and PATH-based atm-cli injection
 
-### Documentation
-- update changelog for auto-migration feature
-- update changelog for recent fixes
+### Removed
+- **Bash scripts**: `ralph.sh`, `ralph-worker.sh`, `ralph-init.sh`, `ralph-reverse.sh`, `ralph-cron.sh`, `ralph-release.sh`, `ralph-update.sh`, `install.sh`
+- **File-based queue**: `plans/pending/`, `plans/current/`, `plans/complete/` directories
+- **Plan parsing**: `internal/plan/` package (markdown plan parsing, checkbox tracking)
+- **Haiku verification**: `internal/runner/verify.go` (replaced by ATM stats checking)
+- **Plan bundles**: `ralph plan create` command and bundle scaffolding
+- **`ralph reset`** command (use ATM to change plan status)
+- **Slack bot directory**: Standalone `slack-bot/` (functionality integrated into `internal/notify/`)
+- **Legacy prompts**: `worker_prompt.md`, `plan_reviewer_prompt.md`, `plan-spec.md` (kept only `prompt.md` and `pr_creation_prompt.md`)
+
+---
 
 ## [1.1.0] - 2026-01-28
 

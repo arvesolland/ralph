@@ -7,36 +7,35 @@ An implementation of the Ralph Wiggum technique for autonomous AI development.
 
 ## Why It Works
 
-**Fresh context per iteration.** Like malloc'ing a new array instead of appending - each Claude Code invocation gets a clean context window, avoiding the pollution and degradation that happens when LLMs accumulate conversation history. Progress persists in files and git, not in context.
+**Fresh context per iteration.** Like malloc'ing a new array instead of appending - each Claude Code invocation gets a clean context window, avoiding the pollution and degradation that happens when LLMs accumulate conversation history. Progress persists in ATM (Agent Task Manager) and git, not in context.
 
 **External memory architecture.** Agents don't carry state - they read it:
-- **Specs** (`specs/`) - Durable knowledge base. Entry point for understanding what exists and why.
-- **Plans** (`plans/`) - Volatile execution state. What to do next, with dependencies and checkboxes.
-- **Progress** (`<plan>.progress.md`) - Per-plan institutional memory. Gotchas that future iterations read to avoid mistakes.
+- **ATM Plans** - Structured tasks with dependencies, acceptance criteria, and status tracked via the ATM API.
+- **ATM Progress/Feedback** - Append-only logs for institutional memory and human-in-the-loop communication.
+- **Git Commits** - Code changes persist between iterations. Each iteration commits its work.
 
-**Collective learning.** Each agent writes learnings back before exiting. Future agents read these gotchas and don't repeat mistakes. The system gets smarter with every iteration.
+**Collective learning.** Each agent writes progress back to ATM before exiting. Future agents read this context and don't repeat mistakes. The system gets smarter with every iteration.
 
 ```
 Fresh context window (clean slate)
-    → Reads specs (understands system)
-    → Reads progress (learns from past gotchas)
-    → Reads plan (knows exactly what to do)
-    → Executes ONE subtask
-    → Writes learnings back
-    → Commits & exits
-    → Next agent picks up smarter
+    -> Fetches plan context from ATM (tasks, progress, feedback)
+    -> Knows exactly what to do (structured task with acceptance criteria)
+    -> Executes ONE task
+    -> Updates task status in ATM
+    -> Commits & exits
+    -> Next agent picks up smarter
 ```
 
 ## Features
 
 - **Single Binary** - Cross-platform Go binary with no dependencies
+- **ATM Integration** - Polls ATM for ready plans, tracks tasks, progress, and feedback via API
 - **Structured Plans** - Tasks with dependencies, status tracking, and acceptance criteria
 - **Worktree Isolation** - Each plan runs in its own git worktree (no branch switching conflicts)
-- **Task Queue** - File-based queue for processing multiple plans
 - **Auto PR Creation** - Create pull requests via `gh` CLI on completion
 - **Slack Notifications** - Real-time updates via webhooks or Bot API
-- **Progress Tracking** - Per-plan learnings that future iterations read
-- **Config-Driven** - Customize prompts via config files, not code
+- **False Completion Guard** - ATM stats verification prevents premature completion claims
+- **Config-Driven** - Customize prompts, commands, and behavior via config files
 
 ## Installation
 
@@ -86,77 +85,41 @@ ralph init --detect
 ```
 
 This creates:
-- `.ralph/config.yaml` - Project configuration
-- `plans/` - Queue directories (pending, current, complete)
+- `.ralph/config.yaml` - Project configuration (including ATM settings)
+- `.ralph/prompts/` - Customizable agent prompts
 - `specs/INDEX.md` - Feature specification index
 
-### 2. Create a Plan Bundle
+During init, you'll be prompted for ATM configuration (project slug, API URL, API token).
+
+### 2. Create a Plan in ATM
+
+Create plans in the ATM task manager via the `atm-cli` or ATM web UI:
 
 ```bash
-ralph plan create my-feature
-```
-
-This creates a plan bundle at `plans/pending/my-feature/` with scaffolded files:
-- `plan.md` - Task template with acceptance criteria
-- `progress.md` - Iteration log
-- `feedback.md` - Human input for blockers
-
-Edit `plans/pending/my-feature/plan.md` to define your tasks:
-
-```markdown
-# Plan: My Feature
-
-## Context
-Brief description of what this plan implements.
-
-## Tasks
-
-### T1: First Task
-> Description of the task
-
-**Requires:** —
-**Status:** open
-
-**Done when:**
-- [ ] Acceptance criterion 1
-- [ ] Acceptance criterion 2
-
-**Subtasks:**
-1. [ ] First implementation step
-2. [ ] Second implementation step
-
----
-
-### T2: Second Task
-> Description (requires T1)
-
-**Requires:** T1
-**Status:** open
-
-**Done when:**
-- [ ] Task 2 acceptance criterion
-
-**Subtasks:**
-1. [ ] Implementation step
+atm-cli plan create <project-slug> --title "My Feature"
+atm-cli task create <plan-id> --title "First task" --description "..."
+atm-cli plan status <plan-id> --status ready
 ```
 
 ### 3. Run Ralph
 
 ```bash
-# Run a single plan
-ralph run plans/pending/my-feature
+# Run a single plan by ID
+ralph run --plan 42
 
-# Or use the worker to process the queue
+# Or use the worker to process the ATM queue
 ralph worker --once
 ```
 
 Ralph will:
-1. Create a worktree for the plan's feature branch
-2. Find the first task with met dependencies
-3. Execute Claude Code with the implementation prompt
-4. Verify completion and commit changes
-5. Repeat until all tasks are complete
-6. Create a PR (if configured)
+1. Fetch plan details and context from ATM
+2. Create a worktree for the plan's feature branch
+3. Build a prompt with ATM context (tasks, progress, feedback)
+4. Execute Claude Code to work on the next available task
+5. Verify completion via ATM task stats
+6. Commit changes after each iteration
+7. Repeat until all tasks are complete
+8. Create a PR (default), merge, or push branch only
 
 ## Commands
 
@@ -173,53 +136,50 @@ Flags:
 
 ### `ralph run`
 
-Run the implementation loop on a specific plan bundle.
+Run the iteration loop on a specific ATM plan.
 
 ```bash
-ralph run <plan-bundle> [flags]
+ralph run --plan <plan-id> [flags]
 
 Flags:
-  --max int       Max iterations (default 30)
+  --plan int              ATM plan ID (required)
+  --max int               Max iterations (default 30)
+  --completion-mode str   Completion mode: pr, merge, or branch (default from config)
+  --push                  Push to remote after each iteration
 ```
 
 Example:
 ```bash
-ralph run plans/pending/my-feature
+ralph run --plan 42
+ralph run --plan 42 --max 100
+ralph run --plan 42 --completion-mode merge
 ```
 
 ### `ralph worker`
 
-Process plans from the queue.
+Process plans from the ATM queue.
 
 ```bash
 ralph worker [flags]
 
 Flags:
-  --once              Process one plan and exit
-  --pr                Create PR on completion (default)
-  --merge             Merge to base branch on completion
-  --interval duration Poll interval when queue empty (default 30s)
-  --max int           Max iterations per plan (default 30)
+  --once                  Process one plan and exit
+  --pr                    Create PR on completion (default)
+  --merge                 Merge to base branch on completion
+  --branch                Push to branch only, no PR or merge
+  --interval duration     Poll interval when queue empty (default 30s)
+  --max int               Max iterations per plan (default 200)
+  --sync                  Pull from remote before each queue check
+  --sync-interval dur     Minimum time between syncs (e.g., 60s)
+  --push                  Push to remote after each iteration
 ```
 
 ### `ralph status`
 
-Display queue status and current plan information.
+Display project status from ATM (active plan, task stats, available tasks, recent progress).
 
 ```bash
 ralph status
-```
-
-### `ralph reset`
-
-Move the current plan back to pending.
-
-```bash
-ralph reset [flags]
-
-Flags:
-  --force, -f       Skip confirmation prompt
-  --keep-worktree   Don't remove the worktree
 ```
 
 ### `ralph cleanup`
@@ -239,6 +199,15 @@ Show version information.
 
 ```bash
 ralph version
+```
+
+### Global Flags
+
+```bash
+  -c, --config string   Config file path (default ".ralph/config.yaml")
+  -v, --verbose         Enable verbose output (debug level)
+  -q, --quiet           Suppress informational output
+      --no-color        Disable color output
 ```
 
 ## Configuration
@@ -261,15 +230,25 @@ commands:
   build: "npm run build"
 
 completion:
-  mode: "pr"  # or "merge"
+  mode: "pr"  # or "merge" or "branch"
 
 worktree:
   copy_env_files: ".env, .env.local"
   init_commands: ""  # Custom init (skips auto-detection if set)
 
+atm:
+  project_slug: "my-project"
+  api_url: "https://atm.example.com/api"
+  api_token: "your-api-token"
+  bin_path: "atm-cli"  # Path to atm-cli binary (default: "atm-cli")
+
+worker:
+  sync: false           # Pull from remote before each queue check
+  sync_interval: "60s"  # Minimum time between syncs
+
 slack:
   webhook_url: "https://hooks.slack.com/services/..."
-  bot_token: "xoxb-..."  # Optional: for thread replies
+  bot_token: "xoxb-..."  # Optional: for thread-based notifications
   app_token: "xapp-..."  # Optional: for Socket Mode
   channel: "C0123456789"  # Required for bot features
   notify_start: true
@@ -281,14 +260,19 @@ slack:
 
 ### Prompt Customization
 
-Override default prompts by creating files in `.ralph/`:
+Default prompts are embedded in the binary. Override them by placing files in `.ralph/prompts/`:
 
 | File | Purpose |
 |------|---------|
-| `principles.md` | Development principles injected into prompts |
-| `patterns.md` | Code patterns for your project |
-| `boundaries.md` | Files Ralph should never modify |
-| `tech-stack.md` | Technology stack description |
+| `prompt.md` | Main agent instructions (injected each iteration) |
+| `pr_creation_prompt.md` | PR description generation prompt |
+
+Prompts use `{{PLACEHOLDER}}` syntax for dynamic values:
+- `{{PROJECT_NAME}}`, `{{PROJECT_DESCRIPTION}}` - from config.yaml
+- `{{TEST_COMMAND}}`, `{{LINT_COMMAND}}`, `{{BUILD_COMMAND}}` - from config.yaml
+- `{{ITERATION}}`, `{{MAX_ITERATIONS}}` - current iteration state
+- `{{FEATURE_BRANCH}}`, `{{BASE_BRANCH}}` - git branch info
+- `{{PLAN_ID}}`, `{{ATM_CONTEXT}}` - ATM plan data
 
 ### Directory Structure
 
@@ -296,37 +280,37 @@ Override default prompts by creating files in `.ralph/`:
 your-project/
 ├── .ralph/
 │   ├── config.yaml       # Project configuration
-│   ├── principles.md     # Development principles
-│   ├── patterns.md       # Code patterns
-│   ├── boundaries.md     # Protected files
-│   ├── tech-stack.md     # Technology description
+│   ├── prompts/          # Customizable agent prompts
+│   │   └── prompt.md     # Main agent instructions
 │   └── worktrees/        # Git worktrees (gitignored)
-├── plans/
-│   ├── pending/          # Plans waiting to be processed
-│   ├── current/          # Currently active plan (0-1)
-│   └── complete/         # Finished plans
 └── specs/
     └── INDEX.md          # Feature specification index
 ```
 
-## Queue Workflow
+## ATM Workflow
 
-1. **Pending** - Plans waiting to be processed
-2. **Current** - One plan being actively worked on
-3. **Complete** - Finished plans (archived)
+Ralph uses the ATM (Agent Task Manager) service for plan and task management:
+
+1. **Ready** - Plans in ATM with status "ready" are available for processing
+2. **Active** - Ralph activates a plan and begins the iteration loop
+3. **Complete** - All tasks done in ATM, plan marked complete, PR/merge/branch created
+4. **Blocked** - Plan marked blocked if max iterations reached or errors occur
 
 ```bash
-# Add a plan to the queue
-mv my-plan.md plans/pending/
+# Create a plan in ATM
+atm-cli plan create my-project --title "Add user auth"
 
-# Process the queue
+# Add tasks with acceptance criteria
+atm-cli task create <plan-id> --title "Create login endpoint"
+
+# Mark plan as ready for Ralph
+atm-cli plan status <plan-id> --status ready
+
+# Ralph picks it up automatically
 ralph worker
 
 # Check status
 ralph status
-
-# Reset current plan (start over)
-ralph reset
 ```
 
 ## Worktree Isolation
@@ -378,21 +362,14 @@ This enables:
 ### Building from Source
 
 ```bash
-# Clone the repository
 git clone https://github.com/arvesolland/ralph.git
 cd ralph
 
-# Build (development)
-make build-dev
-
-# Build (production with version info)
-make build
-
-# Run tests
-make test
-
-# Run tests with race detector
-make test-race
+make build-dev     # Fast development build
+make build         # Production build with version info
+make test          # Run all tests
+make test-race     # Run tests with race detector
+make lint          # Run golangci-lint
 ```
 
 ### Project Structure
@@ -400,24 +377,24 @@ make test-race
 ```
 cmd/ralph/              # Main entry point
 internal/
-├── cli/                # Cobra commands (init, run, worker, status, etc.)
+├── cli/                # Cobra commands (init, run, worker, status, cleanup, version)
 ├── config/             # Config loading, YAML parsing, project detection
-├── plan/               # Plan parsing, task extraction, queue management
-├── runner/             # Claude execution, streaming, retry, verification
-├── git/                # Git operations (commit, branch, status)
-├── worktree/           # Worktree management, file sync, hooks
+├── atm/                # ATM client (shells out to atm-cli)
+├── runner/             # Claude execution, streaming, retry, iteration loop
+├── git/                # Git operations (commit, branch, status, worktree)
+├── worktree/           # Worktree management, dependency auto-detection, hooks
+├── worker/             # Queue processor orchestration, completion modes
 ├── notify/             # Slack notifications (webhook, bot, threads)
 ├── prompt/             # Prompt template building with embedded defaults
-├── worker/             # Queue processor orchestration
 └── log/                # Structured logging with color support
 ```
 
 ### Key Packages
 
-- **runner** - Core Claude CLI execution with JSON streaming, retry logic, and Haiku-based verification
-- **worker** - Queue processor that moves plans through pending → current → complete
+- **atm** - ATM client wrapping the `atm-cli` binary for plan/task management
+- **runner** - Core Claude CLI execution with JSON streaming, retry logic, and ATM-based completion verification
+- **worker** - Queue processor that polls ATM for ready plans, runs iteration loops, handles PR/merge/branch completion
 - **worktree** - Git worktree lifecycle management with dependency auto-detection
-- **plan** - Markdown plan parsing with task extraction and checkbox tracking
 
 See [CLAUDE.md](CLAUDE.md) for detailed development guidance.
 
@@ -443,6 +420,16 @@ Or use merge mode instead:
 ralph worker --merge
 ```
 
+### "atm.project_slug not configured"
+
+Run `ralph init` to set up ATM configuration, or manually add to `.ralph/config.yaml`:
+```yaml
+atm:
+  project_slug: "my-project"
+  api_url: "https://atm.example.com/api"
+  api_token: "your-token"
+```
+
 ### "branch is already checked out"
 
 Another worktree has the branch checked out. Either:
@@ -456,17 +443,18 @@ Ralph won't clean up worktrees with uncommitted changes for safety. Either:
 - Commit or discard the changes manually
 - The changes will be preserved for review
 
-### Plan verification keeps failing
+### False completion claims
 
-If Claude outputs `<promise>COMPLETE</promise>` but verification fails:
-1. Check `<plan>.feedback.md` for the reason
-2. The next iteration will read this and address it
-3. If it keeps failing, the plan may have unclear acceptance criteria
+If the agent outputs `<promise>COMPLETE</promise>` but ATM stats show tasks remain:
+1. Ralph automatically adds feedback to ATM explaining which tasks are incomplete
+2. The next iteration reads this feedback and addresses it
+3. After 5 consecutive false completions, Ralph halts to prevent infinite loops
 
 ## Requirements
 
-- **Claude Code CLI** - `claude` command must be available
-- **Git** - For version control
+- **Claude Code CLI** - `claude` command must be available in PATH
+- **ATM CLI** - `atm-cli` command for task management (configurable via `atm.bin_path`)
+- **Git** - For version control and worktree management
 - **GitHub CLI** (optional) - For PR creation (`gh`)
 
 ## License

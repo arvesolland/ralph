@@ -15,10 +15,10 @@ import (
 var cleanupCmd = &cobra.Command{
 	Use:   "cleanup",
 	Short: "Remove orphaned worktrees",
-	Long: `Remove worktrees that no longer have associated plans.
+	Long: `Remove worktrees that no longer have an active context.
 
 A worktree is considered orphaned if it exists in .ralph/worktrees/ but
-has no matching plan in pending/ or current/.
+has no context.json indicating active use.
 
 For safety, worktrees with uncommitted changes are NOT removed.
 Use --dry-run to see what would be removed without actually removing anything.`,

@@ -48,30 +48,3 @@ func TestRunCmd_FlagsRegistered(t *testing.T) {
 	}
 }
 
-func TestParsePlanID(t *testing.T) {
-	tests := []struct {
-		input   string
-		want    int
-		wantErr bool
-	}{
-		{"42", 42, false},
-		{"#42", 42, false},
-		{"1", 1, false},
-		{"abc", 0, true},
-		{"", 0, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got, err := parsePlanID(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parsePlanID(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("parsePlanID(%q) = %d, want %d", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
