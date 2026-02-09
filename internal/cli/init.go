@@ -293,21 +293,6 @@ func fileExistsInit(path string) bool {
 	return err == nil
 }
 
-// confirmOverwrite asks the user to confirm overwriting an existing file.
-func confirmOverwrite(path string) bool {
-	fmt.Printf("Config file already exists: %s\n", path)
-	fmt.Print("Overwrite? [y/N]: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return false
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	return input == "y" || input == "yes"
-}
-
 // appendToGitignore adds an entry to .gitignore if it doesn't already exist.
 func appendToGitignore(path, entry string) error {
 	// Read existing content if file exists
