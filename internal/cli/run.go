@@ -252,11 +252,18 @@ func runRun(cmd *cobra.Command, args []string) error {
 			if result.IsComplete {
 				log.Info("Completion marker detected")
 			}
-			_ = notifier.UpdateProgress(npi, &notify.ProgressStatus{
+			// Fetch ATM task stats for progress display
+			progress := &notify.ProgressStatus{
 				Iteration:     iteration,
 				MaxIterations: runMaxIterations,
 				Phase:         notify.PhaseRunning,
-			})
+			}
+			if agentCtx, err := atmClient.PlanContext(plan.ID); err == nil {
+				progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
+				progress.TasksTotal = agentCtx.Stats.TotalTasks
+				log.Info("Tasks: %d/%d done", progress.TasksDone, progress.TasksTotal)
+			}
+			_ = notifier.UpdateProgress(npi, progress)
 			if cfg.Slack.NotifyIteration {
 				if err := notifier.Iteration(npi, iteration, runMaxIterations); err != nil {
 					log.Debug("Failed to send iteration notification: %v", err)
@@ -268,12 +275,17 @@ func runRun(cmd *cobra.Command, args []string) error {
 			if blocker.Action != "" {
 				log.Info("Action required: %s", blocker.Action)
 			}
-			_ = notifier.UpdateProgress(npi, &notify.ProgressStatus{
+			blockerProgress := &notify.ProgressStatus{
 				Iteration:     execCtx.Iteration,
 				MaxIterations: runMaxIterations,
 				Phase:         notify.PhaseBlocked,
 				Message:       blocker.Description,
-			})
+			}
+			if agentCtx, err := atmClient.PlanContext(plan.ID); err == nil {
+				blockerProgress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
+				blockerProgress.TasksTotal = agentCtx.Stats.TotalTasks
+			}
+			_ = notifier.UpdateProgress(npi, blockerProgress)
 			if cfg.Slack.NotifyBlocker {
 				if err := notifier.BlockerNotify(npi, &notify.Blocker{
 					Content:     blocker.Content,
@@ -337,11 +349,16 @@ func runRun(cmd *cobra.Command, args []string) error {
 		}
 
 		// Send completion notification
-		_ = notifier.UpdateProgress(npi, &notify.ProgressStatus{
+		completeProgress := &notify.ProgressStatus{
 			Iteration:     result.Iterations,
 			MaxIterations: runMaxIterations,
 			Phase:         notify.PhaseComplete,
-		})
+		}
+		if agentCtx, err := atmClient.PlanContext(plan.ID); err == nil {
+			completeProgress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
+			completeProgress.TasksTotal = agentCtx.Stats.TotalTasks
+		}
+		_ = notifier.UpdateProgress(npi, completeProgress)
 		if cfg.Slack.NotifyComplete {
 			_ = notifier.Complete(npi, prURL)
 		}

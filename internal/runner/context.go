@@ -28,7 +28,7 @@ type Context struct {
 }
 
 // DefaultMaxIterations is the default maximum number of iterations
-const DefaultMaxIterations = 30
+const DefaultMaxIterations = 100
 
 // ContextFilename is the filename for context files in worktrees
 const ContextFilename = "context.json"

@@ -295,6 +295,17 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 		WorktreePath:     worktreePath,
 		IterationTimeout: w.iterationTimeout,
 		OnIteration: func(iteration int, result *runner.Result) {
+			// Update living status card with task stats
+			progress := &notify.ProgressStatus{
+				Iteration:     iteration,
+				MaxIterations: w.maxIterations,
+				Phase:         notify.PhaseRunning,
+			}
+			if agentCtx, statsErr := w.atm.PlanContext(plan.ID); statsErr == nil {
+				progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
+				progress.TasksTotal = agentCtx.Stats.TotalTasks
+			}
+			_ = w.notifier.UpdateProgress(toNotifyPlanInfo(info), progress)
 			w.sendIterationNotification(info, iteration, w.maxIterations)
 		},
 		OnBlocker: func(blocker *runner.Blocker) {

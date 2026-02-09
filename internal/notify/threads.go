@@ -34,6 +34,9 @@ type ThreadInfo struct {
 	// LastIteration tracks the last iteration we updated to.
 	LastIteration int `json:"last_iteration,omitempty"`
 
+	// LastTasksDone tracks the last task completion count we updated to.
+	LastTasksDone int `json:"last_tasks_done,omitempty"`
+
 	// NotifiedBlockers contains hashes of blockers that have been notified.
 	// Used to prevent duplicate notifications for the same blocker.
 	NotifiedBlockers []string `json:"notified_blockers,omitempty"`
@@ -177,7 +180,7 @@ func (t *ThreadTracker) HasNotifiedBlocker(planName, blockerHash string) bool {
 
 // UpdateProgress updates the progress tracking for a plan.
 // Returns true if the progress was actually updated (changed).
-func (t *ThreadTracker) UpdateProgress(planName string, iteration int, phase string) (bool, error) {
+func (t *ThreadTracker) UpdateProgress(planName string, iteration int, phase string, tasksDone int) (bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -187,13 +190,14 @@ func (t *ThreadTracker) UpdateProgress(planName string, iteration int, phase str
 	}
 
 	// Check if anything changed
-	if info.LastIteration == iteration && info.LastPhase == phase {
+	if info.LastIteration == iteration && info.LastPhase == phase && info.LastTasksDone == tasksDone {
 		return false, nil
 	}
 
 	// Update progress
 	info.LastIteration = iteration
 	info.LastPhase = phase
+	info.LastTasksDone = tasksDone
 	info.UpdatedAt = time.Now()
 
 	return true, t.saveUnlocked()

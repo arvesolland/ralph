@@ -62,8 +62,8 @@ func NewSlackNotifier(cfg SlackNotifierConfig) Notifier {
 func (s *SlackNotifier) Start(p PlanInfo) error {
 	// Build initial status card with progress display
 	status := &ProgressStatus{
-		Iteration:     1,
-		MaxIterations: 30,
+		Iteration:     0,
+		MaxIterations: 0,
 		Phase:         PhaseInitializing,
 	}
 	blocks := s.buildProgressBlocks(p, status)
@@ -248,7 +248,7 @@ func (s *SlackNotifier) UpdateProgress(p PlanInfo, status *ProgressStatus) error
 	}
 
 	// Check if we should update (avoid redundant updates)
-	changed, err := s.threadTracker.UpdateProgress(p.Name, status.Iteration, string(status.Phase))
+	changed, err := s.threadTracker.UpdateProgress(p.Name, status.Iteration, string(status.Phase), status.TasksDone)
 	if err != nil {
 		log.Debug("Failed to check progress change: %v", err)
 	}
@@ -303,16 +303,27 @@ func (s *SlackNotifier) buildProgressBlocks(p PlanInfo, status *ProgressStatus) 
 		phaseText = "Running"
 	}
 
-	// Build progress bar (10 segments)
-	var progressBar string
-	if status.MaxIterations > 0 {
+	// Build progress bar (10 segments) based on task completion or iteration
+	var progressText string
+	if status.TasksTotal > 0 {
+		// Task-based progress
+		filled := int(float64(status.TasksDone) / float64(status.TasksTotal) * 10)
+		if filled > 10 {
+			filled = 10
+		}
+		progressBar := strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", 10-filled)
+		progressText = fmt.Sprintf("%s %d/%d tasks", progressBar, status.TasksDone, status.TasksTotal)
+		if status.Iteration > 0 {
+			progressText += fmt.Sprintf(" (iteration %d)", status.Iteration)
+		}
+	} else if status.MaxIterations > 0 {
+		// Fallback: iteration-based progress
 		filled := int(float64(status.Iteration) / float64(status.MaxIterations) * 10)
 		if filled > 10 {
 			filled = 10
 		}
-		progressBar = strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", 10-filled)
-	} else {
-		progressBar = "\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591"
+		progressBar := strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", 10-filled)
+		progressText = fmt.Sprintf("%s %d/%d", progressBar, status.Iteration, status.MaxIterations)
 	}
 
 	// Build header text
@@ -326,7 +337,10 @@ func (s *SlackNotifier) buildProgressBlocks(p PlanInfo, status *ProgressStatus) 
 	// Build fields
 	fields := []*slack.TextBlockObject{
 		slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Branch:*\n`%s`", p.Branch), false, false),
-		slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Progress:*\n%s %d/%d", progressBar, status.Iteration, status.MaxIterations), false, false),
+	}
+
+	if progressText != "" {
+		fields = append(fields, slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Progress:*\n%s", progressText), false, false))
 	}
 
 	if status.Message != "" {

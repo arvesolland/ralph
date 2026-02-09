@@ -54,6 +54,12 @@ type ProgressStatus struct {
 
 	// Message is an optional status message.
 	Message string
+
+	// TasksDone is the number of completed tasks (done + skipped).
+	TasksDone int
+
+	// TasksTotal is the total number of tasks in the plan.
+	TasksTotal int
 }
 
 // Notifier defines the interface for sending notifications.

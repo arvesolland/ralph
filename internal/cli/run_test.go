@@ -31,8 +31,8 @@ func TestRunCmd_FlagsRegistered(t *testing.T) {
 	if maxFlag == nil {
 		t.Fatal("--max flag not registered")
 	}
-	if maxFlag.DefValue != "30" {
-		t.Errorf("--max default should be 30, got %s", maxFlag.DefValue)
+	if maxFlag.DefValue != "100" {
+		t.Errorf("--max default should be 100, got %s", maxFlag.DefValue)
 	}
 
 	// Verify --completion-mode flag exists
