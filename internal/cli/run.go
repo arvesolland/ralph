@@ -320,7 +320,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 		log.Success("Plan completed successfully!")
 
 		// Handle completion (PR/merge/branch)
-		if err := handleCompletion(plan, completionMode, worktreePath, cfg, wtGit, g, claudeRunner, promptBuilder); err != nil {
+		prURL, err := handleCompletion(plan, completionMode, worktreePath, cfg, wtGit, g, claudeRunner, promptBuilder)
+		if err != nil {
 			log.Error("Completion failed: %v", err)
 			return fmt.Errorf("completion: %w", err)
 		}
@@ -342,7 +343,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			Phase:         notify.PhaseComplete,
 		})
 		if cfg.Slack.NotifyComplete {
-			_ = notifier.Complete(npi, "")
+			_ = notifier.Complete(npi, prURL)
 		}
 		return nil
 	}
@@ -375,7 +376,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 }
 
 // handleCompletion handles the plan completion workflow based on mode.
-func handleCompletion(plan *atm.Plan, mode, worktreePath string, cfg *config.Config, wtGit, mainGit git.Git, _ runner.Runner, _ *prompt.Builder) error {
+// Returns the PR URL (if applicable) and any error.
+func handleCompletion(plan *atm.Plan, mode, worktreePath string, cfg *config.Config, wtGit, mainGit git.Git, _ runner.Runner, _ *prompt.Builder) (string, error) {
 	baseBranch := cfg.Git.BaseBranch
 	if baseBranch == "" {
 		baseBranch = "main"
@@ -387,31 +389,32 @@ func handleCompletion(plan *atm.Plan, mode, worktreePath string, cfg *config.Con
 	case "pr":
 		// Push and create PR
 		if err := wtGit.PushWithUpstream("origin", featureBranch); err != nil {
-			return fmt.Errorf("pushing branch: %w", err)
+			return "", fmt.Errorf("pushing branch: %w", err)
 		}
 		prURL, err := createPR(plan.Title, worktreePath)
 		if err != nil {
 			log.Warn("Failed to create PR: %v", err)
 			log.Warn("Branch has been pushed. Create PR manually for branch: %s", featureBranch)
-		} else {
-			log.Success("PR created: %s", prURL)
+			return "", nil
 		}
+		log.Success("PR created: %s", prURL)
+		return prURL, nil
 
 	case "merge":
 		if err := worker.CompleteMerge(featureBranch, baseBranch, mainGit); err != nil {
-			return fmt.Errorf("merge completion: %w", err)
+			return "", fmt.Errorf("merge completion: %w", err)
 		}
 
 	case "branch":
 		if err := worker.CompleteBranch(featureBranch, baseBranch, wtGit); err != nil {
-			return fmt.Errorf("branch completion: %w", err)
+			return "", fmt.Errorf("branch completion: %w", err)
 		}
 
 	default:
-		return fmt.Errorf("unknown completion mode: %s", mode)
+		return "", fmt.Errorf("unknown completion mode: %s", mode)
 	}
 
-	return nil
+	return "", nil
 }
 
 // createPR creates a pull request using the gh CLI.
