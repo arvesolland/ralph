@@ -85,7 +85,7 @@ func TestWebhookNotifier_Complete_WithPR(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		json.NewDecoder(r.Body).Decode(&received)
+		_ = json.NewDecoder(r.Body).Decode(&received)
 		close(done)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -134,7 +134,7 @@ func TestWebhookNotifier_Complete_NoPR(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		json.NewDecoder(r.Body).Decode(&received)
+		_ = json.NewDecoder(r.Body).Decode(&received)
 		close(done)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -170,7 +170,7 @@ func TestWebhookNotifier_BlockerNotify(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		json.NewDecoder(r.Body).Decode(&received)
+		_ = json.NewDecoder(r.Body).Decode(&received)
 		close(done)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -233,7 +233,7 @@ func TestWebhookNotifier_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		json.NewDecoder(r.Body).Decode(&received)
+		_ = json.NewDecoder(r.Body).Decode(&received)
 		close(done)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -287,7 +287,7 @@ func TestWebhookNotifier_Error_TruncatesLongMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		json.NewDecoder(r.Body).Decode(&received)
+		_ = json.NewDecoder(r.Body).Decode(&received)
 		close(done)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -338,7 +338,7 @@ func TestWebhookNotifier_Iteration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		json.NewDecoder(r.Body).Decode(&received)
+		_ = json.NewDecoder(r.Body).Decode(&received)
 		close(done)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -399,7 +399,7 @@ func TestWebhookNotifier_Send_ContentType(t *testing.T) {
 	n := NewWebhookNotifier(server.URL)
 	p := PlanInfo{Name: "test-plan"}
 
-	n.Start(p)
+	_ = n.Start(p)
 
 	select {
 	case <-done:

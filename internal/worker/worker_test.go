@@ -265,7 +265,9 @@ func TestWorker_LoadOrCreateContext_StaleContext(t *testing.T) {
 
 	// Create a context.json for plan ID 100
 	ralphDir := filepath.Join(tmpDir, ".ralph")
-	os.MkdirAll(ralphDir, 0755)
+	if err := os.MkdirAll(ralphDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	ctxPath := filepath.Join(ralphDir, "context.json")
 
 	oldCtx := &runner.Context{
@@ -309,7 +311,9 @@ func TestWorker_LoadOrCreateContext_MatchingContext(t *testing.T) {
 
 	// Create a context.json for plan ID 42
 	ralphDir := filepath.Join(tmpDir, ".ralph")
-	os.MkdirAll(ralphDir, 0755)
+	if err := os.MkdirAll(ralphDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	ctxPath := filepath.Join(ralphDir, "context.json")
 
 	existingCtx := &runner.Context{
@@ -339,7 +343,9 @@ func TestWorker_LoadOrCreateContext_MatchingContext(t *testing.T) {
 func TestWorker_SetupNotifications(t *testing.T) {
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, ".ralph")
-	os.MkdirAll(configDir, 0755)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	cfg := config.Defaults()
 	cfg.Slack.WebhookURL = "https://hooks.slack.com/services/test"
@@ -487,7 +493,9 @@ func setupWorkerTestGitRepo(t *testing.T, dir, featureBranch string) git.Git {
 
 	// Create a bare repo to act as remote
 	bareDir := filepath.Join(filepath.Dir(dir), "bare-"+branchToWorktreeName(featureBranch)+".git")
-	os.MkdirAll(bareDir, 0755)
+	if err := os.MkdirAll(bareDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	bareInit := exec.Command("git", "init", "--bare")
 	bareInit.Dir = bareDir
 	bareInit.Stderr = os.Stderr
@@ -516,7 +524,9 @@ func TestWorker_RunOnce_ActivatesPlan(t *testing.T) {
 	// → UpdatePlanStatus("active") should be called, plan gets processed
 	tmpDir := t.TempDir()
 	wtDir := filepath.Join(tmpDir, "worktree")
-	os.MkdirAll(wtDir, 0755)
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/test")
 
 	mockATM := atm.NewMockATM()
@@ -604,7 +614,9 @@ func TestWorker_RunOnce_ResumesActivePlan(t *testing.T) {
 	// ProjectContext returns an active plan → resumes without calling ListPlans
 	tmpDir := t.TempDir()
 	wtDir := filepath.Join(tmpDir, "worktree")
-	os.MkdirAll(wtDir, 0755)
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/active")
 
 	mockATM := atm.NewMockATM()
@@ -706,7 +718,9 @@ func TestWorker_RunOnce_CompletionFlow(t *testing.T) {
 	// Verifies the full status transition: ready → active → complete
 	tmpDir := t.TempDir()
 	wtDir := filepath.Join(tmpDir, "worktree")
-	os.MkdirAll(wtDir, 0755)
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/complete")
 
 	mockATM := atm.NewMockATM()

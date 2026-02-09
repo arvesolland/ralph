@@ -479,10 +479,14 @@ func TestManager_Cleanup_RemovesOrphan(t *testing.T) {
 
 	// Create initial commit so we can create branches
 	dummyFile := filepath.Join(tmpDir, "README.md")
-	os.WriteFile(dummyFile, []byte("# Test"), 0644)
+	if err := os.WriteFile(dummyFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 	cmd = execCommand("git", "add", "README.md")
 	cmd.Dir = tmpDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
 	cmd = execCommand("git", "commit", "-m", "Initial commit")
 	cmd.Dir = tmpDir
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
@@ -547,11 +551,15 @@ func TestManager_Cleanup_SkipsUncommittedChanges(t *testing.T) {
 
 	// Create worktrees directory
 	worktreesDir := filepath.Join(tmpDir, ".ralph/worktrees")
-	os.MkdirAll(worktreesDir, 0755)
+	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	// Create an orphaned worktree directory manually (simulating a dirty state)
 	orphanDir := filepath.Join(worktreesDir, "dirty-orphan")
-	os.MkdirAll(orphanDir, 0755)
+	if err := os.MkdirAll(orphanDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
 
 	// Create manager with a mock that reports dirty state
 	g := newMockGit(tmpDir)
@@ -616,10 +624,14 @@ func TestManager_Cleanup_CompletePlanIsOrphaned(t *testing.T) {
 
 	// Create initial commit so we can create branches
 	dummyFile := filepath.Join(tmpDir, "README.md")
-	os.WriteFile(dummyFile, []byte("# Test"), 0644)
+	if err := os.WriteFile(dummyFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
 	cmd = execCommand("git", "add", "README.md")
 	cmd.Dir = tmpDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
 	cmd = execCommand("git", "commit", "-m", "Initial commit")
 	cmd.Dir = tmpDir
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",

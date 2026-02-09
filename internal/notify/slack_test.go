@@ -76,7 +76,7 @@ func newMockSlackServer() *mockSlackServer {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	mux.HandleFunc("/chat.update", func(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +111,7 @@ func newMockSlackServer() *mockSlackServer {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	m.Server = httptest.NewServer(mux)
@@ -261,7 +261,7 @@ func TestSlackNotifier_Complete(t *testing.T) {
 	}
 
 	// Pre-populate thread info
-	tracker.Set("test-plan", &ThreadInfo{
+	_ = tracker.Set("test-plan", &ThreadInfo{
 		PlanName:  "test-plan",
 		ThreadTS:  "1234567890.000000",
 		ChannelID: "C12345",
@@ -310,7 +310,7 @@ func TestSlackNotifier_BlockerNotify(t *testing.T) {
 	}
 
 	// Pre-populate thread info
-	tracker.Set("test-plan", &ThreadInfo{
+	_ = tracker.Set("test-plan", &ThreadInfo{
 		PlanName:  "test-plan",
 		ThreadTS:  "1234567890.000000",
 		ChannelID: "C12345",
@@ -367,7 +367,7 @@ func TestSlackNotifier_BlockerNotify_Deduplication(t *testing.T) {
 	}
 
 	// Pre-populate thread info with already notified blocker
-	tracker.Set("test-plan", &ThreadInfo{
+	_ = tracker.Set("test-plan", &ThreadInfo{
 		PlanName:         "test-plan",
 		ThreadTS:         "1234567890.000000",
 		ChannelID:        "C12345",
@@ -785,7 +785,7 @@ func TestSlackNotifier_UpdateProgress(t *testing.T) {
 	}
 
 	// Pre-populate thread info
-	tracker.Set("test-plan", &ThreadInfo{
+	_ = tracker.Set("test-plan", &ThreadInfo{
 		PlanName:  "test-plan",
 		ThreadTS:  "1234567890.000000",
 		MessageTS: "1234567890.000000",
@@ -854,7 +854,7 @@ func TestSlackNotifier_UpdateProgress_Deduplication(t *testing.T) {
 	}
 
 	// Pre-populate thread info with existing progress
-	tracker.Set("test-plan", &ThreadInfo{
+	_ = tracker.Set("test-plan", &ThreadInfo{
 		PlanName:      "test-plan",
 		ThreadTS:      "1234567890.000000",
 		MessageTS:     "1234567890.000000",

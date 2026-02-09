@@ -122,10 +122,8 @@ func TestRunInitHooks_AutoDetect(t *testing.T) {
 	cfg := &config.Config{}
 
 	result, err := RunInitHooks(worktreeDir, cfg, mainDir)
-	// We might get an error if go is not installed, that's OK
-	if err != nil && !strings.Contains(err.Error(), "command not found") {
-		// Some other error is OK too (e.g., no deps to download)
-	}
+	// We might get an error if go is not installed or no deps to download, that's OK
+	_ = err
 
 	// Verify method is auto_detect
 	if result != nil && result.Method != "auto_detect" {

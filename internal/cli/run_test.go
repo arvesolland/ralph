@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -78,37 +75,3 @@ func TestParsePlanID(t *testing.T) {
 	}
 }
 
-func setupTestGitRepo(t *testing.T, dir string) {
-	t.Helper()
-
-	cmd := func(args ...string) {
-		t.Helper()
-		c := runGitCommand(dir, args...)
-		if err := c.Run(); err != nil {
-			t.Fatalf("git %v failed: %v", args, err)
-		}
-	}
-
-	cmd("init", "-b", "main")
-	cmd("config", "user.email", "test@test.com")
-	cmd("config", "user.name", "Test User")
-
-	readme := filepath.Join(dir, "README.md")
-	if err := os.WriteFile(readme, []byte("# Test"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	cmd("add", "README.md")
-	cmd("commit", "-m", "Initial commit")
-}
-
-func runGitCommand(dir string, args ...string) *exec.Cmd {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=Test",
-		"GIT_AUTHOR_EMAIL=test@test.com",
-		"GIT_COMMITTER_NAME=Test",
-		"GIT_COMMITTER_EMAIL=test@test.com",
-	)
-	return cmd
-}

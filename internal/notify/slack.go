@@ -16,8 +16,7 @@ type SlackNotifier struct {
 	threadTracker *ThreadTracker
 	repoName      string
 
-	// fallback is used when bot_token is not configured
-	fallback *WebhookNotifier
+
 }
 
 // SlackNotifierConfig contains configuration for creating a SlackNotifier.

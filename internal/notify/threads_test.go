@@ -230,7 +230,7 @@ func TestThreadTracker_Set(t *testing.T) {
 		tracker, _ := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
 
 		// First set
-		tracker.Set("test-plan", &ThreadInfo{
+		_ = tracker.Set("test-plan", &ThreadInfo{
 			ThreadTS:  "1234567890.123456",
 			ChannelID: "C123456",
 		})
@@ -284,7 +284,7 @@ func TestThreadTracker_Delete(t *testing.T) {
 		filePath := filepath.Join(tmpDir, "threads.json")
 		tracker, _ := NewThreadTracker(filePath)
 
-		tracker.Set("test-plan", &ThreadInfo{
+		_ = tracker.Set("test-plan", &ThreadInfo{
 			ThreadTS:  "1234567890.123456",
 			ChannelID: "C123456",
 		})
@@ -301,7 +301,7 @@ func TestThreadTracker_Delete(t *testing.T) {
 		// Verify persisted
 		data, _ := os.ReadFile(filePath)
 		var loaded map[string]*ThreadInfo
-		json.Unmarshal(data, &loaded)
+		_ = json.Unmarshal(data, &loaded)
 		if loaded["test-plan"] != nil {
 			t.Error("expected test-plan to be deleted from file")
 		}
@@ -323,7 +323,7 @@ func TestThreadTracker_AddNotifiedBlocker(t *testing.T) {
 		tmpDir := t.TempDir()
 		tracker, _ := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
 
-		tracker.Set("test-plan", &ThreadInfo{
+		_ = tracker.Set("test-plan", &ThreadInfo{
 			ThreadTS:  "1234567890.123456",
 			ChannelID: "C123456",
 		})
@@ -346,7 +346,7 @@ func TestThreadTracker_AddNotifiedBlocker(t *testing.T) {
 		tmpDir := t.TempDir()
 		tracker, _ := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
 
-		tracker.Set("test-plan", &ThreadInfo{
+		_ = tracker.Set("test-plan", &ThreadInfo{
 			ThreadTS:         "1234567890.123456",
 			ChannelID:        "C123456",
 			NotifiedBlockers: []string{"abc12345"},
@@ -381,7 +381,7 @@ func TestThreadTracker_HasNotifiedBlocker(t *testing.T) {
 	tmpDir := t.TempDir()
 	tracker, _ := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
 
-	tracker.Set("test-plan", &ThreadInfo{
+	_ = tracker.Set("test-plan", &ThreadInfo{
 		ThreadTS:         "1234567890.123456",
 		ChannelID:        "C123456",
 		NotifiedBlockers: []string{"abc12345"},
@@ -410,8 +410,8 @@ func TestThreadTracker_List(t *testing.T) {
 	tmpDir := t.TempDir()
 	tracker, _ := NewThreadTracker(filepath.Join(tmpDir, "threads.json"))
 
-	tracker.Set("plan-1", &ThreadInfo{ThreadTS: "111", ChannelID: "C1"})
-	tracker.Set("plan-2", &ThreadInfo{ThreadTS: "222", ChannelID: "C2"})
+	_ = tracker.Set("plan-1", &ThreadInfo{ThreadTS: "111", ChannelID: "C1"})
+	_ = tracker.Set("plan-2", &ThreadInfo{ThreadTS: "222", ChannelID: "C2"})
 
 	list := tracker.List()
 	if len(list) != 2 {
@@ -436,14 +436,14 @@ func TestThreadTracker_Reload(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "threads.json")
 	tracker, _ := NewThreadTracker(filePath)
 
-	tracker.Set("test-plan", &ThreadInfo{ThreadTS: "111", ChannelID: "C1"})
+	_ = tracker.Set("test-plan", &ThreadInfo{ThreadTS: "111", ChannelID: "C1"})
 
 	// Modify file directly
 	newData := map[string]*ThreadInfo{
 		"other-plan": {ThreadTS: "222", ChannelID: "C2"},
 	}
 	data, _ := json.Marshal(newData)
-	os.WriteFile(filePath, data, 0644)
+	_ = os.WriteFile(filePath, data, 0644)
 
 	// Reload
 	if err := tracker.Reload(); err != nil {
@@ -467,7 +467,7 @@ func TestThreadTracker_Persistence(t *testing.T) {
 
 	// Create and populate tracker
 	tracker1, _ := NewThreadTracker(filePath)
-	tracker1.Set("test-plan", &ThreadInfo{
+	_ = tracker1.Set("test-plan", &ThreadInfo{
 		ThreadTS:         "1234567890.123456",
 		ChannelID:        "C123456",
 		NotifiedBlockers: []string{"abc12345", "def67890"},
@@ -506,7 +506,7 @@ func TestThreadTracker_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
 				planName := "test-plan"
-				tracker.Set(planName, &ThreadInfo{
+				_ = tracker.Set(planName, &ThreadInfo{
 					ThreadTS:  "1234567890.123456",
 					ChannelID: "C123456",
 				})
@@ -531,7 +531,7 @@ func TestThreadTracker_AtomicWrite(t *testing.T) {
 	tracker, _ := NewThreadTracker(filePath)
 
 	// Set data
-	tracker.Set("test-plan", &ThreadInfo{
+	_ = tracker.Set("test-plan", &ThreadInfo{
 		ThreadTS:  "1234567890.123456",
 		ChannelID: "C123456",
 	})

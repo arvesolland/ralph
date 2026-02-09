@@ -18,7 +18,7 @@ func withStdinNewlines(t *testing.T) func() {
 	}
 	os.Stdin = r
 	// Write 3 newlines for 3 ATM prompts
-	w.WriteString("\n\n\n")
+	_, _ = w.WriteString("\n\n\n")
 	w.Close()
 	return func() {
 		os.Stdin = oldStdin
@@ -39,7 +39,7 @@ func TestRunInit_CreatesDirectoryStructure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)
@@ -113,7 +113,7 @@ func TestRunInit_WithDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)
@@ -174,7 +174,7 @@ func TestRunInit_PreservesExistingSpecs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)

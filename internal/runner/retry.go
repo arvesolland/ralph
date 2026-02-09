@@ -218,7 +218,7 @@ func IsRetryable(err error) bool {
 	// Network errors are generally retryable
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		return netErr.Timeout() || netErr.Temporary()
+		return netErr.Timeout()
 	}
 
 	// DNS errors are retryable

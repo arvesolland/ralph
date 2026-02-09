@@ -177,6 +177,7 @@ func TestDetectAndInstall_CommandNotFound(t *testing.T) {
 	if err != nil {
 		if result == nil {
 			t.Error("Expected non-nil result even on command failure")
+			return
 		}
 		if result.Lockfile != "go.sum" {
 			t.Errorf("Expected lockfile 'go.sum', got %q", result.Lockfile)

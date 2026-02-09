@@ -62,7 +62,7 @@ func init() {
 	runCmd.Flags().IntVar(&runMaxIterations, "max", runner.DefaultMaxIterations, "maximum iterations before stopping")
 	runCmd.Flags().StringVar(&runCompletionMode, "completion-mode", "", "completion mode: pr, merge, or branch (default from config)")
 	runCmd.Flags().BoolVar(&runPush, "push", false, "push to remote after each iteration")
-	runCmd.MarkFlagRequired("plan")
+	_ = runCmd.MarkFlagRequired("plan")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -233,7 +233,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			if result.IsComplete {
 				log.Info("Completion marker detected")
 			}
-			notifier.UpdateProgress(npi, &notify.ProgressStatus{
+			_ = notifier.UpdateProgress(npi, &notify.ProgressStatus{
 				Iteration:     iteration,
 				MaxIterations: runMaxIterations,
 				Phase:         notify.PhaseRunning,
@@ -249,7 +249,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			if blocker.Action != "" {
 				log.Info("Action required: %s", blocker.Action)
 			}
-			notifier.UpdateProgress(npi, &notify.ProgressStatus{
+			_ = notifier.UpdateProgress(npi, &notify.ProgressStatus{
 				Iteration:     execCtx.Iteration,
 				MaxIterations: runMaxIterations,
 				Phase:         notify.PhaseBlocked,
@@ -317,13 +317,13 @@ func runRun(cmd *cobra.Command, args []string) error {
 		}
 
 		// Send completion notification
-		notifier.UpdateProgress(npi, &notify.ProgressStatus{
+		_ = notifier.UpdateProgress(npi, &notify.ProgressStatus{
 			Iteration:     result.Iterations,
 			MaxIterations: runMaxIterations,
 			Phase:         notify.PhaseComplete,
 		})
 		if cfg.Slack.NotifyComplete {
-			notifier.Complete(npi, "")
+			_ = notifier.Complete(npi, "")
 		}
 		return nil
 	}
@@ -331,9 +331,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if result.Error != nil {
 		// Send error notification
 		if cfg.Slack.NotifyError {
-			notifier.Error(npi, result.Error)
+			_ = notifier.Error(npi, result.Error)
 		}
-		notifier.UpdateProgress(npi, &notify.ProgressStatus{
+		_ = notifier.UpdateProgress(npi, &notify.ProgressStatus{
 			Iteration:     result.Iterations,
 			MaxIterations: runMaxIterations,
 			Phase:         notify.PhaseError,

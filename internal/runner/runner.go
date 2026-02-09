@@ -170,7 +170,7 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 	var stderrBuf strings.Builder
 	stderrDone := make(chan struct{})
 	go func() {
-		io.Copy(&stderrBuf, stderr)
+		_, _ = io.Copy(&stderrBuf, stderr)
 		close(stderrDone)
 	}()
 
@@ -322,7 +322,7 @@ func (r *CLIRunner) terminateProcess(cmd *exec.Cmd) error {
 	// Wait for process to exit or grace period to elapse
 	done := make(chan struct{})
 	go func() {
-		cmd.Wait()
+		_ = cmd.Wait()
 		close(done)
 	}()
 

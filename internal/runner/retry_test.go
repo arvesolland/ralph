@@ -5,40 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
 	"testing"
 	"time"
 )
-
-// mockClock implements Clock for testing
-type mockClock struct {
-	mu        sync.Mutex
-	sleepTime time.Duration
-	sleeps    []time.Duration
-}
-
-func (m *mockClock) Sleep(d time.Duration) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.sleepTime += d
-	m.sleeps = append(m.sleeps, d)
-}
-
-func (m *mockClock) Now() time.Time {
-	return time.Now()
-}
-
-func (m *mockClock) TotalSleep() time.Duration {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.sleepTime
-}
-
-func (m *mockClock) Sleeps() []time.Duration {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]time.Duration{}, m.sleeps...)
-}
 
 func TestDefaultRetryConfig(t *testing.T) {
 	cfg := DefaultRetryConfig()
@@ -417,7 +386,7 @@ func TestIsRetryable_NetError(t *testing.T) {
 		retryable bool
 	}{
 		{"timeout", &mockNetError{timeout: true}, true},
-		{"temporary", &mockNetError{temporary: true}, true},
+		{"temporary only", &mockNetError{temporary: true}, false},
 		{"both", &mockNetError{timeout: true, temporary: true}, true},
 		{"neither", &mockNetError{}, false},
 	}
@@ -484,7 +453,7 @@ func TestRetrier_IntegrationTiming(t *testing.T) {
 
 	start := time.Now()
 	called := 0
-	r.Do(func() error {
+	_ = r.Do(func() error {
 		called++
 		return ErrConnectionFailed
 	})

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -153,19 +152,7 @@ func (g *CLIGit) runRaw(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
-// runWithEnv executes a git command with custom environment variables.
-func (g *CLIGit) runWithEnv(env []string, args ...string) (string, string, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = g.workDir
-	cmd.Env = append(os.Environ(), env...)
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()), err
-}
 
 // Status returns the current status of the working tree.
 func (g *CLIGit) Status() (*Status, error) {
@@ -502,8 +489,7 @@ func (g *CLIGit) ListWorktrees() ([]WorktreeInfo, error) {
 			current.Branch = strings.TrimPrefix(ref, "refs/heads/")
 		} else if line == "bare" && current != nil {
 			current.Bare = true
-		} else if strings.HasPrefix(line, "detached") && current != nil {
-			// Detached HEAD - branch stays empty
+		} else if strings.HasPrefix(line, "detached") && current != nil { //nolint:staticcheck // intentionally empty: detached HEAD means branch stays empty
 		}
 	}
 

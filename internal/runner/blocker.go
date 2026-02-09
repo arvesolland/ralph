@@ -13,7 +13,6 @@ var blockerTagRegex = regexp.MustCompile(`(?s)<blocker>(.*?)</blocker>`)
 // fieldRegexes for parsing structured fields within blocker content.
 // Using (?s) for single-line mode where . matches newlines for multi-line capture.
 var (
-	descriptionRegex = regexp.MustCompile(`(?im)^(?:Description:\s*)?(.+?)(?:\n(?:Action:|Resume:)|$)`)
 	// actionRegex captures multi-line content: everything after "Action:" until "Resume:" or end
 	actionRegex = regexp.MustCompile(`(?ims)^Action:\s*(.*?)(?:\nResume:|\z)`)
 	// resumeRegex captures everything after "Resume:" to the end
@@ -24,7 +23,7 @@ var (
 // Returns nil if no blocker tag is found.
 func ExtractBlocker(output string) *Blocker {
 	matches := blockerTagRegex.FindStringSubmatch(output)
-	if matches == nil || len(matches) < 2 {
+	if len(matches) < 2 {
 		return nil
 	}
 

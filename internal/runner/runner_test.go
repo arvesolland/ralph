@@ -328,7 +328,7 @@ func TestCLIRunner_RunWithMockScript_Success(t *testing.T) {
 			t.Fatalf("ParseReader failed: %v", err)
 		}
 
-		cmd.Wait()
+		_ = cmd.Wait()
 
 		if !containsCompletionMarker(parser.TextContent()) {
 			t.Errorf("parser should detect completion marker in: %s", parser.TextContent())
@@ -457,7 +457,7 @@ func TestCLIRunner_TerminateProcess(t *testing.T) {
 		}
 
 		// Wait for process to fully exit
-		cmd.Wait()
+		_ = cmd.Wait()
 	})
 }
 
