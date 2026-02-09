@@ -1,6 +1,11 @@
 // Package atm provides a client for the ATM task management API via the atm-cli binary.
 package atm
 
+import (
+	"regexp"
+	"strings"
+)
+
 // Plan status constants.
 const (
 	PlanStatusDraft    = "draft"
@@ -51,6 +56,28 @@ type Plan struct {
 	Progress       []Progress `json:"progress,omitempty"`
 	CreatedAt      string     `json:"created_at"`
 	UpdatedAt      string     `json:"updated_at"`
+}
+
+// BranchName returns the feature branch for this plan.
+// If FeatureBranch is set, it's returned as-is.
+// Otherwise, a branch name is generated from the plan title: "feat/<slugified-title>".
+func (p *Plan) BranchName() string {
+	if p.FeatureBranch != "" {
+		return p.FeatureBranch
+	}
+	return "feat/" + slugify(p.Title)
+}
+
+// slugify converts a string to a git-safe branch name component.
+// "AKB -> ATM Integration" becomes "akb-atm-integration".
+var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugify(s string) string {
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "->", "")
+	s = nonAlphanumRe.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
 }
 
 // Task represents an ATM task.

@@ -96,8 +96,11 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("fetching plan #%d: %w", runPlanID, err)
 	}
 
+	// Resolve branch name (uses branch or generates from title)
+	branch := plan.BranchName()
+
 	log.Info("Plan: %s (ID: %d, status: %s)", plan.Title, plan.ID, plan.Status)
-	log.Info("Branch: %s", plan.FeatureBranch)
+	log.Info("Branch: %s", branch)
 	log.Info("Max iterations: %d", runMaxIterations)
 	log.Info("Completion mode: %s", completionMode)
 
@@ -143,7 +146,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	wtInfo := worktree.PlanInfo{
 		Name:   plan.Title,
-		Branch: plan.FeatureBranch,
+		Branch: branch,
 	}
 
 	var worktreePath string
@@ -176,7 +179,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		execCtx = existingCtx
 		log.Info("Resuming at iteration %d", execCtx.Iteration)
 	} else {
-		execCtx = runner.NewContext(plan.ID, plan.FeatureBranch, cfg.Git.BaseBranch, runMaxIterations)
+		execCtx = runner.NewContext(plan.ID, branch, cfg.Git.BaseBranch, runMaxIterations)
 		if err := runner.SaveContext(execCtx, ctxPath); err != nil {
 			return fmt.Errorf("saving context: %w", err)
 		}
@@ -200,7 +203,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	planInfo := &worker.PlanInfo{
 		ID:     plan.ID,
 		Name:   plan.Title,
-		Branch: plan.FeatureBranch,
+		Branch: branch,
 	}
 
 	// Send start notification
@@ -268,7 +271,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		},
 		OnAfterCommit: func() {
 			if runPush {
-				if err := wtGit.PushWithUpstream("origin", plan.FeatureBranch); err != nil {
+				if err := wtGit.PushWithUpstream("origin", branch); err != nil {
 					log.Warn("Failed to push after iteration: %v", err)
 				}
 			}
@@ -361,27 +364,29 @@ func handleCompletion(plan *atm.Plan, mode, worktreePath string, cfg *config.Con
 		baseBranch = "main"
 	}
 
+	featureBranch := plan.BranchName()
+
 	switch mode {
 	case "pr":
 		// Push and create PR
-		if err := wtGit.PushWithUpstream("origin", plan.FeatureBranch); err != nil {
+		if err := wtGit.PushWithUpstream("origin", featureBranch); err != nil {
 			return fmt.Errorf("pushing branch: %w", err)
 		}
 		prURL, err := createPR(plan.Title, worktreePath)
 		if err != nil {
 			log.Warn("Failed to create PR: %v", err)
-			log.Warn("Branch has been pushed. Create PR manually for branch: %s", plan.FeatureBranch)
+			log.Warn("Branch has been pushed. Create PR manually for branch: %s", featureBranch)
 		} else {
 			log.Success("PR created: %s", prURL)
 		}
 
 	case "merge":
-		if err := worker.CompleteMerge(plan.FeatureBranch, baseBranch, mainGit); err != nil {
+		if err := worker.CompleteMerge(featureBranch, baseBranch, mainGit); err != nil {
 			return fmt.Errorf("merge completion: %w", err)
 		}
 
 	case "branch":
-		if err := worker.CompleteBranch(plan.FeatureBranch, baseBranch, wtGit); err != nil {
+		if err := worker.CompleteBranch(featureBranch, baseBranch, wtGit); err != nil {
 			return fmt.Errorf("branch completion: %w", err)
 		}
 

@@ -229,11 +229,14 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		plan = updated
 	}
 
+	// Resolve branch name (uses FeatureBranch or generates from title)
+	branch := plan.BranchName()
+
 	// Process the plan
 	info := &PlanInfo{
 		ID:     plan.ID,
 		Name:   plan.Title,
-		Branch: plan.FeatureBranch,
+		Branch: branch,
 	}
 
 	return w.processPlan(ctx, plan, info)
@@ -297,7 +300,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 		OnAfterCommit: func() {
 			if w.pushAfterIteration {
 				wtGit := git.NewGit(worktreePath)
-				if err := wtGit.PushWithUpstream("origin", plan.FeatureBranch); err != nil {
+				if err := wtGit.PushWithUpstream("origin", info.Branch); err != nil {
 					log.Warn("Failed to push after iteration: %v", err)
 				}
 			}
@@ -357,7 +360,8 @@ func (w *Worker) ensureWorktree(plan *atm.Plan) (string, error) {
 	}
 
 	// Use plan feature branch as worktree name
-	name := branchToWorktreeName(plan.FeatureBranch)
+	branch := plan.BranchName()
+	name := branchToWorktreeName(branch)
 
 	// Check if worktree already exists
 	if w.worktreeManager.Exists(name) {
@@ -370,12 +374,12 @@ func (w *Worker) ensureWorktree(plan *atm.Plan) (string, error) {
 	}
 
 	// Create new worktree
-	path, err := w.worktreeManager.Create(name, plan.FeatureBranch)
+	path, err := w.worktreeManager.Create(name, branch)
 	if err != nil {
 		return "", fmt.Errorf("creating worktree: %w", err)
 	}
 
-	log.Info("Created worktree: %s (branch: %s)", path, plan.FeatureBranch)
+	log.Info("Created worktree: %s (branch: %s)", path, branch)
 	return path, nil
 }
 
@@ -400,7 +404,7 @@ func (w *Worker) loadOrCreateContext(plan *atm.Plan, worktreePath string) (*runn
 		baseBranch = w.config.Git.BaseBranch
 	}
 
-	execCtx = runner.NewContext(plan.ID, plan.FeatureBranch, baseBranch, w.maxIterations)
+	execCtx = runner.NewContext(plan.ID, plan.BranchName(), baseBranch, w.maxIterations)
 
 	// Save the new context
 	if err := runner.SaveContext(execCtx, ctxPath); err != nil {
@@ -427,7 +431,7 @@ func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath strin
 		if w.config != nil && w.config.Git.BaseBranch != "" {
 			baseBranch = w.config.Git.BaseBranch
 		}
-		if err := CompleteMerge(plan.FeatureBranch, baseBranch, w.git); err != nil {
+		if err := CompleteMerge(info.Branch, baseBranch, w.git); err != nil {
 			return fmt.Errorf("merge completion: %w", err)
 		}
 
@@ -437,7 +441,7 @@ func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath strin
 			baseBranch = w.config.Git.BaseBranch
 		}
 		wtGit := git.NewGit(worktreePath)
-		if err := CompleteBranch(plan.FeatureBranch, baseBranch, wtGit); err != nil {
+		if err := CompleteBranch(info.Branch, baseBranch, wtGit); err != nil {
 			return fmt.Errorf("branch completion: %w", err)
 		}
 	}
@@ -449,7 +453,7 @@ func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath strin
 
 	// Clean up worktree
 	if w.worktreeManager != nil {
-		name := branchToWorktreeName(plan.FeatureBranch)
+		name := branchToWorktreeName(info.Branch)
 		if err := w.worktreeManager.Remove(name, false); err != nil {
 			log.Warn("Failed to remove worktree: %v", err)
 		}
@@ -466,12 +470,12 @@ func (w *Worker) completePR(plan *atm.Plan, info *PlanInfo, worktreePath string)
 	wtGit := git.NewGit(worktreePath)
 
 	// Push branch
-	if err := pushBranch(wtGit, plan.FeatureBranch); err != nil {
+	if err := pushBranch(wtGit, info.Branch); err != nil {
 		return "", fmt.Errorf("pushing branch: %w", err)
 	}
 
 	// Create PR
-	prURL, err := createPRSimple(plan.Title, plan.FeatureBranch, worktreePath, w.runner, w.promptBuilder)
+	prURL, err := createPRSimple(plan.Title, info.Branch, worktreePath, w.runner, w.promptBuilder)
 	if err != nil {
 		log.Error("Failed to create PR: %v", err)
 		logManualPRInstructionsSimple(info.Name, info.Branch)
