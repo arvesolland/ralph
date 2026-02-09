@@ -46,13 +46,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	ralphDir := filepath.Join(cwd, ".ralph")
 	configPath := filepath.Join(ralphDir, "config.yaml")
 
-	// Check if config already exists
-	if fileExistsInit(configPath) {
-		if !confirmOverwrite(configPath) {
-			log.Info("Initialization cancelled")
-			return nil
-		}
-	}
+	// Check if config already exists — load it as the base so we don't clobber existing values
+	reinit := fileExistsInit(configPath)
 
 	// Create directory structure
 	dirs := []string{
@@ -100,10 +95,22 @@ func runInit(cmd *cobra.Command, args []string) error {
 		log.Debug("Added .ralph/ to .gitignore")
 	}
 
-	// Build config
-	cfg := config.Defaults()
+	// Build config: load existing config as base to preserve values, fall back to defaults
+	var cfg *config.Config
+	if reinit {
+		log.Info("Existing config found — preserving current values, filling in missing fields")
+		existing, err := config.LoadWithDefaults(configPath)
+		if err != nil {
+			log.Warn("Failed to load existing config, starting fresh: %v", err)
+			cfg = config.Defaults()
+		} else {
+			cfg = existing
+		}
+	} else {
+		cfg = config.Defaults()
+	}
 
-	// Auto-detect if flag is set
+	// Auto-detect if flag is set — only fill in empty command fields
 	if detectFlag {
 		log.Info("Auto-detecting project settings...")
 		detected, err := config.Detect(cwd)
@@ -115,89 +122,122 @@ func runInit(cmd *cobra.Command, args []string) error {
 				log.Info("  Framework: %s", detected.Framework)
 			}
 
-			// Merge detected settings into config
-			if detected.Commands.Test != "" {
+			// Only fill in commands that are currently empty
+			if cfg.Commands.Test == "" && detected.Commands.Test != "" {
 				cfg.Commands.Test = detected.Commands.Test
 				log.Info("  Test command: %s", detected.Commands.Test)
+			} else if detected.Commands.Test != "" {
+				log.Info("  Test command: %s (kept existing)", cfg.Commands.Test)
 			}
-			if detected.Commands.Lint != "" {
+			if cfg.Commands.Lint == "" && detected.Commands.Lint != "" {
 				cfg.Commands.Lint = detected.Commands.Lint
 				log.Info("  Lint command: %s", detected.Commands.Lint)
+			} else if detected.Commands.Lint != "" {
+				log.Info("  Lint command: %s (kept existing)", cfg.Commands.Lint)
 			}
-			if detected.Commands.Build != "" {
+			if cfg.Commands.Build == "" && detected.Commands.Build != "" {
 				cfg.Commands.Build = detected.Commands.Build
 				log.Info("  Build command: %s", detected.Commands.Build)
+			} else if detected.Commands.Build != "" {
+				log.Info("  Build command: %s (kept existing)", cfg.Commands.Build)
 			}
-			if detected.Commands.Dev != "" {
+			if cfg.Commands.Dev == "" && detected.Commands.Dev != "" {
 				cfg.Commands.Dev = detected.Commands.Dev
 				log.Info("  Dev command: %s", detected.Commands.Dev)
+			} else if detected.Commands.Dev != "" {
+				log.Info("  Dev command: %s (kept existing)", cfg.Commands.Dev)
 			}
 		} else {
 			log.Info("No project type detected, using defaults")
 		}
 	}
 
-	// Extract project name and description using AI (if available)
-	// This is optional - gracefully falls back to folder name if Claude CLI
-	// is not available or ANTHROPIC_API_KEY is not set
-	if os.Getenv("ANTHROPIC_API_KEY") != "" {
-		log.Info("Extracting project info...")
-		projectInfo, err := extractProjectInfo(cwd)
-		if err != nil {
-			log.Debug("AI extraction failed: %v", err)
-			cfg.Project.Name = filepath.Base(cwd)
-			log.Info("  Project name: %s (from folder)", cfg.Project.Name)
-		} else {
-			if projectInfo.Name != "" {
-				cfg.Project.Name = projectInfo.Name
-				log.Info("  Project name: %s", cfg.Project.Name)
-			} else {
+	// Extract project name and description using AI — only if not already set
+	if cfg.Project.Name == "" {
+		if os.Getenv("ANTHROPIC_API_KEY") != "" {
+			log.Info("Extracting project info...")
+			projectInfo, err := extractProjectInfo(cwd)
+			if err != nil {
+				log.Debug("AI extraction failed: %v", err)
 				cfg.Project.Name = filepath.Base(cwd)
 				log.Info("  Project name: %s (from folder)", cfg.Project.Name)
+			} else {
+				if projectInfo.Name != "" {
+					cfg.Project.Name = projectInfo.Name
+					log.Info("  Project name: %s", cfg.Project.Name)
+				} else {
+					cfg.Project.Name = filepath.Base(cwd)
+					log.Info("  Project name: %s (from folder)", cfg.Project.Name)
+				}
+				if cfg.Project.Description == "" && projectInfo.Description != "" {
+					cfg.Project.Description = projectInfo.Description
+					log.Info("  Description: %s", cfg.Project.Description)
+				}
 			}
-			if projectInfo.Description != "" {
-				cfg.Project.Description = projectInfo.Description
-				log.Info("  Description: %s", cfg.Project.Description)
-			}
+		} else {
+			cfg.Project.Name = filepath.Base(cwd)
+			log.Info("Project name: %s (set ANTHROPIC_API_KEY for AI extraction)", cfg.Project.Name)
 		}
 	} else {
-		// No API key - use folder name as default
-		cfg.Project.Name = filepath.Base(cwd)
-		log.Info("Project name: %s (set ANTHROPIC_API_KEY for AI extraction)", cfg.Project.Name)
+		log.Info("Project name: %s (kept existing)", cfg.Project.Name)
+		if cfg.Project.Description != "" {
+			log.Info("Description: %s (kept existing)", cfg.Project.Description)
+		}
 	}
 
-	// ATM configuration
-	fmt.Println()
-	log.Info("ATM Task Management Configuration")
-	log.Info("(Leave blank to skip - can be configured later in .ralph/config.yaml)")
-	fmt.Println()
+	// ATM configuration — only prompt for fields that are empty
+	hasATMConfig := cfg.ATM.ProjectSlug != "" || cfg.ATM.APIURL != "" || cfg.ATM.APIToken != ""
+	if hasATMConfig {
+		fmt.Println()
+		log.Info("ATM configuration (existing values preserved)")
+		if cfg.ATM.ProjectSlug != "" {
+			log.Info("  Project slug: %s", cfg.ATM.ProjectSlug)
+		}
+		if cfg.ATM.APIURL != "" {
+			log.Info("  API URL: %s", cfg.ATM.APIURL)
+		}
+		if cfg.ATM.APIToken != "" {
+			log.Info("  API token: (set)")
+		}
+	}
 
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Print("ATM Project Slug: ")
-	if slug, err := reader.ReadString('\n'); err == nil {
-		slug = strings.TrimSpace(slug)
-		if slug != "" {
-			cfg.ATM.ProjectSlug = slug
-			log.Info("  Project slug: %s", slug)
+	if cfg.ATM.ProjectSlug == "" {
+		fmt.Println()
+		log.Info("ATM Task Management Configuration")
+		log.Info("(Leave blank to skip - can be configured later in .ralph/config.yaml)")
+		fmt.Println()
+
+		fmt.Print("ATM Project Slug: ")
+		if slug, err := reader.ReadString('\n'); err == nil {
+			slug = strings.TrimSpace(slug)
+			if slug != "" {
+				cfg.ATM.ProjectSlug = slug
+				log.Info("  Project slug: %s", slug)
+			}
 		}
 	}
 
-	fmt.Print("ATM API URL (e.g., https://atm.example.com/api): ")
-	if apiURL, err := reader.ReadString('\n'); err == nil {
-		apiURL = strings.TrimSpace(apiURL)
-		if apiURL != "" {
-			cfg.ATM.APIURL = apiURL
-			log.Info("  API URL: %s", apiURL)
+	if cfg.ATM.APIURL == "" && !hasATMConfig {
+		fmt.Print("ATM API URL (e.g., https://atm.example.com/api): ")
+		if apiURL, err := reader.ReadString('\n'); err == nil {
+			apiURL = strings.TrimSpace(apiURL)
+			if apiURL != "" {
+				cfg.ATM.APIURL = apiURL
+				log.Info("  API URL: %s", apiURL)
+			}
 		}
 	}
 
-	fmt.Print("ATM API Token: ")
-	if token, err := reader.ReadString('\n'); err == nil {
-		token = strings.TrimSpace(token)
-		if token != "" {
-			cfg.ATM.APIToken = token
-			log.Info("  API token: (set)")
+	if cfg.ATM.APIToken == "" && !hasATMConfig {
+		fmt.Print("ATM API Token: ")
+		if token, err := reader.ReadString('\n'); err == nil {
+			token = strings.TrimSpace(token)
+			if token != "" {
+				cfg.ATM.APIToken = token
+				log.Info("  API token: (set)")
+			}
 		}
 	}
 
@@ -223,9 +263,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Print summary
 	fmt.Println()
-	log.Success("Ralph initialized successfully!")
+	if reinit {
+		log.Success("Ralph config updated (existing values preserved)")
+	} else {
+		log.Success("Ralph initialized successfully!")
+	}
 	fmt.Println()
-	fmt.Println("Created structure:")
+	fmt.Println("Structure:")
 	fmt.Println("  .ralph/")
 	fmt.Println("    config.yaml      - Project configuration")
 	fmt.Println("    prompts/         - Customizable agent prompts")
@@ -236,7 +280,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Edit .ralph/config.yaml to customize settings")
-	fmt.Println("  2. Configure ATM: set atm.project_slug, atm.api_url, atm.api_token")
+	fmt.Println("  2. Configure ATM: set atm.project_slug in .ralph/config.yaml")
 	fmt.Println("  3. Create plans via atm-cli: atm-cli plan create <project-slug> --title <name>")
 	fmt.Println("  4. Run 'ralph worker' to start processing")
 
