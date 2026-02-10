@@ -531,7 +531,7 @@ func (w *Worker) syncFromRemote() {
 // SetupNotifications creates and configures the notifier based on worker config.
 // Returns a cleanup function that should be called on shutdown.
 func (w *Worker) SetupNotifications(ctx context.Context) func() {
-	tracker, err := notify.NewThreadTracker(w.configDir)
+	tracker, err := notify.NewThreadTracker(notify.ThreadTrackerPath(w.configDir))
 	if err != nil {
 		log.Warn("Failed to create thread tracker: %v", err)
 		tracker = nil
