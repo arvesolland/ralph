@@ -191,7 +191,15 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 		if err != nil {
 			log.Error("Worker error: %v", err)
-			// Continue running after errors
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case sig := <-sigCh:
+				log.Info("Worker received signal: %v", sig)
+				return ErrInterrupted
+			case <-time.After(w.pollInterval):
+				continue
+			}
 		}
 	}
 }
