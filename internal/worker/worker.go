@@ -19,6 +19,7 @@ import (
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/notify"
 	"github.com/arvesolland/ralph/internal/prompt"
+	"github.com/arvesolland/ralph/internal/retry"
 	"github.com/arvesolland/ralph/internal/runner"
 )
 
@@ -27,6 +28,14 @@ const (
 	DefaultPollInterval  = 30 * time.Second
 	DefaultMaxIterations = 200
 )
+
+// DefaultStatusRetryConfig is the retry config for critical ATM status updates.
+var DefaultStatusRetryConfig = retry.RetryConfig{
+	MaxRetries:   5,
+	InitialDelay: 5 * time.Second,
+	MaxDelay:     60 * time.Second,
+	JitterFactor: 0.25,
+}
 
 // Sentinel errors returned by the worker.
 var (
@@ -69,6 +78,7 @@ type WorkerConfig struct {
 	SyncInterval       time.Duration
 	PushAfterIteration bool
 	IterationTimeout   time.Duration
+	StatusRetryConfig  *retry.RetryConfig // retry config for ATM status updates (default: aggressive)
 
 	// Callbacks
 	OnPlanStart    func(info *PlanInfo)
@@ -97,6 +107,7 @@ type Worker struct {
 	lastSyncTime       time.Time
 	pushAfterIteration bool
 	iterationTimeout   time.Duration
+	statusRetryConfig  retry.RetryConfig
 
 	// Callbacks
 	onPlanStart    func(info *PlanInfo)
@@ -146,6 +157,11 @@ func NewWorker(cfg WorkerConfig) *Worker {
 	}
 	if w.notifier == nil {
 		w.notifier = &notify.NoopNotifier{}
+	}
+	if cfg.StatusRetryConfig != nil {
+		w.statusRetryConfig = *cfg.StatusRetryConfig
+	} else {
+		w.statusRetryConfig = DefaultStatusRetryConfig
 	}
 
 	return w
@@ -361,9 +377,14 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 	if loopResult.Error != nil {
 		log.Error("Plan failed: %s - %v", info.Name, loopResult.Error)
 
-		// Mark plan as blocked in ATM
-		if _, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusBlocked); err != nil {
-			log.Error("Failed to set plan status to blocked: %v", err)
+		// Mark plan as blocked in ATM (with retry)
+		blockedRetrier := retry.NewRetrier(w.statusRetryConfig)
+		if retryErr := blockedRetrier.Do(func() error {
+			_, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusBlocked)
+			return err
+		}); retryErr != nil {
+			log.Error("Failed to set plan status to blocked after %d retries: %v", blockedRetrier.Attempts(), retryErr)
+			log.Error("Manual recovery required: atm-cli plan status %d --status blocked", plan.ID)
 		}
 
 		w.notifyError(info, loopResult.Error)
@@ -471,13 +492,22 @@ func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath strin
 		}
 	}
 
-	// Update ATM status to complete
-	if _, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusComplete); err != nil {
-		log.Error("Failed to set plan status to complete in ATM: %v", err)
+	// Update ATM status to complete with retry (critical path)
+	r := retry.NewRetrier(w.statusRetryConfig)
+	statusUpdateFailed := false
+	if err := r.Do(func() error {
+		_, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusComplete)
+		return err
+	}); err != nil {
+		statusUpdateFailed = true
+		log.Error("CRITICAL: Failed to set plan status to complete in ATM after %d retries: %v", r.Attempts(), err)
+		log.Error("Manual recovery required: atm-cli plan status %d --status complete", plan.ID)
 	}
 
-	// Clean up worktree
-	if w.worktreeManager != nil {
+	// Skip worktree cleanup if ATM status update failed (preserve work for manual recovery)
+	if statusUpdateFailed {
+		log.Warn("Skipping worktree cleanup because ATM status update failed (preserving work for recovery)")
+	} else if w.worktreeManager != nil {
 		name := branchToWorktreeName(info.Branch)
 		if err := w.worktreeManager.Remove(name, false); err != nil {
 			log.Warn("Failed to remove worktree: %v", err)

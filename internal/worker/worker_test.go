@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/notify"
 	"github.com/arvesolland/ralph/internal/prompt"
+	"github.com/arvesolland/ralph/internal/retry"
 	"github.com/arvesolland/ralph/internal/runner"
 )
 
@@ -449,7 +451,8 @@ func (m *MockNotifier) UpdateProgress(p notify.PlanInfo, status *notify.Progress
 
 // MockWorktreeManager implements WorktreeManager for testing.
 type MockWorktreeManager struct {
-	worktrees map[string]string // name -> path
+	worktrees   map[string]string // name -> path
+	RemoveCalls int               // tracks number of Remove calls
 }
 
 func newMockWorktreeManager() *MockWorktreeManager {
@@ -472,6 +475,7 @@ func (m *MockWorktreeManager) Get(name string) (string, error) {
 }
 
 func (m *MockWorktreeManager) Remove(name string, deleteBranch bool) error {
+	m.RemoveCalls++
 	delete(m.worktrees, name)
 	return nil
 }
@@ -797,6 +801,253 @@ func TestWorker_RunOnce_CompletionFlow(t *testing.T) {
 	last := transitions[len(transitions)-1]
 	if last.Status != atm.PlanStatusComplete {
 		t.Errorf("Expected last transition to 'complete', got %q", last.Status)
+	}
+}
+
+// fastRetryConfig returns a retry config with minimal delays for testing.
+func fastRetryConfig() retry.RetryConfig {
+	return retry.RetryConfig{
+		MaxRetries:   5,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     5 * time.Millisecond,
+		JitterFactor: 0,
+	}
+}
+
+func TestCompletePlan_RetriesStatusUpdate(t *testing.T) {
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/retry-test")
+
+	mockATM := atm.NewMockATM()
+
+	// Fail twice with a retryable error, then succeed
+	updateCalls := 0
+	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+		updateCalls++
+		if status == atm.PlanStatusComplete && updateCalls <= 2 {
+			return nil, fmt.Errorf("connection refused")
+		}
+		return &atm.Plan{ID: id, Status: status}, nil
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-retry-test", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := &Worker{
+		atm:               mockATM,
+		config:            cfg,
+		worktreeManager:   wtMgr,
+		notifier:          &notify.NoopNotifier{},
+		completionMode:    "branch",
+		git:               git.NewGit(tmpDir),
+		statusRetryConfig: fastCfg,
+	}
+
+	plan := &atm.Plan{ID: 42, FeatureBranch: "feat/retry-test"}
+	info := &PlanInfo{ID: 42, Name: "Retry Test", Branch: "feat/retry-test"}
+
+	err := w.completePlan(plan, info, wtDir)
+	if err != nil {
+		t.Fatalf("completePlan() error = %v", err)
+	}
+
+	// Should have retried (3 calls: 2 failures + 1 success)
+	if updateCalls < 3 {
+		t.Errorf("Expected at least 3 UpdatePlanStatus calls (with retries), got %d", updateCalls)
+	}
+
+	// Worktree should have been cleaned up (status update eventually succeeded)
+	if wtMgr.RemoveCalls != 1 {
+		t.Errorf("Expected 1 worktree Remove call, got %d", wtMgr.RemoveCalls)
+	}
+}
+
+func TestCompletePlan_SkipsWorktreeCleanupOnStatusFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/skip-cleanup")
+
+	mockATM := atm.NewMockATM()
+
+	// Always fail with a retryable error
+	updateCalls := 0
+	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+		updateCalls++
+		if status == atm.PlanStatusComplete {
+			return nil, fmt.Errorf("connection refused")
+		}
+		return &atm.Plan{ID: id, Status: status}, nil
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-skip-cleanup", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := &Worker{
+		atm:               mockATM,
+		config:            cfg,
+		worktreeManager:   wtMgr,
+		notifier:          &notify.NoopNotifier{},
+		completionMode:    "branch",
+		git:               git.NewGit(tmpDir),
+		statusRetryConfig: fastCfg,
+	}
+
+	plan := &atm.Plan{ID: 43, FeatureBranch: "feat/skip-cleanup"}
+	info := &PlanInfo{ID: 43, Name: "Skip Cleanup", Branch: "feat/skip-cleanup"}
+
+	// completePlan should return nil even when ATM status update fails
+	err := w.completePlan(plan, info, wtDir)
+	if err != nil {
+		t.Fatalf("completePlan() should return nil when only ATM status update fails, got: %v", err)
+	}
+
+	// Worktree should NOT have been cleaned up
+	if wtMgr.RemoveCalls != 0 {
+		t.Errorf("Expected 0 worktree Remove calls (cleanup should be skipped), got %d", wtMgr.RemoveCalls)
+	}
+
+	// Should have attempted retries (initial + 5 retries = 6 calls)
+	if updateCalls != 6 {
+		t.Errorf("Expected 6 UpdatePlanStatus calls (1 initial + 5 retries), got %d", updateCalls)
+	}
+}
+
+func TestCompletePlan_NonRetryableErrorFailsFast(t *testing.T) {
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/non-retryable")
+
+	mockATM := atm.NewMockATM()
+
+	// Fail with a non-retryable error (e.g., 404 not found)
+	updateCalls := 0
+	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+		updateCalls++
+		if status == atm.PlanStatusComplete {
+			return nil, fmt.Errorf("not found: plan 99")
+		}
+		return &atm.Plan{ID: id, Status: status}, nil
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-non-retryable", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := &Worker{
+		atm:               mockATM,
+		config:            cfg,
+		worktreeManager:   wtMgr,
+		notifier:          &notify.NoopNotifier{},
+		completionMode:    "branch",
+		git:               git.NewGit(tmpDir),
+		statusRetryConfig: fastCfg,
+	}
+
+	plan := &atm.Plan{ID: 99, FeatureBranch: "feat/non-retryable"}
+	info := &PlanInfo{ID: 99, Name: "Non-Retryable", Branch: "feat/non-retryable"}
+
+	err := w.completePlan(plan, info, wtDir)
+	if err != nil {
+		t.Fatalf("completePlan() should return nil even on non-retryable error, got: %v", err)
+	}
+
+	// Non-retryable error should fail after 1 attempt (no retries)
+	if updateCalls != 1 {
+		t.Errorf("Expected 1 UpdatePlanStatus call (no retries for non-retryable), got %d", updateCalls)
+	}
+
+	// Worktree should NOT be cleaned up (status update failed)
+	if wtMgr.RemoveCalls != 0 {
+		t.Errorf("Expected 0 worktree Remove calls, got %d", wtMgr.RemoveCalls)
+	}
+}
+
+func TestProcessPlan_BlockedStatusUsesRetry(t *testing.T) {
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/blocked-retry")
+
+	mockATM := atm.NewMockATM()
+
+	// PlanContextText for prompt building
+	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Context", nil
+	}
+	// PlanContext for stats
+	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
+		return &atm.AgentContext{
+			Stats: atm.Stats{TotalTasks: 2, Done: 0},
+		}, nil
+	}
+
+	// Track blocked status update calls
+	blockedUpdateCalls := 0
+	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+		if status == atm.PlanStatusBlocked {
+			blockedUpdateCalls++
+			if blockedUpdateCalls <= 2 {
+				return nil, fmt.Errorf("connection refused")
+			}
+		}
+		return &atm.Plan{ID: id, Status: status}, nil
+	}
+
+	// Runner returns an error to trigger the blocked path
+	mockRunner := &MockATMRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			return nil, fmt.Errorf("claude failed")
+		},
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-blocked-retry", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := NewWorker(WorkerConfig{
+		ATM:               mockATM,
+		ProjectSlug:       "test-project",
+		Config:            cfg,
+		WorktreeManager:   wtMgr,
+		Git:               git.NewGit(tmpDir),
+		MainWorktreePath:  tmpDir,
+		Runner:            mockRunner,
+		PromptBuilder:     prompt.NewBuilder(cfg, "", ""),
+		MaxIterations:     1,
+		CompletionMode:    "branch",
+		StatusRetryConfig: &fastCfg,
+	})
+
+	plan := &atm.Plan{ID: 50, Title: "Blocked Retry Test", FeatureBranch: "feat/blocked-retry"}
+	info := &PlanInfo{ID: 50, Name: "Blocked Retry Test", Branch: "feat/blocked-retry"}
+
+	// processPlan should return the loop error
+	err := w.processPlan(context.Background(), plan, info)
+	if err == nil {
+		t.Fatal("processPlan() should return error when loop fails")
+	}
+
+	// Should have retried the blocked status update (3 calls: 2 failures + 1 success)
+	if blockedUpdateCalls < 3 {
+		t.Errorf("Expected at least 3 blocked UpdatePlanStatus calls (with retries), got %d", blockedUpdateCalls)
 	}
 }
 
