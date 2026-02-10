@@ -158,8 +158,9 @@ func TestWorker_SendNotifications(t *testing.T) {
 	}
 
 	testInfo := &PlanInfo{ID: 1, Name: "test", Branch: "feat/test"}
+	testPlan := &atm.Plan{ID: 1, Title: "test"}
 
-	w.sendStartNotification(testInfo)
+	w.sendStartNotification(testPlan, testInfo)
 	if mockNotifier.StartCalls != 1 {
 		t.Errorf("StartCalls = %d, want 1", mockNotifier.StartCalls)
 	}
@@ -206,8 +207,9 @@ func TestWorker_SendNotifications_Disabled(t *testing.T) {
 	}
 
 	testInfo := &PlanInfo{ID: 1, Name: "test", Branch: "feat/test"}
+	testPlan := &atm.Plan{ID: 1, Title: "test"}
 
-	w.sendStartNotification(testInfo)
+	w.sendStartNotification(testPlan, testInfo)
 	w.sendCompleteNotification(testInfo, "")
 	w.sendBlockerNotification(testInfo, &runner.Blocker{})
 	w.notifyError(testInfo, ErrGHNotInstalled)
@@ -239,9 +241,10 @@ func TestWorker_SendNotifications_NilConfig(t *testing.T) {
 	}
 
 	testInfo := &PlanInfo{ID: 1, Name: "test", Branch: "feat/test"}
+	testPlan := &atm.Plan{ID: 1, Title: "test"}
 
 	// Should not panic with nil config
-	w.sendStartNotification(testInfo)
+	w.sendStartNotification(testPlan, testInfo)
 	w.sendCompleteNotification(testInfo, "")
 	w.sendBlockerNotification(testInfo, &runner.Blocker{})
 	w.notifyError(testInfo, ErrGHNotInstalled)

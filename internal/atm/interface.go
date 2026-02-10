@@ -20,4 +20,5 @@ type ATM interface {
 	AddFeedback(planID int, author, body string) (*Feedback, error)
 	CheckCriterion(id int) (*Criterion, error)
 	UncheckCriterion(id int) (*Criterion, error)
+	UpdatePlan(id int, fields map[string]string) (*Plan, error)
 }

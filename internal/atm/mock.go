@@ -30,6 +30,7 @@ type MockATM struct {
 	AddFeedbackFunc     func(planID int, author, body string) (*Feedback, error)
 	CheckCriterionFunc  func(id int) (*Criterion, error)
 	UncheckCriterionFunc func(id int) (*Criterion, error)
+	UpdatePlanFunc      func(id int, fields map[string]string) (*Plan, error)
 }
 
 // Compile-time check that MockATM implements ATM.
@@ -176,6 +177,14 @@ func (m *MockATM) UncheckCriterion(id int) (*Criterion, error) {
 	m.record("UncheckCriterion", id)
 	if m.UncheckCriterionFunc != nil {
 		return m.UncheckCriterionFunc(id)
+	}
+	return nil, nil
+}
+
+func (m *MockATM) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
+	m.record("UpdatePlan", id, fields)
+	if m.UpdatePlanFunc != nil {
+		return m.UpdatePlanFunc(id, fields)
 	}
 	return nil, nil
 }

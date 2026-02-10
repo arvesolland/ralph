@@ -276,8 +276,8 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo) error {
 	log.Info("Processing plan: %s (branch: %s)", info.Name, info.Branch)
 
-	// Send start notification
-	w.sendStartNotification(info)
+	// Send start notification (seeds thread from ATM if available, saves to ATM after creation)
+	w.sendStartNotification(plan, info)
 
 	// Call start callback
 	if w.onPlanStart != nil {
@@ -593,12 +593,51 @@ func toNotifyBlocker(b *runner.Blocker) *notify.Blocker {
 
 // Notification methods using PlanInfo.
 
-func (w *Worker) sendStartNotification(info *PlanInfo) {
+func (w *Worker) sendStartNotification(plan *atm.Plan, info *PlanInfo) {
 	if w.config == nil || !w.config.Slack.NotifyStart {
 		return
 	}
-	if err := w.notifier.Start(toNotifyPlanInfo(info)); err != nil {
+
+	np := toNotifyPlanInfo(info)
+
+	// If ATM has a Slack thread URL, seed the thread tracker so we resume the existing thread.
+	if plan.SlackThreadURL != "" {
+		channelID, threadTS, err := notify.ParseSlackThreadURL(plan.SlackThreadURL)
+		if err == nil {
+			if sn, ok := w.notifier.(*notify.SlackNotifier); ok && sn != nil {
+				_ = sn.SeedThread(info.Name, channelID, threadTS)
+				log.Info("Resumed Slack thread from ATM: %s", plan.SlackThreadURL)
+
+				// Update the living status card instead of creating a new thread
+				progress := &notify.ProgressStatus{
+					Iteration:     0,
+					MaxIterations: 0,
+					Phase:         notify.PhaseInitializing,
+				}
+				_ = w.notifier.UpdateProgress(np, progress)
+				return
+			}
+		} else {
+			log.Warn("Failed to parse Slack thread URL from ATM: %v", err)
+		}
+	}
+
+	// No existing thread — create a new one via Start()
+	if err := w.notifier.Start(np); err != nil {
 		log.Warn("Failed to send start notification: %v", err)
+		return
+	}
+
+	// After Start(), save the new thread URL back to ATM
+	if sn, ok := w.notifier.(*notify.SlackNotifier); ok && sn != nil {
+		threadURL := sn.GetThreadURL(info.Name)
+		if threadURL != "" {
+			if _, err := w.atm.UpdatePlan(plan.ID, map[string]string{"slack-thread-url": threadURL}); err != nil {
+				log.Warn("Failed to save Slack thread URL to ATM: %v", err)
+			} else {
+				log.Info("Saved Slack thread URL to ATM: %s", threadURL)
+			}
+		}
 	}
 }
 

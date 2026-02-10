@@ -79,6 +79,20 @@ func newMockSlackServer() *mockSlackServer {
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
+	mux.HandleFunc("/auth.test", func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]interface{}{
+			"ok":       true,
+			"url":      "https://testteam.slack.com/",
+			"team":     "testteam",
+			"user":     "testbot",
+			"team_id":  "T12345",
+			"user_id":  "U12345",
+			"bot_id":   "B12345",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
 	mux.HandleFunc("/chat.update", func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

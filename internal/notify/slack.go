@@ -15,8 +15,7 @@ type SlackNotifier struct {
 	channel       string
 	threadTracker *ThreadTracker
 	repoName      string
-
-
+	teamURL       string
 }
 
 // SlackNotifierConfig contains configuration for creating a SlackNotifier.
@@ -41,11 +40,23 @@ func NewSlackNotifier(cfg SlackNotifierConfig) Notifier {
 		if cfg.APIURL != "" {
 			opts = append(opts, slack.OptionAPIURL(cfg.APIURL))
 		}
+		client := slack.New(cfg.BotToken, opts...)
+
+		// Fetch workspace URL via auth.test for constructing thread permalinks
+		var teamURL string
+		resp, err := client.AuthTest()
+		if err != nil {
+			log.Debug("Failed to get workspace URL via auth.test: %v", err)
+		} else if resp != nil {
+			teamURL = resp.URL
+		}
+
 		return &SlackNotifier{
-			client:        slack.New(cfg.BotToken, opts...),
+			client:        client,
 			channel:       cfg.Channel,
 			threadTracker: cfg.ThreadTracker,
 			repoName:      cfg.RepoName,
+			teamURL:       teamURL,
 		}
 	}
 
@@ -387,6 +398,44 @@ func (s *SlackNotifier) postMessageInThread(planName string, blocks []slack.Bloc
 			log.Debug("Failed to send Slack notification: %v", err)
 		}
 	}()
+}
+
+// SeedThread pre-populates the thread tracker with an existing Slack thread.
+// This is used when resuming a plan that already has a thread URL stored in ATM.
+func (s *SlackNotifier) SeedThread(planName, channelID, threadTS string) error {
+	if s.threadTracker == nil {
+		return nil
+	}
+
+	// Only seed if we don't already have a thread for this plan
+	if existing := s.threadTracker.Get(planName); existing != nil {
+		return nil
+	}
+
+	info := &ThreadInfo{
+		PlanName:  planName,
+		ThreadTS:  threadTS,
+		ChannelID: channelID,
+		MessageTS: threadTS,
+	}
+	return s.threadTracker.Set(planName, info)
+}
+
+// TeamURL returns the Slack workspace base URL (e.g. "https://myteam.slack.com/").
+func (s *SlackNotifier) TeamURL() string {
+	return s.teamURL
+}
+
+// GetThreadURL returns the Slack thread permalink for a plan, or empty string if unavailable.
+func (s *SlackNotifier) GetThreadURL(planName string) string {
+	if s.teamURL == "" || s.threadTracker == nil {
+		return ""
+	}
+	info := s.threadTracker.Get(planName)
+	if info == nil || info.ThreadTS == "" || info.ChannelID == "" {
+		return ""
+	}
+	return BuildSlackThreadURL(s.teamURL, info.ChannelID, info.ThreadTS)
 }
 
 // Ensure SlackNotifier implements Notifier.

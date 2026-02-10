@@ -6,12 +6,42 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
 
 // ThreadsFilename is the name of the file that stores thread information.
 const ThreadsFilename = "slack_threads.json"
+
+// slackThreadURLRe matches Slack thread URLs like:
+// https://myteam.slack.com/archives/C12345/p1234567890123456
+var slackThreadURLRe = regexp.MustCompile(`/archives/(C[A-Z0-9]+)/p(\d{10})(\d{6})$`)
+
+// BuildSlackThreadURL constructs a Slack thread permalink from components.
+// teamURL is the workspace base URL (e.g. "https://myteam.slack.com/").
+// channelID is the Slack channel ID (e.g. "C12345").
+// threadTS is the thread timestamp (e.g. "1234567890.123456").
+func BuildSlackThreadURL(teamURL, channelID, threadTS string) string {
+	teamURL = strings.TrimRight(teamURL, "/")
+	// Remove the dot from the timestamp: "1234567890.123456" -> "1234567890123456"
+	ts := strings.Replace(threadTS, ".", "", 1)
+	return fmt.Sprintf("%s/archives/%s/p%s", teamURL, channelID, ts)
+}
+
+// ParseSlackThreadURL extracts channel ID and thread timestamp from a Slack thread URL.
+// URL format: https://{team}.slack.com/archives/{channelID}/p{ts_no_dot}
+func ParseSlackThreadURL(url string) (channelID, threadTS string, err error) {
+	matches := slackThreadURLRe.FindStringSubmatch(url)
+	if matches == nil {
+		return "", "", fmt.Errorf("invalid Slack thread URL: %s", url)
+	}
+	channelID = matches[1]
+	// Reconstruct the timestamp with a dot: "1234567890" + "." + "123456"
+	threadTS = matches[2] + "." + matches[3]
+	return channelID, threadTS, nil
+}
 
 // ThreadInfo contains Slack thread information for a plan.
 type ThreadInfo struct {

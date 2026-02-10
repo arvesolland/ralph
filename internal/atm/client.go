@@ -320,6 +320,25 @@ func (c *Client) UncheckCriterion(id int) (*Criterion, error) {
 	return &resp.Data, nil
 }
 
+// UpdatePlan updates a plan's fields via atm-cli plan update.
+func (c *Client) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
+	args := []string{"plan", "update", strconv.Itoa(id)}
+	for key, value := range fields {
+		args = append(args, "--"+key, value)
+	}
+	data, err := c.exec(args...)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data Plan `json:"data"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parsing plan response: %w", err)
+	}
+	return &resp.Data, nil
+}
+
 // exec runs the atm-cli binary with global flags and the given arguments,
 // returning stdout on success or an error wrapping stderr on failure.
 // Commands are bounded by ExecTimeout per attempt and retried on transient failures.
