@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strconv"
 	"time"
+
+	"github.com/arvesolland/ralph/internal/retry"
 )
 
 // ExecTimeout is the timeout for atm-cli commands.
@@ -27,6 +29,7 @@ type Client struct {
 	binPath  string
 	apiURL   string
 	apiToken string
+	retrier  *retry.Retrier
 }
 
 // NewClient creates a new ATM client with the given configuration.
@@ -39,6 +42,12 @@ func NewClient(cfg ClientConfig) *Client {
 		binPath:  bin,
 		apiURL:   cfg.APIURL,
 		apiToken: cfg.APIToken,
+		retrier: retry.NewRetrier(retry.RetryConfig{
+			MaxRetries:   3,
+			InitialDelay: 2 * time.Second,
+			MaxDelay:     30 * time.Second,
+			JitterFactor: 0.25,
+		}),
 	}
 }
 
@@ -313,7 +322,7 @@ func (c *Client) UncheckCriterion(id int) (*Criterion, error) {
 
 // exec runs the atm-cli binary with global flags and the given arguments,
 // returning stdout on success or an error wrapping stderr on failure.
-// Commands are bounded by ExecTimeout to prevent hangs.
+// Commands are bounded by ExecTimeout per attempt and retried on transient failures.
 func (c *Client) exec(args ...string) ([]byte, error) {
 	// Prepend global flags.
 	var cmdArgs []string
@@ -325,19 +334,24 @@ func (c *Client) exec(args ...string) ([]byte, error) {
 	}
 	cmdArgs = append(cmdArgs, args...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), ExecTimeout)
-	defer cancel()
+	var stdout []byte
+	err := c.retrier.Do(func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), ExecTimeout)
+		defer cancel()
 
-	cmd := exec.CommandContext(ctx, c.binPath, cmdArgs...)
-	stdout, err := cmd.Output()
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("atm-cli %s: timed out after %v", args[0], ExecTimeout)
+		cmd := exec.CommandContext(ctx, c.binPath, cmdArgs...)
+		out, err := cmd.Output()
+		if err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return fmt.Errorf("atm-cli %s: timed out after %v", args[0], ExecTimeout)
+			}
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return fmt.Errorf("atm-cli %s: %s", args[0], string(exitErr.Stderr))
+			}
+			return fmt.Errorf("running atm-cli: %w", err)
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("atm-cli %s: %s", args[0], string(exitErr.Stderr))
-		}
-		return nil, fmt.Errorf("running atm-cli: %w", err)
-	}
-	return stdout, nil
+		stdout = out
+		return nil
+	})
+	return stdout, err
 }

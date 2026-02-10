@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/arvesolland/ralph/internal/retry"
 )
 
 func TestNewCLIRunner(t *testing.T) {
@@ -26,12 +28,12 @@ func TestNewCLIRunner(t *testing.T) {
 }
 
 func TestNewCLIRunnerWithRetrier(t *testing.T) {
-	config := RetryConfig{
+	config := retry.RetryConfig{
 		MaxRetries:   3,
 		InitialDelay: time.Second,
 		MaxDelay:     10 * time.Second,
 	}
-	retrier := NewRetrier(config)
+	retrier := retry.NewRetrier(config)
 	runner := NewCLIRunnerWithRetrier(retrier)
 
 	if runner == nil {

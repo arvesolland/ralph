@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/arvesolland/ralph/internal/log"
+	"github.com/arvesolland/ralph/internal/retry"
 )
 
 // Runner defines the interface for Claude CLI execution.
@@ -60,7 +61,7 @@ type Blocker struct {
 
 // CLIRunner implements Runner by executing the claude CLI.
 type CLIRunner struct {
-	retrier *Retrier
+	retrier *retry.Retrier
 
 	// terminationGracePeriod is how long to wait after SIGTERM before SIGKILL
 	terminationGracePeriod time.Duration
@@ -73,13 +74,13 @@ type CLIRunner struct {
 // NewCLIRunner creates a new CLIRunner with default settings.
 func NewCLIRunner() *CLIRunner {
 	return &CLIRunner{
-		retrier:                NewRetrier(DefaultRetryConfig()),
+		retrier:                retry.NewRetrier(retry.DefaultRetryConfig()),
 		terminationGracePeriod: 5 * time.Second,
 	}
 }
 
 // NewCLIRunnerWithRetrier creates a new CLIRunner with a custom retrier.
-func NewCLIRunnerWithRetrier(retrier *Retrier) *CLIRunner {
+func NewCLIRunnerWithRetrier(retrier *retry.Retrier) *CLIRunner {
 	return &CLIRunner{
 		retrier:                retrier,
 		terminationGracePeriod: 5 * time.Second,
@@ -293,7 +294,7 @@ func (r *CLIRunner) runOnce(ctx context.Context, prompt string, opts Options) (*
 			}
 
 			// Non-retryable exit error
-			return result, WrapNonRetryable(fmt.Errorf("claude exited with code %d: %s", exitErr.ExitCode(), errMsg))
+			return result, retry.WrapNonRetryable(fmt.Errorf("claude exited with code %d: %s", exitErr.ExitCode(), errMsg))
 		}
 		return result, waitErr
 	}
