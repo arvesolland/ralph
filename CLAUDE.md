@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working on the Ralph repository.
 
 Ralph is an autonomous AI development loop orchestration system implementing the "Ralph Wiggum technique" - fresh context per iteration with progress persisted in Board and git.
 
-Ralph is written in Go. The codebase lives in `cmd/` and `internal/` directories following standard Go project layout. Task management is handled via Board (task management service), accessed through the `board-cli` binary.
+Ralph is written in Go. The codebase lives in `cmd/` and `internal/` directories following standard Go project layout. Task management is handled via Board (task management service), accessed through the `board` binary.
 
 ## Commands
 
@@ -48,7 +48,7 @@ cmd/ralph/              # Main entry point
 internal/
 ├── cli/                # Cobra commands (init, run, worker, status, cleanup, version)
 ├── config/             # Config loading, YAML parsing, project detection
-├── board/              # Board client (shells out to board-cli binary)
+├── board/              # Board client (shells out to board binary)
 ├── runner/             # Claude execution, streaming, retry logic, iteration loop
 ├── git/                # Git operations (commit, branch, worktree, status)
 ├── worktree/           # Worktree management, dependency auto-detection, hooks
@@ -58,25 +58,25 @@ internal/
 └── log/                # Structured logging with color support
 test/
 └── integration/        # End-to-end integration tests (requires Claude CLI)
-    └── fakeboard/      # Fake board-cli binary for test isolation
+    └── fakeboard/      # Fake board binary for test isolation
 ```
 
 Key packages:
 - `internal/runner/loop.go` - Main iteration loop (prompt -> Claude -> verify Board stats -> commit)
 - `internal/worker/worker.go` - Queue processor (poll Board -> activate -> iterate -> complete)
-- `internal/board/client.go` - Board client wrapping board-cli commands
+- `internal/board/client.go` - Board client wrapping board commands
 - `internal/worktree/manager.go` - Worktree creation, cleanup, dependency installation
 
 ### Board Integration
 
-Ralph uses Board as its external task management backend. The `internal/board/` package wraps the `board-cli` binary:
+Ralph uses Board as its external task management backend. The `internal/board/` package wraps the `board` binary:
 
 - **Plan lifecycle:** ready -> active -> complete (or blocked)
 - **Task lifecycle:** todo -> claimed -> doing -> done (or blocked/skipped)
-- **Agent context:** Single-call bootstrapping via `board-cli plan context <id>`
+- **Agent context:** Single-call bootstrapping via `board plan context <id>`
 - **Progress/Feedback:** Append-only logs for inter-iteration memory
 
-The Board client (`internal/board/client.go`) shells out to `board-cli` with `--api-url` and `--api-token` flags. Configuration is in `.ralph/config.yaml` under the `board:` section.
+The Board client (`internal/board/client.go`) shells out to `board` with `--api-url` and `--api-token` flags. Configuration is in `.ralph/config.yaml` under the `board:` section.
 
 ### Worktree-Based Isolation
 
@@ -226,7 +226,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/config/defaults.go` | Default configuration values |
 | `internal/config/detect.go` | Project type auto-detection |
 | `internal/board/interface.go` | Board interface definition |
-| `internal/board/client.go` | Board client (shells out to board-cli) |
+| `internal/board/client.go` | Board client (shells out to board) |
 | `internal/board/types.go` | Board data types (Plan, Task, Criterion, etc.) |
 | `internal/board/mock.go` | Mock Board client for testing |
 | `internal/runner/loop.go` | Main iteration loop |
@@ -252,7 +252,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `.goreleaser.yaml` | Release configuration |
 | `Makefile` | Build targets |
 | `test/integration/integration_test.go` | End-to-end integration tests |
-| `test/integration/fakeboard/` | Fake board-cli binary for test isolation |
+| `test/integration/fakeboard/` | Fake board binary for test isolation |
 
 ## Testing
 
@@ -289,7 +289,7 @@ Integration tests are in `test/integration/` and require:
 - Built ralph binary (`make build`)
 - Claude CLI available in PATH
 
-They use a fake `board-cli` binary (`test/integration/fakeboard/`) that stores state in a JSON file, providing full end-to-end testing without a real Board server.
+They use a fake `board` binary (`test/integration/fakeboard/`) that stores state in a JSON file, providing full end-to-end testing without a real Board server.
 
 Test cases:
 - `TestSingleTask` - Basic single task completion with `ralph run --plan`
@@ -373,7 +373,7 @@ Release configuration is in `.goreleaser.yaml`. CI/CD workflows are in `.github/
 
 ## Gotchas
 
-- **Board is required**: Ralph needs `board-cli` in PATH and Board configuration in `.ralph/config.yaml`. Run `ralph init` to set up.
+- **Board is required**: Ralph needs `board` in PATH and Board configuration in `.ralph/config.yaml`. Run `ralph init` to set up.
 - **Feature branches come from Board**: The `feature_branch` field on the Board plan determines the branch name. Ralph creates the worktree on that branch.
 - **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion -- Board stats verification catches this.
 - **False completion circuit breaker**: After 5 consecutive false completions (agent claims done but Board disagrees), Ralph halts.

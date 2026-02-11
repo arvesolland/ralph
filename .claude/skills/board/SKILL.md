@@ -1,6 +1,6 @@
 # Skill: Board
 
-Interact with Board plans, tasks, feedback, and progress via `board-cli`.
+Interact with Board plans, tasks, feedback, and progress via `board`.
 
 ## When to Use
 
@@ -14,13 +14,13 @@ Use `/board` when you want to:
 
 ## Prerequisites
 
-- `board-cli` must be on PATH
-- `board-cli` manages its own auth via `~/.config/board/config.json` (set up separately)
+- `board` must be on PATH
+- `board` manages its own auth via `~/.config/board/config.json` (set up separately)
 - Project slug is needed for project-level commands — read from `.ralph/config.yaml` (`board.project_slug`) if configured, otherwise ask the user or infer from the project name
 
 ## Usage
 
-The user invokes `/board <subcommand> [args]`. Parse the subcommand and arguments, then run the appropriate `board-cli` command(s). If no subcommand is given, show a help summary.
+The user invokes `/board <subcommand> [args]`. Parse the subcommand and arguments, then run the appropriate `board` command(s). If no subcommand is given, show a help summary.
 
 ### Subcommands
 
@@ -28,7 +28,7 @@ The user invokes `/board <subcommand> [args]`. Parse the subcommand and argument
 Show the current project status: active plan, task stats, available tasks, recent feedback.
 
 ```bash
-board-cli project context <project-slug> --format text
+board project context <project-slug> --format text
 ```
 
 Read the project slug from `.ralph/config.yaml` (`board.project_slug`), falling back to `project.name`. Display the output clearly formatted.
@@ -38,10 +38,10 @@ Show the full agent context for a plan (what Ralph's agent sees each iteration).
 
 ```bash
 # With plan ID
-board-cli plan context <plan-id> --format text
+board plan context <plan-id> --format text
 
 # Without plan ID - get active plan from project context first
-board-cli project context <project-slug> --format text
+board project context <project-slug> --format text
 ```
 
 If no plan ID provided, read project slug from config and show the active plan's context.
@@ -51,17 +51,17 @@ List plans for the project, optionally filtered by status.
 
 ```bash
 # All plans
-board-cli plan list <project-slug> --pretty
+board plan list <project-slug> --pretty
 
 # Filtered by status (draft, ready, active, complete, blocked)
-board-cli plan list <project-slug> --status <status> --pretty
+board plan list <project-slug> --status <status> --pretty
 ```
 
 #### `/board plan <plan-id>`
 Show details for a specific plan.
 
 ```bash
-board-cli plan show <plan-id> --pretty
+board plan show <plan-id> --pretty
 ```
 
 #### `/board tasks <plan-id> [--status <status>] [--available]`
@@ -69,27 +69,27 @@ List tasks for a plan.
 
 ```bash
 # All tasks
-board-cli task list <plan-id> --pretty
+board task list <plan-id> --pretty
 
 # Available tasks only (unblocked, todo)
-board-cli task list <plan-id> --available --pretty
+board task list <plan-id> --available --pretty
 
 # By status (todo, claimed, doing, done, blocked, skipped)
-board-cli task list <plan-id> --status <status> --pretty
+board task list <plan-id> --status <status> --pretty
 ```
 
 #### `/board task <task-id>`
 Show a specific task with its acceptance criteria.
 
 ```bash
-board-cli task show <task-id> --format full --pretty
+board task show <task-id> --format full --pretty
 ```
 
 #### `/board feedback <plan-id> <message>`
 Add feedback to a plan. This is the primary way to steer Ralph's agent on the next iteration. The agent reads the most recent feedback entry first.
 
 ```bash
-board-cli feedback add <plan-id> --author human --body "<message>"
+board feedback add <plan-id> --author human --body "<message>"
 ```
 
 Tips for effective feedback:
@@ -104,66 +104,66 @@ View or add progress entries.
 
 ```bash
 # View recent progress
-board-cli progress list <plan-id> --pretty
+board progress list <plan-id> --pretty
 
 # Add a progress note
-board-cli progress add <plan-id> --author human --body "<message>"
+board progress add <plan-id> --author human --body "<message>"
 ```
 
 #### `/board feedback-list <plan-id>`
 View feedback history for a plan.
 
 ```bash
-board-cli feedback list <plan-id> --pretty
+board feedback list <plan-id> --pretty
 ```
 
 #### `/board complete <task-id>`
 Manually mark a task as done.
 
 ```bash
-board-cli task complete <task-id>
+board task complete <task-id>
 ```
 
 #### `/board block <task-id> <reason>`
 Mark a task as blocked with a reason.
 
 ```bash
-board-cli task block <task-id> --reason "<reason>"
+board task block <task-id> --reason "<reason>"
 ```
 
 #### `/board skip <task-id> [reason]`
 Skip a task, optionally with a reason.
 
 ```bash
-board-cli task skip <task-id> --reason "<reason>"
+board task skip <task-id> --reason "<reason>"
 ```
 
 #### `/board create-task <plan-id> <title> [--description <desc>]`
 Add a new task to a plan.
 
 ```bash
-board-cli task create <plan-id> --title "<title>" --description "<description>"
+board task create <plan-id> --title "<title>" --description "<description>"
 ```
 
 #### `/board plan-status <plan-id> <status>`
 Transition a plan's status (draft, ready, active, complete, blocked).
 
 ```bash
-board-cli plan status <plan-id> --status <status>
+board plan status <plan-id> --status <status>
 ```
 
 #### `/board check <criteria-id>`
 Mark an acceptance criterion as satisfied.
 
 ```bash
-board-cli criteria check <criteria-id>
+board criteria check <criteria-id>
 ```
 
 #### `/board uncheck <criteria-id>`
 Mark an acceptance criterion as not satisfied.
 
 ```bash
-board-cli criteria uncheck <criteria-id>
+board criteria uncheck <criteria-id>
 ```
 
 ### Default: `/board` (no args)
@@ -193,7 +193,7 @@ Board Skill - Task management commands
 
 ## Config
 
-`board-cli` handles its own authentication via `~/.config/board/config.json`. No auth flags need to be passed — just call `board-cli` directly.
+`board` handles its own authentication via `~/.config/board/config.json`. No auth flags need to be passed — just call `board` directly.
 
 The only config this skill reads from `.ralph/config.yaml` is the project slug:
 
@@ -207,7 +207,7 @@ If `board.project_slug` is not set in the config, ask the user for it or try usi
 ## Behavior
 
 - Read `.ralph/config.yaml` to get the project slug for project-level commands.
-- Do NOT pass `--api-url` or `--api-token` flags — `board-cli` handles auth from its own config.
+- Do NOT pass `--api-url` or `--api-token` flags — `board` handles auth from its own config.
 - Use `--pretty` for human-readable JSON output.
 - Use `--format text` for context commands (optimized for readability).
 - When showing task lists, summarize the output in a clear table format.
