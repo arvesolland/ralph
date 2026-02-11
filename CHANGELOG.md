@@ -13,10 +13,10 @@ Complete rewrite from bash scripts to a Go binary with Board integration.
 
 ### Added
 - **Board Integration** - Plans and tasks managed via Board API instead of filesystem queue
-  - `internal/board/` package wrapping `board-cli` binary
+  - `internal/board/` package wrapping `board` binary
   - Plan lifecycle: ready -> active -> complete/blocked
   - Task lifecycle: todo -> claimed -> doing -> done/blocked/skipped
-  - Agent context bootstrapping via `board-cli plan context <id>`
+  - Agent context bootstrapping via `board plan context <id>`
   - Progress and feedback entries for inter-iteration memory
 - **Board-based completion verification** - Checks Board task stats instead of Haiku LLM verification
   - False completion circuit breaker (halts after 5 consecutive false claims)
@@ -59,7 +59,7 @@ Complete rewrite from bash scripts to a Go binary with Board integration.
 - **Context format**: `context.json` uses `planId` (int) instead of `planFile` (string)
 - **Prompt placeholders**: Added `{{PLAN_ID}}` and `{{BOARD_CONTEXT}}` for Board data injection
 - **Worker defaults**: Max iterations increased to 200 (from 30) for worker mode
-- **Integration tests**: Rewritten with fake Board binary, local bare git origin, and PATH-based board-cli injection
+- **Integration tests**: Rewritten with fake Board binary, local bare git origin, and PATH-based board injection
 
 ### Removed
 - **Bash scripts**: `ralph.sh`, `ralph-worker.sh`, `ralph-init.sh`, `ralph-reverse.sh`, `ralph-cron.sh`, `ralph-release.sh`, `ralph-update.sh`, `install.sh`

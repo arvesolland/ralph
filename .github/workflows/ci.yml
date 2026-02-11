@@ -55,7 +55,7 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     # Integration tests require Claude CLI in PATH.
-    # Uses fake board-cli binary (built from test/integration/fakeboard/)
+    # Uses fake board binary (built from test/integration/fakeboard/)
     # and a fake Board server for task management.
     if: false  # Disabled - requires Claude CLI in CI
 

@@ -93,12 +93,12 @@ During init, you'll be prompted for Board configuration (project slug, API URL, 
 
 ### 2. Create a Plan in Board
 
-Create plans in Board via `board-cli` or the Board web UI:
+Create plans in Board via `board` or the Board web UI:
 
 ```bash
-board-cli plan create <project-slug> --title "My Feature"
-board-cli task create <plan-id> --title "First task" --description "..."
-board-cli plan status <plan-id> --status ready
+board plan create <project-slug> --title "My Feature"
+board task create <plan-id> --title "First task" --description "..."
+board plan status <plan-id> --status ready
 ```
 
 ### 3. Run Ralph
@@ -240,7 +240,7 @@ board:
   project_slug: "my-project"
   api_url: "https://board.example.com/api"
   api_token: "your-api-token"
-  bin_path: "board-cli"  # Path to board-cli binary (default: "board-cli")
+  bin_path: "board"  # Path to board binary (default: "board")
 
 worker:
   sync: false           # Pull from remote before each queue check
@@ -298,13 +298,13 @@ Ralph uses Board for plan and task management:
 
 ```bash
 # Create a plan in Board
-board-cli plan create my-project --title "Add user auth"
+board plan create my-project --title "Add user auth"
 
 # Add tasks with acceptance criteria
-board-cli task create <plan-id> --title "Create login endpoint"
+board task create <plan-id> --title "Create login endpoint"
 
 # Mark plan as ready for Ralph
-board-cli plan status <plan-id> --status ready
+board plan status <plan-id> --status ready
 
 # Ralph picks it up automatically
 ralph worker
@@ -379,7 +379,7 @@ cmd/ralph/              # Main entry point
 internal/
 ├── cli/                # Cobra commands (init, run, worker, status, cleanup, version)
 ├── config/             # Config loading, YAML parsing, project detection
-├── board/              # Board client (shells out to board-cli)
+├── board/              # Board client (shells out to board)
 ├── runner/             # Claude execution, streaming, retry, iteration loop
 ├── git/                # Git operations (commit, branch, status, worktree)
 ├── worktree/           # Worktree management, dependency auto-detection, hooks
@@ -391,7 +391,7 @@ internal/
 
 ### Key Packages
 
-- **board** - Board client wrapping the `board-cli` binary for plan/task management
+- **board** - Board client wrapping the `board` binary for plan/task management
 - **runner** - Core Claude CLI execution with JSON streaming, retry logic, and Board-based completion verification
 - **worker** - Queue processor that polls Board for ready plans, runs iteration loops, handles PR/merge/branch completion
 - **worktree** - Git worktree lifecycle management with dependency auto-detection
@@ -453,7 +453,7 @@ If the agent outputs `<promise>COMPLETE</promise>` but Board stats show tasks re
 ## Requirements
 
 - **Claude Code CLI** - `claude` command must be available in PATH
-- **Board CLI** - `board-cli` command for task management (configurable via `board.bin_path`)
+- **Board CLI** - `board` command for task management (configurable via `board.bin_path`)
 - **Git** - For version control and worktree management
 - **GitHub CLI** (optional) - For PR creation (`gh`)
 

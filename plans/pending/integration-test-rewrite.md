@@ -2,13 +2,13 @@
 
 ## Context
 
-Ralph was rewritten from filesystem-based plan/task management to Board API-based management. The integration tests at `test/integration/integration_test.go` (1783 lines) are tightly coupled to the old model (pending/current/complete directories, plan.md checkboxes, state.yaml). The Board client (`internal/board/client.go`) is a concrete struct with no interface, making it impossible to mock for unit tests. Both the Go orchestrator and the Claude agent shell out to `board-cli`, so integration tests need a fake binary that serves both.
+Ralph was rewritten from filesystem-based plan/task management to Board API-based management. The integration tests at `test/integration/integration_test.go` (1783 lines) are tightly coupled to the old model (pending/current/complete directories, plan.md checkboxes, state.yaml). The Board client (`internal/board/client.go`) is a concrete struct with no interface, making it impossible to mock for unit tests. Both the Go orchestrator and the Claude agent shell out to `board`, so integration tests need a fake binary that serves both.
 
 ### Key Technical Details (from code review)
 
 - `*board.Client` has 17 public methods, all shell out via private `exec()` method
 - All JSON responses are wrapped in `{"data": ...}` envelope (except `plan context --format text` which returns raw text)
-- CLI grammar: `board-cli [--api-url URL] [--api-token TOKEN] <group> <action> [positional-args] [--flags]`
+- CLI grammar: `board [--api-url URL] [--api-token TOKEN] <group> <action> [positional-args] [--flags]`
 - `LoopConfig.Board` and `WorkerConfig.Board` are `*board.Client` (concrete pointer, not interface)
 - 9 Board call sites across loop.go (4) and worker.go (5), zero are tested
 - Existing mock patterns: `MockRunner`, `MockNotifier`, `MockBoardRunner` - all use hook-based function fields
@@ -75,7 +75,7 @@ Add `var _ Board = (*Client)(nil)` compile check to `client.go`.
 - `TestWorker_RunOnce_EmptyQueue` — `ProjectContext` returns nothing, `ListPlans` returns empty → `ErrQueueEmpty`
 - `TestWorker_RunOnce_CompletionFlow` — verifies plan transitions: ready → active → complete via `UpdatePlanStatus`
 
-### Phase 3: Fake `board-cli` Binary (~3 new files)
+### Phase 3: Fake `board` Binary (~3 new files)
 
 **`test/integration/fakeboard/main.go`** — CLI entry point:
 - Parses global flags `--api-url` and `--api-token` (accept and ignore)
@@ -110,11 +110,11 @@ Key: `--reason` is optional for `task skip`. `--format text` output must match w
 
 **`test/integration/integration_test.go`** changes:
 
-**TestMain** — build fake `board-cli` binary once via `go build -o fakeboard ./test/integration/fakeboard/`
+**TestMain** — build fake `board` binary once via `go build -o fakeboard ./test/integration/fakeboard/`
 
 **Workspace helper updates:**
 - `setupWorkspace()` writes Board config to `.ralph/config.yaml`:
-  - `board.bin_path`: path to fake board-cli binary
+  - `board.bin_path`: path to fake board binary
   - `board.project_slug`: test project slug
   - `board.api_url` / `board.api_token`: dummy values
 - New `SeedBoardState(slug, planTitle, tasks)` — writes initial state to fake Board state file
