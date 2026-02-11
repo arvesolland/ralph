@@ -36,11 +36,11 @@ var (
 
 var workerCmd = &cobra.Command{
 	Use:   "worker",
-	Short: "Process plans from the ATM queue",
-	Long: `Run the worker loop to process plans from the ATM queue.
+	Short: "Process plans from the Board queue",
+	Long: `Run the worker loop to process plans from the Board queue.
 
 The worker will:
-1. Poll ATM for ready plans
+1. Poll Board for ready plans
 2. Activate the first ready plan
 3. Create a git worktree for the plan's branch
 4. Run the iteration loop until completion or max iterations
@@ -101,13 +101,13 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	}
 
 	// Determine project slug
-	projectSlug := cfg.ATM.ProjectSlug
+	projectSlug := cfg.Board.ProjectSlug
 	if projectSlug == "" {
-		return fmt.Errorf("atm.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
+		return fmt.Errorf("board.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
 	}
 
-	// Create ATM client
-	atmClient := cfg.ATMClient()
+	// Create Board client
+	boardClient := cfg.BoardClient()
 
 	// Determine sync settings (flags take precedence over config)
 	syncEnabled := workerSync
@@ -177,7 +177,7 @@ func runWorker(cmd *cobra.Command, args []string) error {
 
 	// Create worker
 	w := worker.NewWorker(worker.WorkerConfig{
-		ATM:              atmClient,
+		Board:            boardClient,
 		ProjectSlug:      projectSlug,
 		Config:           cfg,
 		ConfigDir:        configDir,

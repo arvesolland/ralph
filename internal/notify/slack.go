@@ -401,7 +401,7 @@ func (s *SlackNotifier) postMessageInThread(planName string, blocks []slack.Bloc
 }
 
 // SeedThread pre-populates the thread tracker with an existing Slack thread.
-// This is used when resuming a plan that already has a thread URL stored in ATM.
+// This is used when resuming a plan that already has a thread URL stored in Board.
 func (s *SlackNotifier) SeedThread(planName, channelID, threadTS string) error {
 	if s.threadTracker == nil {
 		return nil

@@ -1,4 +1,4 @@
-package atm
+package board
 
 import (
 	"os"
@@ -52,15 +52,15 @@ func (instantClock) Now() time.Time      { return time.Now() }
 
 func TestNewClientDefaults(t *testing.T) {
 	c := NewClient(ClientConfig{})
-	if c.binPath != "atm-cli" {
-		t.Errorf("binPath = %q, want %q", c.binPath, "atm-cli")
+	if c.binPath != "board-cli" {
+		t.Errorf("binPath = %q, want %q", c.binPath, "board-cli")
 	}
 }
 
 func TestNewClientCustomBin(t *testing.T) {
-	c := NewClient(ClientConfig{BinPath: "/usr/local/bin/my-atm"})
-	if c.binPath != "/usr/local/bin/my-atm" {
-		t.Errorf("binPath = %q, want %q", c.binPath, "/usr/local/bin/my-atm")
+	c := NewClient(ClientConfig{BinPath: "/usr/local/bin/my-board"})
+	if c.binPath != "/usr/local/bin/my-board" {
+		t.Errorf("binPath = %q, want %q", c.binPath, "/usr/local/bin/my-board")
 	}
 }
 
@@ -70,7 +70,7 @@ func TestExecSuccess(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	bin := writeFakeScript(t, dir, "atm-cli", `echo '{"data":{"id":1,"title":"Test Plan","status":"active"}}'`)
+	bin := writeFakeScript(t, dir, "board-cli", `echo '{"data":{"id":1,"title":"Test Plan","status":"active"}}'`)
 
 	c := newTestClient(bin)
 	plan, err := c.GetPlan(1)
@@ -91,7 +91,7 @@ func TestExecError(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	bin := writeFakeScript(t, dir, "atm-cli", `echo "not found: plan 999" >&2; exit 1`)
+	bin := writeFakeScript(t, dir, "board-cli", `echo "not found: plan 999" >&2; exit 1`)
 
 	c := newTestClient(bin)
 	_, err := c.GetPlan(999)
@@ -105,7 +105,7 @@ func TestExecError(t *testing.T) {
 
 func TestExecTimeoutErrorFormat(t *testing.T) {
 	// The exec() method uses context.WithTimeout and formats timeout errors as:
-	//   "atm-cli <subcommand>: timed out after <duration>"
+	//   "board-cli <subcommand>: timed out after <duration>"
 	// ExecTimeout is a const (30s), so we can't test actual timeouts without waiting.
 	// Instead, verify the error format string by checking the code path indirectly:
 	// a script that outputs nothing and exits 0 produces a JSON parse error,
@@ -120,7 +120,7 @@ func TestExecTimeoutErrorFormat(t *testing.T) {
 
 	dir := t.TempDir()
 	// Script kills itself with SIGTERM (simulating what happens when context deadline fires).
-	bin := writeFakeScript(t, dir, "atm-cli", `kill -TERM $$`)
+	bin := writeFakeScript(t, dir, "board-cli", `kill -TERM $$`)
 
 	c := &Client{
 		binPath:  bin,
@@ -151,7 +151,7 @@ func TestExecParsesGlobalFlags(t *testing.T) {
 
 	dir := t.TempDir()
 	// Script echoes its arguments so we can verify global flags were passed.
-	bin := writeFakeScript(t, dir, "atm-cli", `
+	bin := writeFakeScript(t, dir, "board-cli", `
 # Check that --api-url and --api-token were passed
 for arg in "$@"; do
   case "$arg" in
@@ -197,7 +197,7 @@ func TestRetryOnTransientError(t *testing.T) {
 	}
 
 	// Script fails with "connection refused" the first 2 times, then succeeds.
-	bin := writeFakeScript(t, dir, "atm-cli", `
+	bin := writeFakeScript(t, dir, "board-cli", `
 COUNTER_FILE="`+counterFile+`"
 COUNT=$(cat "$COUNTER_FILE")
 COUNT=$((COUNT + 1))
@@ -238,7 +238,7 @@ func TestNoRetryOnPermanentError(t *testing.T) {
 	}
 
 	// Script always fails with "404 not found" — should NOT be retried.
-	bin := writeFakeScript(t, dir, "atm-cli", `
+	bin := writeFakeScript(t, dir, "board-cli", `
 COUNTER_FILE="`+counterFile+`"
 COUNT=$(cat "$COUNTER_FILE")
 COUNT=$((COUNT + 1))
@@ -270,7 +270,7 @@ func TestPlanContextSuccess(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	bin := writeFakeScript(t, dir, "atm-cli", `echo '{"data":{"project":{"id":1,"slug":"test"},"plan":{"id":42,"title":"Test","status":"active"},"stats":{"total_tasks":3,"done":1,"doing":0,"claimed":0,"blocked":0,"available":2,"skipped":0},"available_tasks":[],"blocked_tasks":[],"recent_progress":[],"recent_feedback":[]}}'`)
+	bin := writeFakeScript(t, dir, "board-cli", `echo '{"data":{"project":{"id":1,"slug":"test"},"plan":{"id":42,"title":"Test","status":"active"},"stats":{"total_tasks":3,"done":1,"doing":0,"claimed":0,"blocked":0,"available":2,"skipped":0},"available_tasks":[],"blocked_tasks":[],"recent_progress":[],"recent_feedback":[]}}'`)
 
 	c := newTestClient(bin)
 	ctx, err := c.PlanContext(42)
@@ -291,7 +291,7 @@ func TestPlanContextTextSuccess(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	bin := writeFakeScript(t, dir, "atm-cli", `echo "Plan #42: Test Plan\nStatus: active"`)
+	bin := writeFakeScript(t, dir, "board-cli", `echo "Plan #42: Test Plan\nStatus: active"`)
 
 	c := newTestClient(bin)
 	text, err := c.PlanContextText(42)
@@ -309,7 +309,7 @@ func TestCompleteTaskSuccess(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	bin := writeFakeScript(t, dir, "atm-cli", `echo '{"data":{"id":10,"plan_id":42,"title":"Task","status":"done"}}'`)
+	bin := writeFakeScript(t, dir, "board-cli", `echo '{"data":{"id":10,"plan_id":42,"title":"Task","status":"done"}}'`)
 
 	c := newTestClient(bin)
 	task, err := c.CompleteTask(10)
@@ -327,7 +327,7 @@ func TestAddProgressSuccess(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	bin := writeFakeScript(t, dir, "atm-cli", `echo '{"data":{"id":1,"plan_id":42,"author":"ralph","body":"iteration done"}}'`)
+	bin := writeFakeScript(t, dir, "board-cli", `echo '{"data":{"id":1,"plan_id":42,"author":"ralph","body":"iteration done"}}'`)
 
 	c := newTestClient(bin)
 	p, err := c.AddProgress(42, "ralph", "iteration done")

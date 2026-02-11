@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,11 +20,11 @@ type Config struct {
 	Completion CompletionConfig `yaml:"completion"`
 	Runner     RunnerConfig     `yaml:"runner"`
 	Worker     WorkerRunConfig  `yaml:"worker"`
-	ATM        ATMConfig        `yaml:"atm"`
+	Board      BoardConfig      `yaml:"board"`
 }
 
-// ATMConfig contains settings for the ATM task management service.
-type ATMConfig struct {
+// BoardConfig contains settings for the Board task management service.
+type BoardConfig struct {
 	ProjectSlug string `yaml:"project_slug"`
 	APIURL      string `yaml:"api_url"`
 	APIToken    string `yaml:"api_token"`
@@ -172,12 +172,12 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ATMClient returns a new ATM client configured from this config.
-func (c *Config) ATMClient() atm.ATM {
-	return atm.NewClient(atm.ClientConfig{
-		BinPath:  c.ATM.BinPath,
-		APIURL:   c.ATM.APIURL,
-		APIToken: c.ATM.APIToken,
+// BoardClient returns a new Board client configured from this config.
+func (c *Config) BoardClient() board.Board {
+	return board.NewClient(board.ClientConfig{
+		BinPath:  c.Board.BinPath,
+		APIURL:   c.Board.APIURL,
+		APIToken: c.Board.APIToken,
 	})
 }
 
@@ -265,17 +265,17 @@ func mergeConfig(dst, src *Config) {
 		dst.Worker.SyncInterval = src.Worker.SyncInterval
 	}
 
-	// ATM
-	if src.ATM.ProjectSlug != "" {
-		dst.ATM.ProjectSlug = src.ATM.ProjectSlug
+	// Board
+	if src.Board.ProjectSlug != "" {
+		dst.Board.ProjectSlug = src.Board.ProjectSlug
 	}
-	if src.ATM.APIURL != "" {
-		dst.ATM.APIURL = src.ATM.APIURL
+	if src.Board.APIURL != "" {
+		dst.Board.APIURL = src.Board.APIURL
 	}
-	if src.ATM.APIToken != "" {
-		dst.ATM.APIToken = src.ATM.APIToken
+	if src.Board.APIToken != "" {
+		dst.Board.APIToken = src.Board.APIToken
 	}
-	if src.ATM.BinPath != "" {
-		dst.ATM.BinPath = src.ATM.BinPath
+	if src.Board.BinPath != "" {
+		dst.Board.BinPath = src.Board.BinPath
 	}
 }

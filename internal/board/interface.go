@@ -1,8 +1,8 @@
-package atm
+package board
 
-// ATM defines the interface for interacting with the ATM task management API.
-// The concrete implementation is Client, which shells out to atm-cli.
-type ATM interface {
+// Board defines the interface for interacting with the Board task management API.
+// The concrete implementation is Client, which shells out to board-cli.
+type Board interface {
 	ProjectContext(slug string) (*AgentContext, error)
 	PlanContext(planID int) (*AgentContext, error)
 	PlanContextText(planID int) (string, error)

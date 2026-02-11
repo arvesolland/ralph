@@ -1,4 +1,4 @@
-package atm
+package board
 
 import (
 	"context"
@@ -11,20 +11,20 @@ import (
 	"github.com/arvesolland/ralph/internal/retry"
 )
 
-// ExecTimeout is the timeout for atm-cli commands.
+// ExecTimeout is the timeout for board-cli commands.
 const ExecTimeout = 30 * time.Second
 
 // ClientConfig holds configuration for creating a new Client.
 type ClientConfig struct {
-	BinPath  string // Path to atm-cli binary. Defaults to "atm-cli".
-	APIURL   string // Base URL for the ATM API (--api-url flag).
+	BinPath  string // Path to board-cli binary. Defaults to "board-cli".
+	APIURL   string // Base URL for the Board API (--api-url flag).
 	APIToken string // Bearer token for authentication (--api-token flag).
 }
 
-// Compile-time check that Client implements ATM.
-var _ ATM = (*Client)(nil)
+// Compile-time check that Client implements Board.
+var _ Board = (*Client)(nil)
 
-// Client shells out to the atm-cli binary to interact with the ATM API.
+// Client shells out to the board-cli binary to interact with the Board API.
 type Client struct {
 	binPath  string
 	apiURL   string
@@ -32,11 +32,11 @@ type Client struct {
 	retrier  *retry.Retrier
 }
 
-// NewClient creates a new ATM client with the given configuration.
+// NewClient creates a new Board client with the given configuration.
 func NewClient(cfg ClientConfig) *Client {
 	bin := cfg.BinPath
 	if bin == "" {
-		bin = "atm-cli"
+		bin = "board-cli"
 	}
 	return &Client{
 		binPath:  bin,
@@ -320,7 +320,7 @@ func (c *Client) UncheckCriterion(id int) (*Criterion, error) {
 	return &resp.Data, nil
 }
 
-// UpdatePlan updates a plan's fields via atm-cli plan update.
+// UpdatePlan updates a plan's fields via board-cli plan update.
 func (c *Client) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
 	args := []string{"plan", "update", strconv.Itoa(id)}
 	for key, value := range fields {
@@ -339,7 +339,7 @@ func (c *Client) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
 	return &resp.Data, nil
 }
 
-// exec runs the atm-cli binary with global flags and the given arguments,
+// exec runs the board-cli binary with global flags and the given arguments,
 // returning stdout on success or an error wrapping stderr on failure.
 // Commands are bounded by ExecTimeout per attempt and retried on transient failures.
 func (c *Client) exec(args ...string) ([]byte, error) {
@@ -362,12 +362,12 @@ func (c *Client) exec(args ...string) ([]byte, error) {
 		out, err := cmd.Output()
 		if err != nil {
 			if ctx.Err() == context.DeadlineExceeded {
-				return fmt.Errorf("atm-cli %s: timed out after %v", args[0], ExecTimeout)
+				return fmt.Errorf("board-cli %s: timed out after %v", args[0], ExecTimeout)
 			}
 			if exitErr, ok := err.(*exec.ExitError); ok {
-				return fmt.Errorf("atm-cli %s: %s", args[0], string(exitErr.Stderr))
+				return fmt.Errorf("board-cli %s: %s", args[0], string(exitErr.Stderr))
 			}
-			return fmt.Errorf("running atm-cli: %w", err)
+			return fmt.Errorf("running board-cli: %w", err)
 		}
 		stdout = out
 		return nil

@@ -1,4 +1,4 @@
-package atm
+package board
 
 import (
 	"encoding/json"
@@ -132,7 +132,7 @@ func TestSlugify(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"AKB -> ATM Integration", "akb-atm-integration"},
+		{"Spark -> Board Integration", "spark-board-integration"},
 		{"Simple Title", "simple-title"},
 		{"", ""},
 		{"---special---chars!!!---", "special-chars"},

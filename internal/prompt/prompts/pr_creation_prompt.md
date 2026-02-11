@@ -10,7 +10,7 @@ Create a pull request for the completed work on branch `{{FEATURE_BRANCH}}`.
    git diff {{BASE_BRANCH}}...HEAD --stat
    ```
 
-2. **Review the ATM context** to understand the plan intent and completed tasks.
+2. **Review the Board context** to understand the plan intent and completed tasks.
 
 3. **Create the PR** using `gh pr create` with:
    - A clear, concise title (not just the plan name)

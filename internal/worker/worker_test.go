@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/notify"
@@ -19,13 +19,13 @@ import (
 	"github.com/arvesolland/ralph/internal/runner"
 )
 
-// MockATMRunner implements runner.Runner for testing.
-type MockATMRunner struct {
+// MockBoardRunner implements runner.Runner for testing.
+type MockBoardRunner struct {
 	RunFunc func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error)
 	calls   int
 }
 
-func (m *MockATMRunner) Run(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+func (m *MockBoardRunner) Run(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
 	m.calls++
 	if m.RunFunc != nil {
 		return m.RunFunc(ctx, p, opts)
@@ -158,7 +158,7 @@ func TestWorker_SendNotifications(t *testing.T) {
 	}
 
 	testInfo := &PlanInfo{ID: 1, Name: "test", Branch: "feat/test"}
-	testPlan := &atm.Plan{ID: 1, Title: "test"}
+	testPlan := &board.Plan{ID: 1, Title: "test"}
 
 	w.sendStartNotification(testPlan, testInfo)
 	if mockNotifier.StartCalls != 1 {
@@ -207,7 +207,7 @@ func TestWorker_SendNotifications_Disabled(t *testing.T) {
 	}
 
 	testInfo := &PlanInfo{ID: 1, Name: "test", Branch: "feat/test"}
-	testPlan := &atm.Plan{ID: 1, Title: "test"}
+	testPlan := &board.Plan{ID: 1, Title: "test"}
 
 	w.sendStartNotification(testPlan, testInfo)
 	w.sendCompleteNotification(testInfo, "")
@@ -241,7 +241,7 @@ func TestWorker_SendNotifications_NilConfig(t *testing.T) {
 	}
 
 	testInfo := &PlanInfo{ID: 1, Name: "test", Branch: "feat/test"}
-	testPlan := &atm.Plan{ID: 1, Title: "test"}
+	testPlan := &board.Plan{ID: 1, Title: "test"}
 
 	// Should not panic with nil config
 	w.sendStartNotification(testPlan, testInfo)
@@ -287,7 +287,7 @@ func TestWorker_LoadOrCreateContext_StaleContext(t *testing.T) {
 	}
 
 	// Create a plan with different ID
-	plan := &atm.Plan{ID: 200, FeatureBranch: "feat/new-plan"}
+	plan := &board.Plan{ID: 200, FeatureBranch: "feat/new-plan"}
 
 	execCtx, err := w.loadOrCreateContext(plan, tmpDir)
 	if err != nil {
@@ -333,7 +333,7 @@ func TestWorker_LoadOrCreateContext_MatchingContext(t *testing.T) {
 	}
 
 	// Create a plan with matching ID
-	plan := &atm.Plan{ID: 42, FeatureBranch: "feat/my-plan"}
+	plan := &board.Plan{ID: 42, FeatureBranch: "feat/my-plan"}
 
 	execCtx, err := w.loadOrCreateContext(plan, tmpDir)
 	if err != nil {
@@ -536,20 +536,20 @@ func TestWorker_RunOnce_ActivatesPlan(t *testing.T) {
 	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/test")
 
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
 	// No active plan in project context
-	mockATM.ProjectContextFunc = func(slug string) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Plan: atm.Plan{ID: 0}, // No active plan
+	mockBoard.ProjectContextFunc = func(slug string) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Plan: board.Plan{ID: 0}, // No active plan
 		}, nil
 	}
 
 	// One ready plan
-	mockATM.ListPlansFunc = func(projectSlug, status string) ([]atm.Plan, error) {
-		if status == atm.PlanStatusReady {
-			return []atm.Plan{
-				{ID: 10, Title: "Test Plan", FeatureBranch: "feat/test", Status: atm.PlanStatusReady},
+	mockBoard.ListPlansFunc = func(projectSlug, status string) ([]board.Plan, error) {
+		if status == board.PlanStatusReady {
+			return []board.Plan{
+				{ID: 10, Title: "Test Plan", FeatureBranch: "feat/test", Status: board.PlanStatusReady},
 			}, nil
 		}
 		return nil, nil
@@ -557,16 +557,16 @@ func TestWorker_RunOnce_ActivatesPlan(t *testing.T) {
 
 	// Track UpdatePlanStatus calls
 	var statusUpdates []struct{ ID int; Status string }
-	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
 		statusUpdates = append(statusUpdates, struct{ ID int; Status string }{id, status})
-		return &atm.Plan{ID: id, Title: "Test Plan", FeatureBranch: "feat/test", Status: status}, nil
+		return &board.Plan{ID: id, Title: "Test Plan", FeatureBranch: "feat/test", Status: status}, nil
 	}
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Context", nil
 	}
 
 	// Runner completes immediately
-	mockRunner := &MockATMRunner{
+	mockRunner := &MockBoardRunner{
 		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
 			return &runner.Result{
 				TextContent: "Done\n<promise>COMPLETE</promise>",
@@ -576,10 +576,10 @@ func TestWorker_RunOnce_ActivatesPlan(t *testing.T) {
 		},
 	}
 
-	// ATM says all tasks done for completion check
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Stats: atm.Stats{TotalTasks: 1, Done: 1},
+	// Board says all tasks done for completion check
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
 		}, nil
 	}
 
@@ -588,7 +588,7 @@ func TestWorker_RunOnce_ActivatesPlan(t *testing.T) {
 
 	cfg := config.Defaults()
 	w := NewWorker(WorkerConfig{
-		ATM:              mockATM,
+		Board:            mockBoard,
 		ProjectSlug:      "test-project",
 		Config:           cfg,
 		WorktreeManager:  wtMgr,
@@ -608,7 +608,7 @@ func TestWorker_RunOnce_ActivatesPlan(t *testing.T) {
 	// Should have activated the plan
 	foundActivate := false
 	for _, u := range statusUpdates {
-		if u.ID == 10 && u.Status == atm.PlanStatusActive {
+		if u.ID == 10 && u.Status == board.PlanStatusActive {
 			foundActivate = true
 		}
 	}
@@ -626,37 +626,37 @@ func TestWorker_RunOnce_ResumesActivePlan(t *testing.T) {
 	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/active")
 
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
 	// Active plan in project context
-	mockATM.ProjectContextFunc = func(slug string) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Plan: atm.Plan{ID: 20, Title: "Active Plan", FeatureBranch: "feat/active", Status: atm.PlanStatusActive},
+	mockBoard.ProjectContextFunc = func(slug string) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Plan: board.Plan{ID: 20, Title: "Active Plan", FeatureBranch: "feat/active", Status: board.PlanStatusActive},
 		}, nil
 	}
 
 	// ListPlans should NOT be called
 	listPlansCalled := false
-	mockATM.ListPlansFunc = func(projectSlug, status string) ([]atm.Plan, error) {
+	mockBoard.ListPlansFunc = func(projectSlug, status string) ([]board.Plan, error) {
 		listPlansCalled = true
 		return nil, nil
 	}
 
 	var statusUpdates []string
-	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
 		statusUpdates = append(statusUpdates, status)
-		return &atm.Plan{ID: id, Title: "Active Plan", FeatureBranch: "feat/active", Status: status}, nil
+		return &board.Plan{ID: id, Title: "Active Plan", FeatureBranch: "feat/active", Status: status}, nil
 	}
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Context", nil
 	}
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Stats: atm.Stats{TotalTasks: 1, Done: 1},
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
 		}, nil
 	}
 
-	mockRunner := &MockATMRunner{
+	mockRunner := &MockBoardRunner{
 		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
 			return &runner.Result{
 				TextContent: "Done\n<promise>COMPLETE</promise>",
@@ -671,7 +671,7 @@ func TestWorker_RunOnce_ResumesActivePlan(t *testing.T) {
 
 	cfg := config.Defaults()
 	w := NewWorker(WorkerConfig{
-		ATM:              mockATM,
+		Board:            mockBoard,
 		ProjectSlug:      "test-project",
 		Config:           cfg,
 		WorktreeManager:  wtMgr,
@@ -696,20 +696,20 @@ func TestWorker_RunOnce_ResumesActivePlan(t *testing.T) {
 
 func TestWorker_RunOnce_EmptyQueue(t *testing.T) {
 	// No active plan, no ready plans → ErrQueueEmpty
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
-	mockATM.ProjectContextFunc = func(slug string) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Plan: atm.Plan{ID: 0},
+	mockBoard.ProjectContextFunc = func(slug string) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Plan: board.Plan{ID: 0},
 		}, nil
 	}
-	mockATM.ListPlansFunc = func(projectSlug, status string) ([]atm.Plan, error) {
-		return []atm.Plan{}, nil
+	mockBoard.ListPlansFunc = func(projectSlug, status string) ([]board.Plan, error) {
+		return []board.Plan{}, nil
 	}
 
 	cfg := config.Defaults()
 	w := NewWorker(WorkerConfig{
-		ATM:              mockATM,
+		Board:            mockBoard,
 		ProjectSlug:      "test-project",
 		Config:           cfg,
 		MainWorktreePath: "/tmp",
@@ -730,15 +730,15 @@ func TestWorker_RunOnce_CompletionFlow(t *testing.T) {
 	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/complete")
 
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
-	mockATM.ProjectContextFunc = func(slug string) (*atm.AgentContext, error) {
-		return &atm.AgentContext{Plan: atm.Plan{ID: 0}}, nil
+	mockBoard.ProjectContextFunc = func(slug string) (*board.AgentContext, error) {
+		return &board.AgentContext{Plan: board.Plan{ID: 0}}, nil
 	}
-	mockATM.ListPlansFunc = func(projectSlug, status string) ([]atm.Plan, error) {
-		if status == atm.PlanStatusReady {
-			return []atm.Plan{
-				{ID: 30, Title: "Completion Test", FeatureBranch: "feat/complete", Status: atm.PlanStatusReady},
+	mockBoard.ListPlansFunc = func(projectSlug, status string) ([]board.Plan, error) {
+		if status == board.PlanStatusReady {
+			return []board.Plan{
+				{ID: 30, Title: "Completion Test", FeatureBranch: "feat/complete", Status: board.PlanStatusReady},
 			}, nil
 		}
 		return nil, nil
@@ -746,20 +746,20 @@ func TestWorker_RunOnce_CompletionFlow(t *testing.T) {
 
 	// Track all status transitions
 	var transitions []struct{ ID int; Status string }
-	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
 		transitions = append(transitions, struct{ ID int; Status string }{id, status})
-		return &atm.Plan{ID: id, Title: "Completion Test", FeatureBranch: "feat/complete", Status: status}, nil
+		return &board.Plan{ID: id, Title: "Completion Test", FeatureBranch: "feat/complete", Status: status}, nil
 	}
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Context", nil
 	}
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Stats: atm.Stats{TotalTasks: 1, Done: 1},
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
 		}, nil
 	}
 
-	mockRunner := &MockATMRunner{
+	mockRunner := &MockBoardRunner{
 		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
 			return &runner.Result{
 				TextContent: "Done\n<promise>COMPLETE</promise>",
@@ -774,7 +774,7 @@ func TestWorker_RunOnce_CompletionFlow(t *testing.T) {
 
 	cfg := config.Defaults()
 	w := NewWorker(WorkerConfig{
-		ATM:              mockATM,
+		Board:            mockBoard,
 		ProjectSlug:      "test-project",
 		Config:           cfg,
 		WorktreeManager:  wtMgr,
@@ -796,13 +796,13 @@ func TestWorker_RunOnce_CompletionFlow(t *testing.T) {
 		t.Fatalf("Expected at least 2 status transitions, got %d: %v", len(transitions), transitions)
 	}
 
-	if transitions[0].Status != atm.PlanStatusActive {
+	if transitions[0].Status != board.PlanStatusActive {
 		t.Errorf("Expected first transition to 'active', got %q", transitions[0].Status)
 	}
 
 	// Last transition should be complete
 	last := transitions[len(transitions)-1]
-	if last.Status != atm.PlanStatusComplete {
+	if last.Status != board.PlanStatusComplete {
 		t.Errorf("Expected last transition to 'complete', got %q", last.Status)
 	}
 }
@@ -825,16 +825,16 @@ func TestCompletePlan_RetriesStatusUpdate(t *testing.T) {
 	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/retry-test")
 
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
 	// Fail twice with a retryable error, then succeed
 	updateCalls := 0
-	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
 		updateCalls++
-		if status == atm.PlanStatusComplete && updateCalls <= 2 {
+		if status == board.PlanStatusComplete && updateCalls <= 2 {
 			return nil, fmt.Errorf("connection refused")
 		}
-		return &atm.Plan{ID: id, Status: status}, nil
+		return &board.Plan{ID: id, Status: status}, nil
 	}
 
 	wtMgr := newMockWorktreeManager()
@@ -843,7 +843,7 @@ func TestCompletePlan_RetriesStatusUpdate(t *testing.T) {
 	cfg := config.Defaults()
 	fastCfg := fastRetryConfig()
 	w := &Worker{
-		atm:               mockATM,
+		board:             mockBoard,
 		config:            cfg,
 		worktreeManager:   wtMgr,
 		notifier:          &notify.NoopNotifier{},
@@ -852,7 +852,7 @@ func TestCompletePlan_RetriesStatusUpdate(t *testing.T) {
 		statusRetryConfig: fastCfg,
 	}
 
-	plan := &atm.Plan{ID: 42, FeatureBranch: "feat/retry-test"}
+	plan := &board.Plan{ID: 42, FeatureBranch: "feat/retry-test"}
 	info := &PlanInfo{ID: 42, Name: "Retry Test", Branch: "feat/retry-test"}
 
 	err := w.completePlan(plan, info, wtDir)
@@ -879,16 +879,16 @@ func TestCompletePlan_SkipsWorktreeCleanupOnStatusFailure(t *testing.T) {
 	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/skip-cleanup")
 
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
 	// Always fail with a retryable error
 	updateCalls := 0
-	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
 		updateCalls++
-		if status == atm.PlanStatusComplete {
+		if status == board.PlanStatusComplete {
 			return nil, fmt.Errorf("connection refused")
 		}
-		return &atm.Plan{ID: id, Status: status}, nil
+		return &board.Plan{ID: id, Status: status}, nil
 	}
 
 	wtMgr := newMockWorktreeManager()
@@ -897,7 +897,7 @@ func TestCompletePlan_SkipsWorktreeCleanupOnStatusFailure(t *testing.T) {
 	cfg := config.Defaults()
 	fastCfg := fastRetryConfig()
 	w := &Worker{
-		atm:               mockATM,
+		board:             mockBoard,
 		config:            cfg,
 		worktreeManager:   wtMgr,
 		notifier:          &notify.NoopNotifier{},
@@ -906,13 +906,13 @@ func TestCompletePlan_SkipsWorktreeCleanupOnStatusFailure(t *testing.T) {
 		statusRetryConfig: fastCfg,
 	}
 
-	plan := &atm.Plan{ID: 43, FeatureBranch: "feat/skip-cleanup"}
+	plan := &board.Plan{ID: 43, FeatureBranch: "feat/skip-cleanup"}
 	info := &PlanInfo{ID: 43, Name: "Skip Cleanup", Branch: "feat/skip-cleanup"}
 
-	// completePlan should return nil even when ATM status update fails
+	// completePlan should return nil even when Board status update fails
 	err := w.completePlan(plan, info, wtDir)
 	if err != nil {
-		t.Fatalf("completePlan() should return nil when only ATM status update fails, got: %v", err)
+		t.Fatalf("completePlan() should return nil when only Board status update fails, got: %v", err)
 	}
 
 	// Worktree should NOT have been cleaned up
@@ -934,16 +934,16 @@ func TestCompletePlan_NonRetryableErrorFailsFast(t *testing.T) {
 	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/non-retryable")
 
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
 	// Fail with a non-retryable error (e.g., 404 not found)
 	updateCalls := 0
-	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
 		updateCalls++
-		if status == atm.PlanStatusComplete {
+		if status == board.PlanStatusComplete {
 			return nil, fmt.Errorf("not found: plan 99")
 		}
-		return &atm.Plan{ID: id, Status: status}, nil
+		return &board.Plan{ID: id, Status: status}, nil
 	}
 
 	wtMgr := newMockWorktreeManager()
@@ -952,7 +952,7 @@ func TestCompletePlan_NonRetryableErrorFailsFast(t *testing.T) {
 	cfg := config.Defaults()
 	fastCfg := fastRetryConfig()
 	w := &Worker{
-		atm:               mockATM,
+		board:             mockBoard,
 		config:            cfg,
 		worktreeManager:   wtMgr,
 		notifier:          &notify.NoopNotifier{},
@@ -961,7 +961,7 @@ func TestCompletePlan_NonRetryableErrorFailsFast(t *testing.T) {
 		statusRetryConfig: fastCfg,
 	}
 
-	plan := &atm.Plan{ID: 99, FeatureBranch: "feat/non-retryable"}
+	plan := &board.Plan{ID: 99, FeatureBranch: "feat/non-retryable"}
 	info := &PlanInfo{ID: 99, Name: "Non-Retryable", Branch: "feat/non-retryable"}
 
 	err := w.completePlan(plan, info, wtDir)
@@ -988,33 +988,33 @@ func TestProcessPlan_BlockedStatusUsesRetry(t *testing.T) {
 	}
 	setupWorkerTestGitRepo(t, wtDir, "feat/blocked-retry")
 
-	mockATM := atm.NewMockATM()
+	mockBoard := board.NewMockBoard()
 
 	// PlanContextText for prompt building
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Context", nil
 	}
 	// PlanContext for stats
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Stats: atm.Stats{TotalTasks: 2, Done: 0},
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 2, Done: 0},
 		}, nil
 	}
 
 	// Track blocked status update calls
 	blockedUpdateCalls := 0
-	mockATM.UpdatePlanStatusFunc = func(id int, status string) (*atm.Plan, error) {
-		if status == atm.PlanStatusBlocked {
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		if status == board.PlanStatusBlocked {
 			blockedUpdateCalls++
 			if blockedUpdateCalls <= 2 {
 				return nil, fmt.Errorf("connection refused")
 			}
 		}
-		return &atm.Plan{ID: id, Status: status}, nil
+		return &board.Plan{ID: id, Status: status}, nil
 	}
 
 	// Runner returns an error to trigger the blocked path
-	mockRunner := &MockATMRunner{
+	mockRunner := &MockBoardRunner{
 		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
 			return nil, fmt.Errorf("claude failed")
 		},
@@ -1026,7 +1026,7 @@ func TestProcessPlan_BlockedStatusUsesRetry(t *testing.T) {
 	cfg := config.Defaults()
 	fastCfg := fastRetryConfig()
 	w := NewWorker(WorkerConfig{
-		ATM:               mockATM,
+		Board:             mockBoard,
 		ProjectSlug:       "test-project",
 		Config:            cfg,
 		WorktreeManager:   wtMgr,
@@ -1039,7 +1039,7 @@ func TestProcessPlan_BlockedStatusUsesRetry(t *testing.T) {
 		StatusRetryConfig: &fastCfg,
 	})
 
-	plan := &atm.Plan{ID: 50, Title: "Blocked Retry Test", FeatureBranch: "feat/blocked-retry"}
+	plan := &board.Plan{ID: 50, Title: "Blocked Retry Test", FeatureBranch: "feat/blocked-retry"}
 	info := &PlanInfo{ID: 50, Name: "Blocked Retry Test", Branch: "feat/blocked-retry"}
 
 	// processPlan should return the loop error

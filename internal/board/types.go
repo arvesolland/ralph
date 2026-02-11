@@ -1,5 +1,5 @@
-// Package atm provides a client for the ATM task management API via the atm-cli binary.
-package atm
+// Package board provides a client for the Board task management API via the board-cli binary.
+package board
 
 import (
 	"regexp"
@@ -25,7 +25,7 @@ const (
 	TaskStatusSkipped = "skipped"
 )
 
-// Project represents an ATM project.
+// Project represents a Board project.
 type Project struct {
 	ID             int    `json:"id"`
 	Name           string `json:"name"`
@@ -38,7 +38,7 @@ type Project struct {
 	UpdatedAt      string `json:"updated_at"`
 }
 
-// Plan represents an ATM plan.
+// Plan represents a Board plan.
 type Plan struct {
 	ID             int        `json:"id"`
 	ProjectID      int        `json:"project_id"`
@@ -69,7 +69,7 @@ func (p *Plan) BranchName() string {
 }
 
 // slugify converts a string to a git-safe branch name component.
-// "AKB -> ATM Integration" becomes "akb-atm-integration".
+// "Spark -> Board Integration" becomes "spark-board-integration".
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 func slugify(s string) string {
@@ -80,7 +80,7 @@ func slugify(s string) string {
 	return s
 }
 
-// Task represents an ATM task.
+// Task represents a Board task.
 type Task struct {
 	ID                 int         `json:"id"`
 	PlanID             int         `json:"plan_id"`

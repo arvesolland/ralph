@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
@@ -37,15 +37,15 @@ var (
 var runCmd = &cobra.Command{
 	Use:   "run --plan <plan-id>",
 	Short: "Run the iteration loop on a plan",
-	Long: `Execute the iteration loop on a specified ATM plan.
+	Long: `Execute the iteration loop on a specified Board plan.
 
 The iteration loop will:
-1. Fetch plan details from ATM
+1. Fetch plan details from Board
 2. Set plan status to active
 3. Create/reuse a git worktree for the plan's branch
-4. Build a prompt from ATM context
+4. Build a prompt from Board context
 5. Execute Claude to work on the plan
-6. Check for completion via ATM task stats
+6. Check for completion via Board task stats
 7. Commit changes after each iteration
 8. Repeat until plan is complete or max iterations reached
 9. On completion: create PR (default), merge, or push branch only
@@ -59,7 +59,7 @@ Example:
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-	runCmd.Flags().IntVar(&runPlanID, "plan", 0, "ATM plan ID (required)")
+	runCmd.Flags().IntVar(&runPlanID, "plan", 0, "Board plan ID (required)")
 	runCmd.Flags().IntVar(&runMaxIterations, "max", runner.DefaultMaxIterations, "maximum iterations before stopping")
 	runCmd.Flags().StringVar(&runCompletionMode, "completion-mode", "", "completion mode: pr, merge, or branch (default from config)")
 	runCmd.Flags().BoolVar(&runPush, "push", false, "push to remote after each iteration")
@@ -75,13 +75,13 @@ func runRun(cmd *cobra.Command, args []string) error {
 		cfg = config.Defaults()
 	}
 
-	// Create ATM client
-	atmClient := cfg.ATMClient()
+	// Create Board client
+	boardClient := cfg.BoardClient()
 
 	// Determine project slug
-	projectSlug := cfg.ATM.ProjectSlug
+	projectSlug := cfg.Board.ProjectSlug
 	if projectSlug == "" {
-		return fmt.Errorf("atm.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
+		return fmt.Errorf("board.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
 	}
 
 	// Determine completion mode
@@ -107,7 +107,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Fetch plan details
-	plan, err := atmClient.GetPlan(runPlanID)
+	plan, err := boardClient.GetPlan(runPlanID)
 	if err != nil {
 		return fmt.Errorf("fetching plan #%d: %w", runPlanID, err)
 	}
@@ -122,8 +122,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 	log.Info("Completion mode: %s", completionMode)
 
 	// Set plan status to active if not already
-	if plan.Status != atm.PlanStatusActive {
-		updated, err := atmClient.UpdatePlanStatus(plan.ID, atm.PlanStatusActive)
+	if plan.Status != board.PlanStatusActive {
+		updated, err := boardClient.UpdatePlanStatus(plan.ID, board.PlanStatusActive)
 		if err != nil {
 			return fmt.Errorf("activating plan #%d: %w", plan.ID, err)
 		}
@@ -237,7 +237,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	// Create iteration loop
 	wtGit := git.NewGit(worktreePath)
 	loop := runner.NewIterationLoop(runner.LoopConfig{
-		ATM:              atmClient,
+		Board:            boardClient,
 		PlanID:           plan.ID,
 		ProjectSlug:      projectSlug,
 		Context:          execCtx,
@@ -252,13 +252,13 @@ func runRun(cmd *cobra.Command, args []string) error {
 			if result.IsComplete {
 				log.Info("Completion marker detected")
 			}
-			// Fetch ATM task stats for progress display
+			// Fetch Board task stats for progress display
 			progress := &notify.ProgressStatus{
 				Iteration:     iteration,
 				MaxIterations: runMaxIterations,
 				Phase:         notify.PhaseRunning,
 			}
-			if agentCtx, err := atmClient.PlanContext(plan.ID); err == nil {
+			if agentCtx, err := boardClient.PlanContext(plan.ID); err == nil {
 				progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
 				progress.TasksTotal = agentCtx.Stats.TotalTasks
 				log.Info("Tasks: %d/%d done", progress.TasksDone, progress.TasksTotal)
@@ -281,7 +281,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 				Phase:         notify.PhaseBlocked,
 				Message:       blocker.Description,
 			}
-			if agentCtx, err := atmClient.PlanContext(plan.ID); err == nil {
+			if agentCtx, err := boardClient.PlanContext(plan.ID); err == nil {
 				blockerProgress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
 				blockerProgress.TasksTotal = agentCtx.Stats.TotalTasks
 			}
@@ -338,9 +338,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("completion: %w", err)
 		}
 
-		// Update ATM status
-		if _, err := atmClient.UpdatePlanStatus(plan.ID, atm.PlanStatusComplete); err != nil {
-			log.Error("Failed to update ATM status: %v", err)
+		// Update Board status
+		if _, err := boardClient.UpdatePlanStatus(plan.ID, board.PlanStatusComplete); err != nil {
+			log.Error("Failed to update Board status: %v", err)
 		}
 
 		// Clean up worktree
@@ -354,7 +354,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			MaxIterations: runMaxIterations,
 			Phase:         notify.PhaseComplete,
 		}
-		if agentCtx, err := atmClient.PlanContext(plan.ID); err == nil {
+		if agentCtx, err := boardClient.PlanContext(plan.ID); err == nil {
 			completeProgress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
 			completeProgress.TasksTotal = agentCtx.Stats.TotalTasks
 		}
@@ -394,7 +394,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 // handleCompletion handles the plan completion workflow based on mode.
 // Returns the PR URL (if applicable) and any error.
-func handleCompletion(plan *atm.Plan, mode, worktreePath string, cfg *config.Config, wtGit, mainGit git.Git, _ runner.Runner, _ *prompt.Builder) (string, error) {
+func handleCompletion(plan *board.Plan, mode, worktreePath string, cfg *config.Config, wtGit, mainGit git.Git, _ runner.Runner, _ *prompt.Builder) (string, error) {
 	baseBranch := cfg.Git.BaseBranch
 	if baseBranch == "" {
 		baseBranch = "main"

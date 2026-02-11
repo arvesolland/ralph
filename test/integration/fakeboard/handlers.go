@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 )
 
 // handleProjectContext handles: project context <slug>
@@ -19,7 +19,7 @@ func handleProjectContext(s *State, args []string) (any, error) {
 		return nil, fmt.Errorf("project not found: %s", slug)
 	}
 
-	ctx := atm.AgentContext{
+	ctx := board.AgentContext{
 		Project: *proj,
 	}
 
@@ -53,7 +53,7 @@ func handlePlanContext(s *State, args []string, formatText bool) (any, bool, err
 
 	proj := findProjectByID(s, plan.ProjectID)
 	if proj == nil {
-		proj = &atm.Project{}
+		proj = &board.Project{}
 	}
 
 	enrichedPlan := enrichPlan(s, *plan)
@@ -63,7 +63,7 @@ func handlePlanContext(s *State, args []string, formatText bool) (any, bool, err
 	progress := progressForPlan(s, plan.ID)
 	feedback := feedbackForPlan(s, plan.ID)
 
-	ctx := atm.AgentContext{
+	ctx := board.AgentContext{
 		Project:        *proj,
 		Plan:           enrichedPlan,
 		Stats:          stats,
@@ -94,7 +94,7 @@ func handlePlanList(s *State, args []string, status string) (any, error) {
 
 	plans := plansForProject(s, proj.ID)
 	if status != "" {
-		var filtered []atm.Plan
+		var filtered []board.Plan
 		for _, p := range plans {
 			if p.Status == status {
 				filtered = append(filtered, p)
@@ -158,7 +158,7 @@ func handleTaskList(s *State, args []string, status string, available bool) (any
 	if available {
 		tasks = availableTasks(s, planID)
 	} else if status != "" {
-		var filtered []atm.Task
+		var filtered []board.Task
 		for _, t := range tasks {
 			if t.Status == status {
 				filtered = append(filtered, t)
@@ -202,10 +202,10 @@ func handleTaskClaim(s *State, args []string, assignee string) (any, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task not found: %d", id)
 	}
-	if task.Status != atm.TaskStatusTodo {
+	if task.Status != board.TaskStatusTodo {
 		return nil, fmt.Errorf("task %d cannot be claimed: status is %s", id, task.Status)
 	}
-	task.Status = atm.TaskStatusClaimed
+	task.Status = board.TaskStatusClaimed
 	task.Assignee = assignee
 	task.UpdatedAt = now()
 	return enrichTask(s, *task), nil
@@ -225,10 +225,10 @@ func handleTaskStart(s *State, args []string) (any, error) {
 		return nil, fmt.Errorf("task not found: %d", id)
 	}
 	// Allow start from todo or claimed.
-	if task.Status != atm.TaskStatusTodo && task.Status != atm.TaskStatusClaimed {
+	if task.Status != board.TaskStatusTodo && task.Status != board.TaskStatusClaimed {
 		return nil, fmt.Errorf("task %d cannot be started: status is %s", id, task.Status)
 	}
-	task.Status = atm.TaskStatusDoing
+	task.Status = board.TaskStatusDoing
 	task.StartedAt = now()
 	task.UpdatedAt = now()
 	return enrichTask(s, *task), nil
@@ -247,10 +247,10 @@ func handleTaskComplete(s *State, args []string) (any, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task not found: %d", id)
 	}
-	if task.Status != atm.TaskStatusDoing && task.Status != atm.TaskStatusClaimed && task.Status != atm.TaskStatusTodo {
+	if task.Status != board.TaskStatusDoing && task.Status != board.TaskStatusClaimed && task.Status != board.TaskStatusTodo {
 		return nil, fmt.Errorf("task %d cannot be completed: status is %s", id, task.Status)
 	}
-	task.Status = atm.TaskStatusDone
+	task.Status = board.TaskStatusDone
 	task.CompletedAt = now()
 	task.UpdatedAt = now()
 	return enrichTask(s, *task), nil
@@ -272,7 +272,7 @@ func handleTaskBlock(s *State, args []string, reason string) (any, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task not found: %d", id)
 	}
-	task.Status = atm.TaskStatusBlocked
+	task.Status = board.TaskStatusBlocked
 	task.UpdatedAt = now()
 	return enrichTask(s, *task), nil
 }
@@ -290,7 +290,7 @@ func handleTaskSkip(s *State, args []string, reason string) (any, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task not found: %d", id)
 	}
-	task.Status = atm.TaskStatusSkipped
+	task.Status = board.TaskStatusSkipped
 	task.UpdatedAt = now()
 	return enrichTask(s, *task), nil
 }
@@ -349,7 +349,7 @@ func handleProgressAdd(s *State, args []string, author, body string) (any, error
 	if plan == nil {
 		return nil, fmt.Errorf("plan not found: %d", planID)
 	}
-	entry := atm.Progress{
+	entry := board.Progress{
 		ID:        s.NextProgressID,
 		PlanID:    planID,
 		Author:    author,
@@ -377,7 +377,7 @@ func handleFeedbackAdd(s *State, args []string, author, body string) (any, error
 	if plan == nil {
 		return nil, fmt.Errorf("plan not found: %d", planID)
 	}
-	entry := atm.Feedback{
+	entry := board.Feedback{
 		ID:        s.NextFeedbackID,
 		PlanID:    planID,
 		Author:    author,
@@ -391,22 +391,22 @@ func handleFeedbackAdd(s *State, args []string, author, body string) (any, error
 
 // Text formatting helpers.
 
-func enrichTaskList(s *State, tasks []atm.Task) []atm.Task {
-	result := make([]atm.Task, len(tasks))
+func enrichTaskList(s *State, tasks []board.Task) []board.Task {
+	result := make([]board.Task, len(tasks))
 	for i, t := range tasks {
 		result[i] = enrichTask(s, t)
 	}
 	return result
 }
 
-func recentEntries(entries []atm.Progress, n int) []atm.Progress {
+func recentEntries(entries []board.Progress, n int) []board.Progress {
 	if len(entries) <= n {
 		return entries
 	}
 	return entries[len(entries)-n:]
 }
 
-func recentFeedback(entries []atm.Feedback, n int) []atm.Feedback {
+func recentFeedback(entries []board.Feedback, n int) []board.Feedback {
 	if len(entries) <= n {
 		return entries
 	}
@@ -414,8 +414,8 @@ func recentFeedback(entries []atm.Feedback, n int) []atm.Feedback {
 }
 
 // formatContextAsText renders the AgentContext as structured text suitable for
-// the {{ATM_CONTEXT}} prompt placeholder. This is used by `plan context <id> --format text`.
-func formatContextAsText(ctx atm.AgentContext) string {
+// the {{BOARD_CONTEXT}} prompt placeholder. This is used by `plan context <id> --format text`.
+func formatContextAsText(ctx board.AgentContext) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "## Plan: %s\n", ctx.Plan.Title)

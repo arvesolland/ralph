@@ -1,5 +1,5 @@
 // Package worker implements the queue processing loop for Ralph.
-// It polls ATM for ready plans, creates worktrees, runs the iteration loop,
+// It polls Board for ready plans, creates worktrees, runs the iteration loop,
 // and handles completion (PR or merge).
 package worker
 
@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
@@ -29,7 +29,7 @@ const (
 	DefaultMaxIterations = 200
 )
 
-// DefaultStatusRetryConfig is the retry config for critical ATM status updates.
+// DefaultStatusRetryConfig is the retry config for critical Board status updates.
 var DefaultStatusRetryConfig = retry.RetryConfig{
 	MaxRetries:   5,
 	InitialDelay: 5 * time.Second,
@@ -61,7 +61,7 @@ type WorktreeManager interface {
 
 // WorkerConfig holds all configuration for creating a new Worker.
 type WorkerConfig struct {
-	ATM                atm.ATM
+	Board              board.Board
 	ProjectSlug        string
 	Config             *config.Config
 	ConfigDir          string
@@ -78,7 +78,7 @@ type WorkerConfig struct {
 	SyncInterval       time.Duration
 	PushAfterIteration bool
 	IterationTimeout   time.Duration
-	StatusRetryConfig  *retry.RetryConfig // retry config for ATM status updates (default: aggressive)
+	StatusRetryConfig  *retry.RetryConfig // retry config for Board status updates (default: aggressive)
 
 	// Callbacks
 	OnPlanStart    func(info *PlanInfo)
@@ -87,9 +87,9 @@ type WorkerConfig struct {
 	OnBlocker      func(info *PlanInfo, blocker *runner.Blocker)
 }
 
-// Worker processes plans from the ATM queue.
+// Worker processes plans from the Board queue.
 type Worker struct {
-	atm                atm.ATM
+	board              board.Board
 	projectSlug        string
 	config             *config.Config
 	configDir          string
@@ -119,7 +119,7 @@ type Worker struct {
 // NewWorker creates a new Worker with the given configuration.
 func NewWorker(cfg WorkerConfig) *Worker {
 	w := &Worker{
-		atm:                cfg.ATM,
+		board:              cfg.Board,
 		projectSlug:        cfg.ProjectSlug,
 		config:             cfg.Config,
 		configDir:          cfg.ConfigDir,
@@ -224,21 +224,21 @@ func (w *Worker) Run(ctx context.Context) error {
 // Returns ErrQueueEmpty if no plans are available.
 func (w *Worker) RunOnce(ctx context.Context) error {
 	// Check for an active plan (resume scenario)
-	agentCtx, err := w.atm.ProjectContext(w.projectSlug)
+	agentCtx, err := w.board.ProjectContext(w.projectSlug)
 	if err != nil {
 		return fmt.Errorf("fetching project context: %w", err)
 	}
 
-	var plan *atm.Plan
+	var plan *board.Plan
 
 	// Check if there's an active plan to resume
-	if agentCtx.Plan.ID > 0 && agentCtx.Plan.Status == atm.PlanStatusActive {
+	if agentCtx.Plan.ID > 0 && agentCtx.Plan.Status == board.PlanStatusActive {
 		planCopy := agentCtx.Plan
 		plan = &planCopy
 		log.Info("Resuming active plan #%d: %s", plan.ID, plan.Title)
 	} else {
 		// Check for ready plans
-		readyPlans, err := w.atm.ListPlans(w.projectSlug, atm.PlanStatusReady)
+		readyPlans, err := w.board.ListPlans(w.projectSlug, board.PlanStatusReady)
 		if err != nil {
 			return fmt.Errorf("listing ready plans: %w", err)
 		}
@@ -252,7 +252,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		log.Info("Activating plan #%d: %s", plan.ID, plan.Title)
 
 		// Transition to active
-		updated, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusActive)
+		updated, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusActive)
 		if err != nil {
 			return fmt.Errorf("activating plan #%d: %w", plan.ID, err)
 		}
@@ -273,10 +273,10 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 }
 
 // processPlan executes the full lifecycle of a plan: setup, iterate, complete.
-func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo) error {
+func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanInfo) error {
 	log.Info("Processing plan: %s (branch: %s)", info.Name, info.Branch)
 
-	// Send start notification (seeds thread from ATM if available, saves to ATM after creation)
+	// Send start notification (seeds thread from Board if available, saves to Board after creation)
 	w.sendStartNotification(plan, info)
 
 	// Call start callback
@@ -308,7 +308,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 
 	// Create the iteration loop
 	loop := runner.NewIterationLoop(runner.LoopConfig{
-		ATM:              w.atm,
+		Board:            w.board,
 		PlanID:           plan.ID,
 		ProjectSlug:      w.projectSlug,
 		Context:          execCtx,
@@ -325,7 +325,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 				MaxIterations: w.maxIterations,
 				Phase:         notify.PhaseRunning,
 			}
-			if agentCtx, statsErr := w.atm.PlanContext(plan.ID); statsErr == nil {
+			if agentCtx, statsErr := w.board.PlanContext(plan.ID); statsErr == nil {
 				progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
 				progress.TasksTotal = agentCtx.Stats.TotalTasks
 			}
@@ -377,14 +377,14 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 	if loopResult.Error != nil {
 		log.Error("Plan failed: %s - %v", info.Name, loopResult.Error)
 
-		// Mark plan as blocked in ATM (with retry)
+		// Mark plan as blocked in Board (with retry)
 		blockedRetrier := retry.NewRetrier(w.statusRetryConfig)
 		if retryErr := blockedRetrier.Do(func() error {
-			_, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusBlocked)
+			_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusBlocked)
 			return err
 		}); retryErr != nil {
 			log.Error("Failed to set plan status to blocked after %d retries: %v", blockedRetrier.Attempts(), retryErr)
-			log.Error("Manual recovery required: atm-cli plan status %d --status blocked", plan.ID)
+			log.Error("Manual recovery required: board-cli plan status %d --status blocked", plan.ID)
 		}
 
 		w.notifyError(info, loopResult.Error)
@@ -399,7 +399,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *atm.Plan, info *PlanInfo
 }
 
 // ensureWorktree creates or reuses a worktree for the plan.
-func (w *Worker) ensureWorktree(plan *atm.Plan) (string, error) {
+func (w *Worker) ensureWorktree(plan *board.Plan) (string, error) {
 	if w.worktreeManager == nil {
 		// No worktree manager, use main worktree
 		return w.mainWorktreePath, nil
@@ -430,7 +430,7 @@ func (w *Worker) ensureWorktree(plan *atm.Plan) (string, error) {
 }
 
 // loadOrCreateContext loads an existing context or creates a new one.
-func (w *Worker) loadOrCreateContext(plan *atm.Plan, worktreePath string) (*runner.Context, error) {
+func (w *Worker) loadOrCreateContext(plan *board.Plan, worktreePath string) (*runner.Context, error) {
 	ctxPath := runner.ContextPath(worktreePath)
 
 	// Try to load existing context
@@ -461,7 +461,7 @@ func (w *Worker) loadOrCreateContext(plan *atm.Plan, worktreePath string) (*runn
 }
 
 // completePlan handles the completion workflow (PR creation or merge).
-func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath string) error {
+func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath string) error {
 	var prURL string
 
 	switch w.completionMode {
@@ -492,21 +492,21 @@ func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath strin
 		}
 	}
 
-	// Update ATM status to complete with retry (critical path)
+	// Update Board status to complete with retry (critical path)
 	r := retry.NewRetrier(w.statusRetryConfig)
 	statusUpdateFailed := false
 	if err := r.Do(func() error {
-		_, err := w.atm.UpdatePlanStatus(plan.ID, atm.PlanStatusComplete)
+		_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusComplete)
 		return err
 	}); err != nil {
 		statusUpdateFailed = true
-		log.Error("CRITICAL: Failed to set plan status to complete in ATM after %d retries: %v", r.Attempts(), err)
-		log.Error("Manual recovery required: atm-cli plan status %d --status complete", plan.ID)
+		log.Error("CRITICAL: Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
+		log.Error("Manual recovery required: board-cli plan status %d --status complete", plan.ID)
 	}
 
-	// Skip worktree cleanup if ATM status update failed (preserve work for manual recovery)
+	// Skip worktree cleanup if Board status update failed (preserve work for manual recovery)
 	if statusUpdateFailed {
-		log.Warn("Skipping worktree cleanup because ATM status update failed (preserving work for recovery)")
+		log.Warn("Skipping worktree cleanup because Board status update failed (preserving work for recovery)")
 	} else if w.worktreeManager != nil {
 		name := branchToWorktreeName(info.Branch)
 		if err := w.worktreeManager.Remove(name, false); err != nil {
@@ -521,7 +521,7 @@ func (w *Worker) completePlan(plan *atm.Plan, info *PlanInfo, worktreePath strin
 }
 
 // completePR pushes the branch and creates a PR.
-func (w *Worker) completePR(plan *atm.Plan, info *PlanInfo, worktreePath string) (string, error) {
+func (w *Worker) completePR(plan *board.Plan, info *PlanInfo, worktreePath string) (string, error) {
 	wtGit := git.NewGit(worktreePath)
 
 	// Push branch
@@ -593,20 +593,20 @@ func toNotifyBlocker(b *runner.Blocker) *notify.Blocker {
 
 // Notification methods using PlanInfo.
 
-func (w *Worker) sendStartNotification(plan *atm.Plan, info *PlanInfo) {
+func (w *Worker) sendStartNotification(plan *board.Plan, info *PlanInfo) {
 	if w.config == nil || !w.config.Slack.NotifyStart {
 		return
 	}
 
 	np := toNotifyPlanInfo(info)
 
-	// If ATM has a Slack thread URL, seed the thread tracker so we resume the existing thread.
+	// If Board has a Slack thread URL, seed the thread tracker so we resume the existing thread.
 	if plan.SlackThreadURL != "" {
 		channelID, threadTS, err := notify.ParseSlackThreadURL(plan.SlackThreadURL)
 		if err == nil {
 			if sn, ok := w.notifier.(*notify.SlackNotifier); ok && sn != nil {
 				_ = sn.SeedThread(info.Name, channelID, threadTS)
-				log.Info("Resumed Slack thread from ATM: %s", plan.SlackThreadURL)
+				log.Info("Resumed Slack thread from Board: %s", plan.SlackThreadURL)
 
 				// Update the living status card instead of creating a new thread
 				progress := &notify.ProgressStatus{
@@ -618,7 +618,7 @@ func (w *Worker) sendStartNotification(plan *atm.Plan, info *PlanInfo) {
 				return
 			}
 		} else {
-			log.Warn("Failed to parse Slack thread URL from ATM: %v", err)
+			log.Warn("Failed to parse Slack thread URL from Board: %v", err)
 		}
 	}
 
@@ -628,14 +628,14 @@ func (w *Worker) sendStartNotification(plan *atm.Plan, info *PlanInfo) {
 		return
 	}
 
-	// After Start(), save the new thread URL back to ATM
+	// After Start(), save the new thread URL back to Board
 	if sn, ok := w.notifier.(*notify.SlackNotifier); ok && sn != nil {
 		threadURL := sn.GetThreadURL(info.Name)
 		if threadURL != "" {
-			if _, err := w.atm.UpdatePlan(plan.ID, map[string]string{"slack-thread-url": threadURL}); err != nil {
-				log.Warn("Failed to save Slack thread URL to ATM: %v", err)
+			if _, err := w.board.UpdatePlan(plan.ID, map[string]string{"slack-thread-url": threadURL}); err != nil {
+				log.Warn("Failed to save Slack thread URL to Board: %v", err)
 			} else {
-				log.Info("Saved Slack thread URL to ATM: %s", threadURL)
+				log.Info("Saved Slack thread URL to Board: %s", threadURL)
 			}
 		}
 	}

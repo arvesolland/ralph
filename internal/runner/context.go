@@ -11,7 +11,7 @@ import (
 // Context represents the execution state for a plan iteration.
 // It is persisted as context.json in the worktree to maintain state between iterations.
 type Context struct {
-	// PlanID is the ATM plan ID.
+	// PlanID is the Board plan ID.
 	PlanID int `json:"planId"`
 
 	// FeatureBranch is the git branch for this plan (e.g., "feat/go-rewrite")

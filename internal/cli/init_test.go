@@ -25,7 +25,7 @@ func withStdinInput(t *testing.T, input string) func() {
 }
 
 // withStdinNewlines replaces os.Stdin with a pipe that provides newlines
-// for the ATM config prompts (3 prompts: slug, URL, token).
+// for the Board config prompts (3 prompts: slug, URL, token).
 func withStdinNewlines(t *testing.T) func() {
 	return withStdinInput(t, "\n\n\n")
 }
@@ -52,7 +52,7 @@ func TestRunInit_CreatesDirectoryStructure(t *testing.T) {
 	// Reset detect flag
 	detectFlag = false
 
-	// Provide stdin for ATM prompts
+	// Provide stdin for Board prompts
 	cleanup := withStdinNewlines(t)
 	defer cleanup()
 
@@ -124,7 +124,7 @@ func TestRunInit_WithDetection(t *testing.T) {
 	detectFlag = true
 	defer func() { detectFlag = false }()
 
-	// Provide stdin for ATM prompts
+	// Provide stdin for Board prompts
 	cleanup := withStdinNewlines(t)
 	defer cleanup()
 
@@ -184,7 +184,7 @@ func TestRunInit_PreservesExistingSpecs(t *testing.T) {
 	// Reset detect flag
 	detectFlag = false
 
-	// Provide stdin for ATM prompts
+	// Provide stdin for Board prompts
 	cleanup := withStdinNewlines(t)
 	defer cleanup()
 
@@ -228,7 +228,7 @@ commands:
 slack:
     channel: C12345
     notify_start: true
-atm:
+board:
     project_slug: my-slug
 `
 	configPath := filepath.Join(ralphDir, "config.yaml")
@@ -250,7 +250,7 @@ atm:
 	// Reset detect flag
 	detectFlag = false
 
-	// No stdin needed — all ATM fields are already set or skipped
+	// No stdin needed — all Board fields are already set or skipped
 	cleanup := withStdinInput(t, "")
 	defer cleanup()
 
@@ -283,7 +283,7 @@ atm:
 		t.Error("Config should preserve Slack channel")
 	}
 	if !strings.Contains(configStr, "my-slug") {
-		t.Error("Config should preserve ATM project slug")
+		t.Error("Config should preserve Board project slug")
 	}
 }
 
