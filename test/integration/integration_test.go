@@ -2,7 +2,7 @@
 
 // Package integration provides end-to-end tests for the Ralph CLI.
 // These tests run the actual ralph binary against test plans using real Claude CLI
-// and a fake atm-cli binary for task management.
+// and a fake board-cli binary for task management.
 //
 // Run with: go test -tags=integration -v ./test/integration/...
 //
@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 )
 
 // testTimeout is the maximum time for a single test
@@ -36,12 +36,12 @@ const maxIterations = 5
 // ralphBinary is the path to the ralph binary (set in TestMain)
 var ralphBinary string
 
-// fakeATMBinary is the path to the fake atm-cli binary (set in TestMain)
-var fakeATMBinary string
+// fakeBoardBinary is the path to the fake board-cli binary (set in TestMain)
+var fakeBoardBinary string
 
-// fakeATMDir is the directory containing the fake binary named "atm-cli".
+// fakeBoardDir is the directory containing the fake binary named "board-cli".
 // This is prepended to PATH so the Claude agent finds it instead of the real one.
-var fakeATMDir string
+var fakeBoardDir string
 
 func TestMain(m *testing.M) {
 	// Find ralph binary (relative to test directory)
@@ -73,18 +73,18 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Build the fake atm-cli binary.
-	// Named "atm-cli" so it shadows the real binary when prepended to PATH.
-	// This is critical: the Claude agent shells out to "atm-cli" directly.
-	tmpDir, err := os.MkdirTemp("", "ralph-fakeatm-*")
+	// Build the fake board-cli binary.
+	// Named "board-cli" so it shadows the real binary when prepended to PATH.
+	// This is critical: the Claude agent shells out to "board-cli" directly.
+	tmpDir, err := os.MkdirTemp("", "ralph-fakeboard-*")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to create temp dir for fakeatm: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: failed to create temp dir for fakeboard: %v\n", err)
 		os.Exit(1)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	fakeATMDir = tmpDir
-	fakeATMBinary = filepath.Join(tmpDir, "atm-cli")
+	fakeBoardDir = tmpDir
+	fakeBoardBinary = filepath.Join(tmpDir, "board-cli")
 
 	// Find repo root for building
 	repoRoot := ""
@@ -102,10 +102,10 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	buildCmd := exec.Command("go", "build", "-o", fakeATMBinary, "./test/integration/fakeatm/")
+	buildCmd := exec.Command("go", "build", "-o", fakeBoardBinary, "./test/integration/fakeboard/")
 	buildCmd.Dir = repoRoot
 	if out, err := buildCmd.CombinedOutput(); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to build fake atm-cli: %v\n%s\n", err, out)
+		fmt.Fprintf(os.Stderr, "ERROR: failed to build fake board-cli: %v\n%s\n", err, out)
 		os.Exit(1)
 	}
 
@@ -113,17 +113,17 @@ func TestMain(m *testing.M) {
 }
 
 // =============================================================================
-// ATM STATE TYPES (mirror of fakeatm/state.go, for test assertions)
+// BOARD STATE TYPES (mirror of fakeboard/state.go, for test assertions)
 // =============================================================================
 
-// atmState is the JSON state file format used by the fake atm-cli.
-type atmState struct {
-	Projects []atm.Project  `json:"projects"`
-	Plans    []atm.Plan     `json:"plans"`
-	Tasks    []atm.Task     `json:"tasks"`
-	Criteria []atm.Criterion `json:"criteria"`
-	Progress []atm.Progress `json:"progress"`
-	Feedback []atm.Feedback `json:"feedback"`
+// boardState is the JSON state file format used by the fake board-cli.
+type boardState struct {
+	Projects []board.Project  `json:"projects"`
+	Plans    []board.Plan     `json:"plans"`
+	Tasks    []board.Task     `json:"tasks"`
+	Criteria []board.Criterion `json:"criteria"`
+	Progress []board.Progress `json:"progress"`
+	Feedback []board.Feedback `json:"feedback"`
 
 	NextProjectID   int `json:"next_project_id"`
 	NextPlanID      int `json:"next_plan_id"`
@@ -133,11 +133,11 @@ type atmState struct {
 	NextFeedbackID  int `json:"next_feedback_id"`
 }
 
-func loadATMState(path string) (*atmState, error) {
+func loadBoardState(path string) (*boardState, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &atmState{
+			return &boardState{
 				NextProjectID:   1,
 				NextPlanID:      1,
 				NextTaskID:      1,
@@ -148,14 +148,14 @@ func loadATMState(path string) (*atmState, error) {
 		}
 		return nil, err
 	}
-	var s atmState
+	var s boardState
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, err
 	}
 	return &s, nil
 }
 
-func saveATMState(path string, s *atmState) error {
+func saveBoardState(path string, s *boardState) error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
@@ -163,8 +163,8 @@ func saveATMState(path string, s *atmState) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-func seedProject(s *atmState, name, slug string) atm.Project {
-	p := atm.Project{
+func seedProject(s *boardState, name, slug string) board.Project {
+	p := board.Project{
 		ID:        s.NextProjectID,
 		Name:      name,
 		Slug:      slug,
@@ -176,8 +176,8 @@ func seedProject(s *atmState, name, slug string) atm.Project {
 	return p
 }
 
-func seedPlan(s *atmState, projectID int, title, status, branch string) atm.Plan {
-	p := atm.Plan{
+func seedPlan(s *boardState, projectID int, title, status, branch string) board.Plan {
+	p := board.Plan{
 		ID:            s.NextPlanID,
 		ProjectID:     projectID,
 		Title:         title,
@@ -191,7 +191,7 @@ func seedPlan(s *atmState, projectID int, title, status, branch string) atm.Plan
 	return p
 }
 
-func seedTask(s *atmState, planID int, title, description string, deps []int) atm.Task {
+func seedTask(s *boardState, planID int, title, description string, deps []int) board.Task {
 	// Count existing tasks for this plan to determine position.
 	position := 1
 	for _, t := range s.Tasks {
@@ -200,25 +200,25 @@ func seedTask(s *atmState, planID int, title, description string, deps []int) at
 		}
 	}
 
-	t := atm.Task{
+	t := board.Task{
 		ID:          s.NextTaskID,
 		PlanID:      planID,
 		Title:       title,
 		Description: description,
-		Status:      atm.TaskStatusTodo,
+		Status:      board.TaskStatusTodo,
 		Position:    position,
 		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 		UpdatedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 	for _, depID := range deps {
-		t.BlockedBy = append(t.BlockedBy, atm.Task{ID: depID})
+		t.BlockedBy = append(t.BlockedBy, board.Task{ID: depID})
 	}
 	s.NextTaskID++
 	s.Tasks = append(s.Tasks, t)
 	return t
 }
 
-func seedCriterion(s *atmState, taskID int, description string) atm.Criterion {
+func seedCriterion(s *boardState, taskID int, description string) board.Criterion {
 	// Count existing criteria for this task to determine position.
 	position := 1
 	for _, c := range s.Criteria {
@@ -227,7 +227,7 @@ func seedCriterion(s *atmState, taskID int, description string) atm.Criterion {
 		}
 	}
 
-	c := atm.Criterion{
+	c := board.Criterion{
 		ID:          s.NextCriterionID,
 		TaskID:      taskID,
 		Description: description,
@@ -244,7 +244,7 @@ func seedCriterion(s *atmState, taskID int, description string) atm.Criterion {
 // TASK DEFINITION HELPERS
 // =============================================================================
 
-// TaskDef defines a task for seeding into the fake ATM state.
+// TaskDef defines a task for seeding into the fake Board state.
 type TaskDef struct {
 	Title    string
 	Requires []string // task titles that this task depends on
@@ -263,7 +263,7 @@ func TestSingleTask(t *testing.T) {
 	ws := setupWorkspace(t)
 	defer ws.Cleanup()
 
-	planID := ws.SeedATMPlan("single-task-test", "active", []TaskDef{
+	planID := ws.SeedBoardPlan("single-task-test", "active", []TaskDef{
 		{
 			Title:    "Create marker file",
 			Criteria: []string{`File output/marker.txt exists with content "ralph-test-complete"`},
@@ -276,12 +276,12 @@ func TestSingleTask(t *testing.T) {
 	ws.AssertFileExists(t, "output/marker.txt", "Marker file should be created")
 	ws.AssertFileContains(t, "output/marker.txt", "ralph-test-complete", "Marker should have correct content")
 
-	// Verify ATM state
-	state := ws.ReadATMState(t)
+	// Verify Board state
+	state := ws.ReadBoardState(t)
 	for _, task := range state.Tasks {
 		if task.PlanID == planID {
-			if task.Status != atm.TaskStatusDone {
-				t.Errorf("Task %q should be done in ATM, got status %q", task.Title, task.Status)
+			if task.Status != board.TaskStatusDone {
+				t.Errorf("Task %q should be done in Board, got status %q", task.Title, task.Status)
 			}
 		}
 	}
@@ -299,7 +299,7 @@ func TestDependencies(t *testing.T) {
 	ws := setupWorkspace(t)
 	defer ws.Cleanup()
 
-	planID := ws.SeedATMPlan("dependencies-test", "active", []TaskDef{
+	planID := ws.SeedBoardPlan("dependencies-test", "active", []TaskDef{
 		{
 			Title: "Create first file",
 			Criteria: []string{
@@ -324,12 +324,12 @@ func TestDependencies(t *testing.T) {
 	ws.AssertFileExists(t, "output/second.txt", "Second file should exist")
 	ws.AssertFileContains(t, "output/second.txt", "step-2-done", "Second file correct content")
 
-	// Verify ATM state: both tasks done
-	state := ws.ReadATMState(t)
+	// Verify Board state: both tasks done
+	state := ws.ReadBoardState(t)
 	for _, task := range state.Tasks {
 		if task.PlanID == planID {
-			if task.Status != atm.TaskStatusDone {
-				t.Errorf("Task %q should be done in ATM, got status %q", task.Title, task.Status)
+			if task.Status != board.TaskStatusDone {
+				t.Errorf("Task %q should be done in Board, got status %q", task.Title, task.Status)
 			}
 		}
 	}
@@ -347,7 +347,7 @@ func TestProgressTracking(t *testing.T) {
 	ws := setupWorkspace(t)
 	defer ws.Cleanup()
 
-	planID := ws.SeedATMPlan("progress-test", "active", []TaskDef{
+	planID := ws.SeedBoardPlan("progress-test", "active", []TaskDef{
 		{
 			Title: "Create encoded file",
 			Criteria: []string{
@@ -360,8 +360,8 @@ func TestProgressTracking(t *testing.T) {
 
 	ws.AssertFileExists(t, "output/encoded.txt", "Encoded file should exist")
 
-	// Verify ATM progress entries exist
-	state := ws.ReadATMState(t)
+	// Verify Board progress entries exist
+	state := ws.ReadBoardState(t)
 	progressEntries := 0
 	for _, p := range state.Progress {
 		if p.PlanID == planID {
@@ -369,9 +369,9 @@ func TestProgressTracking(t *testing.T) {
 		}
 	}
 	if progressEntries == 0 {
-		t.Error("Expected at least one ATM progress entry for the plan")
+		t.Error("Expected at least one Board progress entry for the plan")
 	} else {
-		t.Logf("Found %d ATM progress entries", progressEntries)
+		t.Logf("Found %d Board progress entries", progressEntries)
 	}
 }
 
@@ -388,7 +388,7 @@ func TestOneTaskPerIteration(t *testing.T) {
 	defer ws.KeepOnFailure()
 	defer ws.Cleanup()
 
-	planID := ws.SeedATMPlan("one-task-per-iteration-test", "active", []TaskDef{
+	planID := ws.SeedBoardPlan("one-task-per-iteration-test", "active", []TaskDef{
 		{
 			Title:    "Create marker A",
 			Criteria: []string{`File output/a.txt exists with content "task-a-done"`},
@@ -413,11 +413,11 @@ func TestOneTaskPerIteration(t *testing.T) {
 	ws.AssertFileExists(t, "output/c.txt", "T3 should be completed")
 	ws.AssertFileContains(t, "output/c.txt", "task-c-done", "T3 correct content")
 
-	// Verify ATM state: all tasks done
-	state := ws.ReadATMState(t)
+	// Verify Board state: all tasks done
+	state := ws.ReadBoardState(t)
 	for _, task := range state.Tasks {
-		if task.PlanID == planID && task.Status != atm.TaskStatusDone {
-			t.Errorf("Task %q should be done in ATM, got status %q", task.Title, task.Status)
+		if task.PlanID == planID && task.Status != board.TaskStatusDone {
+			t.Errorf("Task %q should be done in Board, got status %q", task.Title, task.Status)
 		}
 	}
 
@@ -485,7 +485,7 @@ func TestWorkerQueue(t *testing.T) {
 	ws := setupWorkspace(t)
 	defer ws.Cleanup()
 
-	planID := ws.SeedATMPlan("worker-queue-test", "ready", []TaskDef{
+	planID := ws.SeedBoardPlan("worker-queue-test", "ready", []TaskDef{
 		{
 			Title:    "Create worker marker",
 			Criteria: []string{`File output/worker-marker.txt exists with content "worker-test-complete"`},
@@ -501,12 +501,12 @@ func TestWorkerQueue(t *testing.T) {
 	ws.AssertFileExists(t, "output/worker-marker.txt", "Marker file should exist after merge")
 	ws.AssertFileContains(t, "output/worker-marker.txt", "worker-test-complete", "Marker should have correct content")
 
-	// ATM plan should be complete
-	state := ws.ReadATMState(t)
+	// Board plan should be complete
+	state := ws.ReadBoardState(t)
 	for _, plan := range state.Plans {
 		if plan.ID == planID {
-			if plan.Status != atm.PlanStatusComplete {
-				t.Errorf("Plan should be 'complete' in ATM, got %q", plan.Status)
+			if plan.Status != board.PlanStatusComplete {
+				t.Errorf("Plan should be 'complete' in Board, got %q", plan.Status)
 			}
 		}
 	}
@@ -534,7 +534,7 @@ func TestDirtyState(t *testing.T) {
 	}
 	t.Log("Created dirty state in main worktree")
 
-	planID := ws.SeedATMPlan("dirty-state-test", "ready", []TaskDef{
+	planID := ws.SeedBoardPlan("dirty-state-test", "ready", []TaskDef{
 		{
 			Title:    "Create marker in dirty workspace",
 			Criteria: []string{`File output/dirty-test.txt exists`},
@@ -550,12 +550,12 @@ func TestDirtyState(t *testing.T) {
 	// Work should complete
 	ws.AssertFileExists(t, "output/dirty-test.txt", "Work should complete despite dirty state")
 
-	// ATM plan should be complete
-	state := ws.ReadATMState(t)
+	// Board plan should be complete
+	state := ws.ReadBoardState(t)
 	for _, plan := range state.Plans {
 		if plan.ID == planID {
-			if plan.Status != atm.PlanStatusComplete {
-				t.Errorf("Plan should be 'complete' in ATM, got %q", plan.Status)
+			if plan.Status != board.PlanStatusComplete {
+				t.Errorf("Plan should be 'complete' in Board, got %q", plan.Status)
 			}
 		}
 	}
@@ -608,7 +608,7 @@ func TestCorePrinciples(t *testing.T) {
 	ws := setupWorkspace(t)
 	defer ws.Cleanup()
 
-	planID := ws.SeedATMPlan("core-principles-test", "ready", []TaskDef{
+	planID := ws.SeedBoardPlan("core-principles-test", "ready", []TaskDef{
 		{
 			Title: "Create first marker",
 			Criteria: []string{
@@ -653,16 +653,16 @@ func TestCorePrinciples(t *testing.T) {
 		t.Logf("P5: %d commits on main", commitCount)
 	}
 
-	// ATM state: all tasks done, plan complete
-	state := ws.ReadATMState(t)
+	// Board state: all tasks done, plan complete
+	state := ws.ReadBoardState(t)
 	for _, task := range state.Tasks {
-		if task.PlanID == planID && task.Status != atm.TaskStatusDone {
-			t.Errorf("Task %q should be done in ATM, got status %q", task.Title, task.Status)
+		if task.PlanID == planID && task.Status != board.TaskStatusDone {
+			t.Errorf("Task %q should be done in Board, got status %q", task.Title, task.Status)
 		}
 	}
 	for _, plan := range state.Plans {
-		if plan.ID == planID && plan.Status != atm.PlanStatusComplete {
-			t.Errorf("Plan should be 'complete' in ATM, got %q", plan.Status)
+		if plan.ID == planID && plan.Status != board.PlanStatusComplete {
+			t.Errorf("Plan should be 'complete' in Board, got %q", plan.Status)
 		}
 	}
 
@@ -816,7 +816,7 @@ commands:
   test: "echo 'no tests'"
   lint: "echo 'no lint'"
 
-atm:
+board:
   project_slug: "test-project"
   bin_path: "%s"
   api_url: "http://localhost:9999"
@@ -830,7 +830,7 @@ slack:
   notify_iteration: false
   notify_error: true
   notify_blocker: true
-`, fakeATMBinary)
+`, fakeBoardBinary)
 
 	if err := os.WriteFile(filepath.Join(ws.Path, ".ralph/config.yaml"), []byte(configContent), 0644); err != nil {
 		t.Fatalf("Failed to update config: %v", err)
@@ -841,8 +841,8 @@ slack:
 	ws.Git(t, "commit", "-q", "-m", "Add Slack config")
 	ws.Git(t, "push", "origin", "main")
 
-	// Seed a plan via fake ATM
-	ws.SeedATMPlan("slack-test", "ready", []TaskDef{
+	// Seed a plan via fake Board
+	ws.SeedBoardPlan("slack-test", "ready", []TaskDef{
 		{
 			Title:    "Create marker file for slack test",
 			Criteria: []string{`File output/done.txt exists with content "slack-test-complete"`},
@@ -850,19 +850,19 @@ slack:
 	})
 
 	// Run ralph worker with mock Slack server URL via environment.
-	// Prepend fakeATMDir to PATH so Claude agent finds our fake atm-cli.
+	// Prepend fakeBoardDir to PATH so Claude agent finds our fake board-cli.
 	cmd := exec.Command(ralphBinary, "worker", "--once", "--merge", "--max", fmt.Sprintf("%d", maxIterations), "-v")
 	cmd.Dir = ws.Path
 	slackEnv := os.Environ()
 	for i, e := range slackEnv {
 		if strings.HasPrefix(e, "PATH=") {
-			slackEnv[i] = "PATH=" + fakeATMDir + string(os.PathListSeparator) + e[5:]
+			slackEnv[i] = "PATH=" + fakeBoardDir + string(os.PathListSeparator) + e[5:]
 			break
 		}
 	}
 	cmd.Env = append(slackEnv,
 		"RALPH_TEST=1",
-		"FAKEATM_STATE_PATH="+ws.atmStatePath,
+		"FAKEBOARD_STATE_PATH="+ws.boardStatePath,
 		"SLACK_API_URL="+slackServer.URL+"/",
 	)
 
@@ -914,10 +914,10 @@ slack:
 }
 
 // =============================================================================
-// TEST: ATM Context Failure (bad bin_path)
+// TEST: Board Context Failure (bad bin_path)
 // =============================================================================
 
-func TestATMContextFailure(t *testing.T) {
+func TestBoardContextFailure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -925,10 +925,10 @@ func TestATMContextFailure(t *testing.T) {
 	ws := setupWorkspace(t)
 	defer ws.Cleanup()
 
-	// Override config with an invalid atm bin_path
+	// Override config with an invalid board bin_path
 	configContent := `project:
   name: "Test Project"
-  description: "Integration test with bad ATM config"
+  description: "Integration test with bad Board config"
 
 git:
   base_branch: "main"
@@ -937,9 +937,9 @@ commands:
   test: "echo 'no tests'"
   lint: "echo 'no lint'"
 
-atm:
+board:
   project_slug: "test-project"
-  bin_path: "/nonexistent/atm-cli"
+  bin_path: "/nonexistent/board-cli"
   api_url: "http://localhost:9999"
   api_token: "test-token"
 `
@@ -950,9 +950,9 @@ atm:
 
 	// Commit the config change
 	ws.Git(t, "add", "-A")
-	ws.Git(t, "commit", "-q", "-m", "Add bad ATM config")
+	ws.Git(t, "commit", "-q", "-m", "Add bad Board config")
 
-	// Run ralph run with a plan ID (it will try to call ATM and fail)
+	// Run ralph run with a plan ID (it will try to call Board and fail)
 	cmd := exec.Command(ralphBinary, "run", "--plan", "1", "--max", "1")
 	cmd.Dir = ws.Path
 	cmd.Env = append(os.Environ(), "RALPH_TEST=1")
@@ -961,7 +961,7 @@ atm:
 	output := string(out)
 
 	if err == nil {
-		t.Error("Expected ralph to fail with invalid ATM bin_path, but it succeeded")
+		t.Error("Expected ralph to fail with invalid Board bin_path, but it succeeded")
 	} else {
 		t.Logf("ralph failed as expected: %v", err)
 		t.Logf("Output:\n%s", output)
@@ -975,7 +975,7 @@ atm:
 // TestFalseCompletionCircuitBreaker is covered by unit tests in
 // internal/runner/loop_test.go (TestIterationLoop_FalseCompletionCircuitBreaker).
 // Integration testing this is impractical because it requires the Claude agent
-// to repeatedly claim COMPLETE while ATM tasks remain incomplete, which is
+// to repeatedly claim COMPLETE while Board tasks remain incomplete, which is
 // non-deterministic behavior that cannot be reliably triggered.
 
 // =============================================================================
@@ -985,10 +985,10 @@ atm:
 // Workspace represents an isolated test workspace
 type Workspace struct {
 	Path         string
-	atmStatePath string
+	boardStatePath string
 	t            *testing.T
 	cleanup      bool
-	projectID    int // ATM project ID (seeded during setup)
+	projectID    int // Board project ID (seeded during setup)
 }
 
 // setupWorkspace creates an isolated test workspace with git repo and ralph structure
@@ -1003,7 +1003,7 @@ func setupWorkspace(t *testing.T) *Workspace {
 
 	ws := &Workspace{
 		Path:         dir,
-		atmStatePath: filepath.Join(dir, ".ralph", "atm-state.json"),
+		boardStatePath: filepath.Join(dir, ".ralph", "board-state.json"),
 		t:            t,
 		cleanup:      true,
 	}
@@ -1031,7 +1031,7 @@ func setupWorkspace(t *testing.T) *Workspace {
 		t.Fatalf("Failed to create .ralph: %v", err)
 	}
 
-	// Create config with ATM settings
+	// Create config with Board settings
 	configContent := fmt.Sprintf(`project:
   name: "Test Project"
   description: "Integration test workspace"
@@ -1043,12 +1043,12 @@ commands:
   test: "echo 'no tests'"
   lint: "echo 'no lint'"
 
-atm:
+board:
   project_slug: "test-project"
   bin_path: "%s"
   api_url: "http://localhost:9999"
   api_token: "test-token"
-`, fakeATMBinary)
+`, fakeBoardBinary)
 
 	// Check for global Slack credentials and include them
 	slackConfig := getGlobalSlackConfig()
@@ -1066,8 +1066,8 @@ atm:
 		t.Fatalf("Failed to create principles: %v", err)
 	}
 
-	// Seed default ATM project in state file
-	state := &atmState{
+	// Seed default Board project in state file
+	state := &boardState{
 		NextProjectID:   1,
 		NextPlanID:      1,
 		NextTaskID:      1,
@@ -1078,8 +1078,8 @@ atm:
 	proj := seedProject(state, "Test Project", "test-project")
 	ws.projectID = proj.ID
 
-	if err := saveATMState(ws.atmStatePath, state); err != nil {
-		t.Fatalf("Failed to save initial ATM state: %v", err)
+	if err := saveBoardState(ws.boardStatePath, state); err != nil {
+		t.Fatalf("Failed to save initial Board state: %v", err)
 	}
 
 	// Initial commit and push to local bare origin
@@ -1091,14 +1091,14 @@ atm:
 	return ws
 }
 
-// SeedATMPlan seeds a plan with tasks and criteria into the fake ATM state.
+// SeedBoardPlan seeds a plan with tasks and criteria into the fake Board state.
 // Returns the plan ID.
-func (ws *Workspace) SeedATMPlan(name, status string, tasks []TaskDef) int {
+func (ws *Workspace) SeedBoardPlan(name, status string, tasks []TaskDef) int {
 	ws.t.Helper()
 
-	state, err := loadATMState(ws.atmStatePath)
+	state, err := loadBoardState(ws.boardStatePath)
 	if err != nil {
-		ws.t.Fatalf("Failed to load ATM state: %v", err)
+		ws.t.Fatalf("Failed to load Board state: %v", err)
 	}
 
 	// Create plan with feature branch
@@ -1114,7 +1114,7 @@ func (ws *Workspace) SeedATMPlan(name, status string, tasks []TaskDef) int {
 		for _, req := range td.Requires {
 			depID, ok := titleToID[req]
 			if !ok {
-				ws.t.Fatalf("SeedATMPlan: task %q requires %q, but that task hasn't been defined yet (must appear earlier in the list)", td.Title, req)
+				ws.t.Fatalf("SeedBoardPlan: task %q requires %q, but that task hasn't been defined yet (must appear earlier in the list)", td.Title, req)
 			}
 			deps = append(deps, depID)
 		}
@@ -1128,21 +1128,21 @@ func (ws *Workspace) SeedATMPlan(name, status string, tasks []TaskDef) int {
 		}
 	}
 
-	if err := saveATMState(ws.atmStatePath, state); err != nil {
-		ws.t.Fatalf("Failed to save ATM state: %v", err)
+	if err := saveBoardState(ws.boardStatePath, state); err != nil {
+		ws.t.Fatalf("Failed to save Board state: %v", err)
 	}
 
-	ws.t.Logf("Seeded ATM plan #%d (%s) with %d tasks", plan.ID, name, len(tasks))
+	ws.t.Logf("Seeded Board plan #%d (%s) with %d tasks", plan.ID, name, len(tasks))
 	return plan.ID
 }
 
-// ReadATMState loads and returns the current ATM state for assertions.
-func (ws *Workspace) ReadATMState(t *testing.T) *atmState {
+// ReadBoardState loads and returns the current Board state for assertions.
+func (ws *Workspace) ReadBoardState(t *testing.T) *boardState {
 	t.Helper()
 
-	state, err := loadATMState(ws.atmStatePath)
+	state, err := loadBoardState(ws.boardStatePath)
 	if err != nil {
-		t.Fatalf("Failed to load ATM state: %v", err)
+		t.Fatalf("Failed to load Board state: %v", err)
 	}
 	return state
 }
@@ -1171,19 +1171,19 @@ func (ws *Workspace) RunRalph(t *testing.T, args ...string) string {
 	cmd := exec.Command(ralphBinary, args...)
 	cmd.Dir = ws.Path
 
-	// Build env with fake atm-cli directory prepended to PATH.
-	// This ensures the Claude agent (which shells out to "atm-cli") finds our
+	// Build env with fake board-cli directory prepended to PATH.
+	// This ensures the Claude agent (which shells out to "board-cli") finds our
 	// fake binary instead of the real one.
 	env := os.Environ()
 	for i, e := range env {
 		if strings.HasPrefix(e, "PATH=") {
-			env[i] = "PATH=" + fakeATMDir + string(os.PathListSeparator) + e[5:]
+			env[i] = "PATH=" + fakeBoardDir + string(os.PathListSeparator) + e[5:]
 			break
 		}
 	}
 	cmd.Env = append(env,
 		"RALPH_TEST=1",
-		"FAKEATM_STATE_PATH="+ws.atmStatePath,
+		"FAKEBOARD_STATE_PATH="+ws.boardStatePath,
 	)
 
 	t.Logf("Running: ralph %s", strings.Join(args, " "))

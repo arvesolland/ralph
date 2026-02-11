@@ -7,21 +7,21 @@ An implementation of the Ralph Wiggum technique for autonomous AI development.
 
 ## Why It Works
 
-**Fresh context per iteration.** Like malloc'ing a new array instead of appending - each Claude Code invocation gets a clean context window, avoiding the pollution and degradation that happens when LLMs accumulate conversation history. Progress persists in ATM (Agent Task Manager) and git, not in context.
+**Fresh context per iteration.** Like malloc'ing a new array instead of appending - each Claude Code invocation gets a clean context window, avoiding the pollution and degradation that happens when LLMs accumulate conversation history. Progress persists in Board and git, not in context.
 
 **External memory architecture.** Agents don't carry state - they read it:
-- **ATM Plans** - Structured tasks with dependencies, acceptance criteria, and status tracked via the ATM API.
-- **ATM Progress/Feedback** - Append-only logs for institutional memory and human-in-the-loop communication.
+- **Board Plans** - Structured tasks with dependencies, acceptance criteria, and status tracked via the Board API.
+- **Board Progress/Feedback** - Append-only logs for institutional memory and human-in-the-loop communication.
 - **Git Commits** - Code changes persist between iterations. Each iteration commits its work.
 
-**Collective learning.** Each agent writes progress back to ATM before exiting. Future agents read this context and don't repeat mistakes. The system gets smarter with every iteration.
+**Collective learning.** Each agent writes progress back to Board before exiting. Future agents read this context and don't repeat mistakes. The system gets smarter with every iteration.
 
 ```
 Fresh context window (clean slate)
-    -> Fetches plan context from ATM (tasks, progress, feedback)
+    -> Fetches plan context from Board (tasks, progress, feedback)
     -> Knows exactly what to do (structured task with acceptance criteria)
     -> Executes ONE task
-    -> Updates task status in ATM
+    -> Updates task status in Board
     -> Commits & exits
     -> Next agent picks up smarter
 ```
@@ -29,12 +29,12 @@ Fresh context window (clean slate)
 ## Features
 
 - **Single Binary** - Cross-platform Go binary with no dependencies
-- **ATM Integration** - Polls ATM for ready plans, tracks tasks, progress, and feedback via API
+- **Board Integration** - Polls Board for ready plans, tracks tasks, progress, and feedback via API
 - **Structured Plans** - Tasks with dependencies, status tracking, and acceptance criteria
 - **Worktree Isolation** - Each plan runs in its own git worktree (no branch switching conflicts)
 - **Auto PR Creation** - Create pull requests via `gh` CLI on completion
 - **Slack Notifications** - Real-time updates via webhooks or Bot API
-- **False Completion Guard** - ATM stats verification prevents premature completion claims
+- **False Completion Guard** - Board stats verification prevents premature completion claims
 - **Config-Driven** - Customize prompts, commands, and behavior via config files
 
 ## Installation
@@ -85,20 +85,20 @@ ralph init --detect
 ```
 
 This creates:
-- `.ralph/config.yaml` - Project configuration (including ATM settings)
+- `.ralph/config.yaml` - Project configuration (including Board settings)
 - `.ralph/prompts/` - Customizable agent prompts
 - `specs/INDEX.md` - Feature specification index
 
-During init, you'll be prompted for ATM configuration (project slug, API URL, API token).
+During init, you'll be prompted for Board configuration (project slug, API URL, API token).
 
-### 2. Create a Plan in ATM
+### 2. Create a Plan in Board
 
-Create plans in the ATM task manager via the `atm-cli` or ATM web UI:
+Create plans in Board via `board-cli` or the Board web UI:
 
 ```bash
-atm-cli plan create <project-slug> --title "My Feature"
-atm-cli task create <plan-id> --title "First task" --description "..."
-atm-cli plan status <plan-id> --status ready
+board-cli plan create <project-slug> --title "My Feature"
+board-cli task create <plan-id> --title "First task" --description "..."
+board-cli plan status <plan-id> --status ready
 ```
 
 ### 3. Run Ralph
@@ -107,16 +107,16 @@ atm-cli plan status <plan-id> --status ready
 # Run a single plan by ID
 ralph run --plan 42
 
-# Or use the worker to process the ATM queue
+# Or use the worker to process the Board queue
 ralph worker --once
 ```
 
 Ralph will:
-1. Fetch plan details and context from ATM
+1. Fetch plan details and context from Board
 2. Create a worktree for the plan's feature branch
-3. Build a prompt with ATM context (tasks, progress, feedback)
+3. Build a prompt with Board context (tasks, progress, feedback)
 4. Execute Claude Code to work on the next available task
-5. Verify completion via ATM task stats
+5. Verify completion via Board task stats
 6. Commit changes after each iteration
 7. Repeat until all tasks are complete
 8. Create a PR (default), merge, or push branch only
@@ -136,13 +136,13 @@ Flags:
 
 ### `ralph run`
 
-Run the iteration loop on a specific ATM plan.
+Run the iteration loop on a specific Board plan.
 
 ```bash
 ralph run --plan <plan-id> [flags]
 
 Flags:
-  --plan int              ATM plan ID (required)
+  --plan int              Board plan ID (required)
   --max int               Max iterations (default 30)
   --completion-mode str   Completion mode: pr, merge, or branch (default from config)
   --push                  Push to remote after each iteration
@@ -157,7 +157,7 @@ ralph run --plan 42 --completion-mode merge
 
 ### `ralph worker`
 
-Process plans from the ATM queue.
+Process plans from the Board queue.
 
 ```bash
 ralph worker [flags]
@@ -176,7 +176,7 @@ Flags:
 
 ### `ralph status`
 
-Display project status from ATM (active plan, task stats, available tasks, recent progress).
+Display project status from Board (active plan, task stats, available tasks, recent progress).
 
 ```bash
 ralph status
@@ -236,11 +236,11 @@ worktree:
   copy_env_files: ".env, .env.local"
   init_commands: ""  # Custom init (skips auto-detection if set)
 
-atm:
+board:
   project_slug: "my-project"
-  api_url: "https://atm.example.com/api"
+  api_url: "https://board.example.com/api"
   api_token: "your-api-token"
-  bin_path: "atm-cli"  # Path to atm-cli binary (default: "atm-cli")
+  bin_path: "board-cli"  # Path to board-cli binary (default: "board-cli")
 
 worker:
   sync: false           # Pull from remote before each queue check
@@ -272,7 +272,7 @@ Prompts use `{{PLACEHOLDER}}` syntax for dynamic values:
 - `{{TEST_COMMAND}}`, `{{LINT_COMMAND}}`, `{{BUILD_COMMAND}}` - from config.yaml
 - `{{ITERATION}}`, `{{MAX_ITERATIONS}}` - current iteration state
 - `{{FEATURE_BRANCH}}`, `{{BASE_BRANCH}}` - git branch info
-- `{{PLAN_ID}}`, `{{ATM_CONTEXT}}` - ATM plan data
+- `{{PLAN_ID}}`, `{{BOARD_CONTEXT}}` - Board plan data
 
 ### Directory Structure
 
@@ -287,24 +287,24 @@ your-project/
     └── INDEX.md          # Feature specification index
 ```
 
-## ATM Workflow
+## Board Workflow
 
-Ralph uses the ATM (Agent Task Manager) service for plan and task management:
+Ralph uses Board for plan and task management:
 
-1. **Ready** - Plans in ATM with status "ready" are available for processing
+1. **Ready** - Plans in Board with status "ready" are available for processing
 2. **Active** - Ralph activates a plan and begins the iteration loop
-3. **Complete** - All tasks done in ATM, plan marked complete, PR/merge/branch created
+3. **Complete** - All tasks done in Board, plan marked complete, PR/merge/branch created
 4. **Blocked** - Plan marked blocked if max iterations reached or errors occur
 
 ```bash
-# Create a plan in ATM
-atm-cli plan create my-project --title "Add user auth"
+# Create a plan in Board
+board-cli plan create my-project --title "Add user auth"
 
 # Add tasks with acceptance criteria
-atm-cli task create <plan-id> --title "Create login endpoint"
+board-cli task create <plan-id> --title "Create login endpoint"
 
 # Mark plan as ready for Ralph
-atm-cli plan status <plan-id> --status ready
+board-cli plan status <plan-id> --status ready
 
 # Ralph picks it up automatically
 ralph worker
@@ -379,7 +379,7 @@ cmd/ralph/              # Main entry point
 internal/
 ├── cli/                # Cobra commands (init, run, worker, status, cleanup, version)
 ├── config/             # Config loading, YAML parsing, project detection
-├── atm/                # ATM client (shells out to atm-cli)
+├── board/              # Board client (shells out to board-cli)
 ├── runner/             # Claude execution, streaming, retry, iteration loop
 ├── git/                # Git operations (commit, branch, status, worktree)
 ├── worktree/           # Worktree management, dependency auto-detection, hooks
@@ -391,9 +391,9 @@ internal/
 
 ### Key Packages
 
-- **atm** - ATM client wrapping the `atm-cli` binary for plan/task management
-- **runner** - Core Claude CLI execution with JSON streaming, retry logic, and ATM-based completion verification
-- **worker** - Queue processor that polls ATM for ready plans, runs iteration loops, handles PR/merge/branch completion
+- **board** - Board client wrapping the `board-cli` binary for plan/task management
+- **runner** - Core Claude CLI execution with JSON streaming, retry logic, and Board-based completion verification
+- **worker** - Queue processor that polls Board for ready plans, runs iteration loops, handles PR/merge/branch completion
 - **worktree** - Git worktree lifecycle management with dependency auto-detection
 
 See [CLAUDE.md](CLAUDE.md) for detailed development guidance.
@@ -420,13 +420,13 @@ Or use merge mode instead:
 ralph worker --merge
 ```
 
-### "atm.project_slug not configured"
+### "board.project_slug not configured"
 
-Run `ralph init` to set up ATM configuration, or manually add to `.ralph/config.yaml`:
+Run `ralph init` to set up Board configuration, or manually add to `.ralph/config.yaml`:
 ```yaml
-atm:
+board:
   project_slug: "my-project"
-  api_url: "https://atm.example.com/api"
+  api_url: "https://board.example.com/api"
   api_token: "your-token"
 ```
 
@@ -445,15 +445,15 @@ Ralph won't clean up worktrees with uncommitted changes for safety. Either:
 
 ### False completion claims
 
-If the agent outputs `<promise>COMPLETE</promise>` but ATM stats show tasks remain:
-1. Ralph automatically adds feedback to ATM explaining which tasks are incomplete
+If the agent outputs `<promise>COMPLETE</promise>` but Board stats show tasks remain:
+1. Ralph automatically adds feedback to Board explaining which tasks are incomplete
 2. The next iteration reads this feedback and addresses it
 3. After 5 consecutive false completions, Ralph halts to prevent infinite loops
 
 ## Requirements
 
 - **Claude Code CLI** - `claude` command must be available in PATH
-- **ATM CLI** - `atm-cli` command for task management (configurable via `atm.bin_path`)
+- **Board CLI** - `board-cli` command for task management (configurable via `board.bin_path`)
 - **Git** - For version control and worktree management
 - **GitHub CLI** (optional) - For PR creation (`gh`)
 

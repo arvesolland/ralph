@@ -7,17 +7,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 )
 
-// State is the JSON state file that persists all ATM data for the fake CLI.
+// State is the JSON state file that persists all Board data for the fake CLI.
 type State struct {
-	Projects []atm.Project  `json:"projects"`
-	Plans    []atm.Plan     `json:"plans"`
-	Tasks    []atm.Task     `json:"tasks"`
-	Criteria []atm.Criterion `json:"criteria"`
-	Progress []atm.Progress `json:"progress"`
-	Feedback []atm.Feedback `json:"feedback"`
+	Projects []board.Project  `json:"projects"`
+	Plans    []board.Plan     `json:"plans"`
+	Tasks    []board.Task     `json:"tasks"`
+	Criteria []board.Criterion `json:"criteria"`
+	Progress []board.Progress `json:"progress"`
+	Feedback []board.Feedback `json:"feedback"`
 
 	// Auto-increment counters for each entity type.
 	NextProjectID  int `json:"next_project_id"`
@@ -133,8 +133,8 @@ func now() string {
 // Seed helpers for test setup.
 
 // SeedProject adds a project to the state and returns it with its assigned ID.
-func SeedProject(s *State, name, slug string) atm.Project {
-	p := atm.Project{
+func SeedProject(s *State, name, slug string) board.Project {
+	p := board.Project{
 		ID:        s.NextProjectID,
 		Name:      name,
 		Slug:      slug,
@@ -147,8 +147,8 @@ func SeedProject(s *State, name, slug string) atm.Project {
 }
 
 // SeedPlan adds a plan to the state and returns it with its assigned ID.
-func SeedPlan(s *State, projectID int, title, status, branch string) atm.Plan {
-	p := atm.Plan{
+func SeedPlan(s *State, projectID int, title, status, branch string) board.Plan {
+	p := board.Plan{
 		ID:            s.NextPlanID,
 		ProjectID:     projectID,
 		Title:         title,
@@ -163,20 +163,20 @@ func SeedPlan(s *State, projectID int, title, status, branch string) atm.Plan {
 }
 
 // SeedTask adds a task to the state and returns it with its assigned ID.
-func SeedTask(s *State, planID int, title, description string, deps []int) atm.Task {
-	t := atm.Task{
+func SeedTask(s *State, planID int, title, description string, deps []int) board.Task {
+	t := board.Task{
 		ID:          s.NextTaskID,
 		PlanID:      planID,
 		Title:       title,
 		Description: description,
-		Status:      atm.TaskStatusTodo,
+		Status:      board.TaskStatusTodo,
 		Position:    len(tasksForPlan(s, planID)) + 1,
 		CreatedAt:   now(),
 		UpdatedAt:   now(),
 	}
 	// Store dependency info as BlockedBy references (IDs only).
 	for _, depID := range deps {
-		t.BlockedBy = append(t.BlockedBy, atm.Task{ID: depID})
+		t.BlockedBy = append(t.BlockedBy, board.Task{ID: depID})
 	}
 	s.NextTaskID++
 	s.Tasks = append(s.Tasks, t)
@@ -184,8 +184,8 @@ func SeedTask(s *State, planID int, title, description string, deps []int) atm.T
 }
 
 // SeedCriterion adds a criterion to the state and returns it with its assigned ID.
-func SeedCriterion(s *State, taskID int, description string) atm.Criterion {
-	c := atm.Criterion{
+func SeedCriterion(s *State, taskID int, description string) board.Criterion {
+	c := board.Criterion{
 		ID:          s.NextCriterionID,
 		TaskID:      taskID,
 		Description: description,
@@ -200,7 +200,7 @@ func SeedCriterion(s *State, taskID int, description string) atm.Criterion {
 
 // Helper lookups.
 
-func findProject(s *State, slug string) *atm.Project {
+func findProject(s *State, slug string) *board.Project {
 	for i := range s.Projects {
 		if s.Projects[i].Slug == slug {
 			return &s.Projects[i]
@@ -209,7 +209,7 @@ func findProject(s *State, slug string) *atm.Project {
 	return nil
 }
 
-func findProjectByID(s *State, id int) *atm.Project {
+func findProjectByID(s *State, id int) *board.Project {
 	for i := range s.Projects {
 		if s.Projects[i].ID == id {
 			return &s.Projects[i]
@@ -218,7 +218,7 @@ func findProjectByID(s *State, id int) *atm.Project {
 	return nil
 }
 
-func findPlan(s *State, id int) *atm.Plan {
+func findPlan(s *State, id int) *board.Plan {
 	for i := range s.Plans {
 		if s.Plans[i].ID == id {
 			return &s.Plans[i]
@@ -227,7 +227,7 @@ func findPlan(s *State, id int) *atm.Plan {
 	return nil
 }
 
-func findTask(s *State, id int) *atm.Task {
+func findTask(s *State, id int) *board.Task {
 	for i := range s.Tasks {
 		if s.Tasks[i].ID == id {
 			return &s.Tasks[i]
@@ -236,7 +236,7 @@ func findTask(s *State, id int) *atm.Task {
 	return nil
 }
 
-func findCriterion(s *State, id int) *atm.Criterion {
+func findCriterion(s *State, id int) *board.Criterion {
 	for i := range s.Criteria {
 		if s.Criteria[i].ID == id {
 			return &s.Criteria[i]
@@ -245,8 +245,8 @@ func findCriterion(s *State, id int) *atm.Criterion {
 	return nil
 }
 
-func tasksForPlan(s *State, planID int) []atm.Task {
-	var result []atm.Task
+func tasksForPlan(s *State, planID int) []board.Task {
+	var result []board.Task
 	for _, t := range s.Tasks {
 		if t.PlanID == planID {
 			result = append(result, t)
@@ -255,8 +255,8 @@ func tasksForPlan(s *State, planID int) []atm.Task {
 	return result
 }
 
-func criteriaForTask(s *State, taskID int) []atm.Criterion {
-	var result []atm.Criterion
+func criteriaForTask(s *State, taskID int) []board.Criterion {
+	var result []board.Criterion
 	for _, c := range s.Criteria {
 		if c.TaskID == taskID {
 			result = append(result, c)
@@ -265,8 +265,8 @@ func criteriaForTask(s *State, taskID int) []atm.Criterion {
 	return result
 }
 
-func progressForPlan(s *State, planID int) []atm.Progress {
-	var result []atm.Progress
+func progressForPlan(s *State, planID int) []board.Progress {
+	var result []board.Progress
 	for _, p := range s.Progress {
 		if p.PlanID == planID {
 			result = append(result, p)
@@ -275,8 +275,8 @@ func progressForPlan(s *State, planID int) []atm.Progress {
 	return result
 }
 
-func feedbackForPlan(s *State, planID int) []atm.Feedback {
-	var result []atm.Feedback
+func feedbackForPlan(s *State, planID int) []board.Feedback {
+	var result []board.Feedback
 	for _, f := range s.Feedback {
 		if f.PlanID == planID {
 			result = append(result, f)
@@ -285,8 +285,8 @@ func feedbackForPlan(s *State, planID int) []atm.Feedback {
 	return result
 }
 
-func plansForProject(s *State, projectID int) []atm.Plan {
-	var result []atm.Plan
+func plansForProject(s *State, projectID int) []board.Plan {
+	var result []board.Plan
 	for _, p := range s.Plans {
 		if p.ProjectID == projectID {
 			result = append(result, p)
@@ -296,9 +296,9 @@ func plansForProject(s *State, projectID int) []atm.Plan {
 }
 
 // activePlanForProject returns the first plan with status "active" for the project.
-func activePlanForProject(s *State, projectID int) *atm.Plan {
+func activePlanForProject(s *State, projectID int) *board.Plan {
 	for i := range s.Plans {
-		if s.Plans[i].ProjectID == projectID && s.Plans[i].Status == atm.PlanStatusActive {
+		if s.Plans[i].ProjectID == projectID && s.Plans[i].Status == board.PlanStatusActive {
 			return &s.Plans[i]
 		}
 	}
@@ -306,23 +306,23 @@ func activePlanForProject(s *State, projectID int) *atm.Plan {
 }
 
 // computeStats calculates task statistics for a plan.
-func computeStats(s *State, planID int) atm.Stats {
+func computeStats(s *State, planID int) board.Stats {
 	tasks := tasksForPlan(s, planID)
-	var stats atm.Stats
+	var stats board.Stats
 	stats.TotalTasks = len(tasks)
 	for _, t := range tasks {
 		switch t.Status {
-		case atm.TaskStatusDone:
+		case board.TaskStatusDone:
 			stats.Done++
-		case atm.TaskStatusDoing:
+		case board.TaskStatusDoing:
 			stats.Doing++
-		case atm.TaskStatusClaimed:
+		case board.TaskStatusClaimed:
 			stats.Claimed++
-		case atm.TaskStatusBlocked:
+		case board.TaskStatusBlocked:
 			stats.Blocked++
-		case atm.TaskStatusSkipped:
+		case board.TaskStatusSkipped:
 			stats.Skipped++
-		case atm.TaskStatusTodo:
+		case board.TaskStatusTodo:
 			if isAvailable(s, &t) {
 				stats.Available++
 			}
@@ -332,8 +332,8 @@ func computeStats(s *State, planID int) atm.Stats {
 }
 
 // isAvailable returns true if a task is todo and all its dependencies are done or skipped.
-func isAvailable(s *State, t *atm.Task) bool {
-	if t.Status != atm.TaskStatusTodo {
+func isAvailable(s *State, t *board.Task) bool {
+	if t.Status != board.TaskStatusTodo {
 		return false
 	}
 	for _, dep := range t.BlockedBy {
@@ -341,7 +341,7 @@ func isAvailable(s *State, t *atm.Task) bool {
 		if dt == nil {
 			return false
 		}
-		if dt.Status != atm.TaskStatusDone && dt.Status != atm.TaskStatusSkipped {
+		if dt.Status != board.TaskStatusDone && dt.Status != board.TaskStatusSkipped {
 			return false
 		}
 	}
@@ -349,8 +349,8 @@ func isAvailable(s *State, t *atm.Task) bool {
 }
 
 // availableTasks returns all tasks for a plan that are available (todo + deps satisfied).
-func availableTasks(s *State, planID int) []atm.Task {
-	var result []atm.Task
+func availableTasks(s *State, planID int) []board.Task {
+	var result []board.Task
 	for _, t := range tasksForPlan(s, planID) {
 		if isAvailable(s, &t) {
 			result = append(result, t)
@@ -360,10 +360,10 @@ func availableTasks(s *State, planID int) []atm.Task {
 }
 
 // blockedTasks returns all tasks for a plan with status "blocked".
-func blockedTasks(s *State, planID int) []atm.Task {
-	var result []atm.Task
+func blockedTasks(s *State, planID int) []board.Task {
+	var result []board.Task
 	for _, t := range tasksForPlan(s, planID) {
-		if t.Status == atm.TaskStatusBlocked {
+		if t.Status == board.TaskStatusBlocked {
 			result = append(result, t)
 		}
 	}
@@ -371,11 +371,11 @@ func blockedTasks(s *State, planID int) []atm.Task {
 }
 
 // enrichTask adds acceptance_criteria and blocked_by data to a task.
-func enrichTask(s *State, t atm.Task) atm.Task {
+func enrichTask(s *State, t board.Task) board.Task {
 	t.AcceptanceCriteria = criteriaForTask(s, t.ID)
 	// BlockedBy is already stored on the task as ID references.
 	// Enrich with full task data for the response.
-	var enrichedDeps []atm.Task
+	var enrichedDeps []board.Task
 	for _, dep := range t.BlockedBy {
 		dt := findTask(s, dep.ID)
 		if dt != nil {
@@ -387,7 +387,7 @@ func enrichTask(s *State, t atm.Task) atm.Task {
 }
 
 // enrichPlan adds tasks, feedback, and progress data to a plan.
-func enrichPlan(s *State, p atm.Plan) atm.Plan {
+func enrichPlan(s *State, p board.Plan) board.Plan {
 	tasks := tasksForPlan(s, p.ID)
 	for i := range tasks {
 		tasks[i] = enrichTask(s, tasks[i])

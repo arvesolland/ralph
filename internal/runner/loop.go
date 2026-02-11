@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
@@ -40,13 +40,13 @@ const MaxFalseCompletions = 5
 // IterationLoop manages the main execution loop for plan completion.
 // It orchestrates: prompt building -> Claude execution -> verification -> commit.
 type IterationLoop struct {
-	// atm is the ATM client for task management
-	atm atm.ATM
+	// board is the Board client for task management
+	board board.Board
 
-	// planID is the ATM plan ID being executed
+	// planID is the Board plan ID being executed
 	planID int
 
-	// projectSlug is the ATM project slug
+	// projectSlug is the Board project slug
 	projectSlug string
 
 	// ctx is the execution context
@@ -88,7 +88,7 @@ type IterationLoop struct {
 
 // LoopConfig holds configuration for creating an IterationLoop.
 type LoopConfig struct {
-	ATM               atm.ATM
+	Board             board.Board
 	PlanID            int
 	ProjectSlug       string
 	Context           *Context
@@ -112,7 +112,7 @@ func NewIterationLoop(cfg LoopConfig) *IterationLoop {
 	}
 
 	return &IterationLoop{
-		atm:               cfg.ATM,
+		board:             cfg.Board,
 		planID:            cfg.PlanID,
 		projectSlug:       cfg.ProjectSlug,
 		ctx:               cfg.Context,
@@ -135,7 +135,7 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 	result := &LoopResult{}
 
 	// Validate plan ID before entering loop
-	if l.atm != nil && l.planID <= 0 {
+	if l.board != nil && l.planID <= 0 {
 		result.Error = fmt.Errorf("invalid plan ID: %d (must be > 0)", l.planID)
 		return result
 	}
@@ -181,28 +181,28 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 			// Continue - agent may have worked on other tasks
 		}
 
-		// Check for completion via ATM stats
+		// Check for completion via Board stats
 		if iterResult.IsComplete {
-			log.Info("Completion marker detected, checking ATM stats...")
+			log.Info("Completion marker detected, checking Board stats...")
 
-			if l.isATMComplete(ctx) {
-				log.Success("Plan verified complete (all tasks done in ATM)")
+			if l.isBoardComplete(ctx) {
+				log.Success("Plan verified complete (all tasks done in Board)")
 				result.Completed = true
 				return result
 			}
 
 			// Track consecutive false completions
 			l.falseCompletions++
-			log.Warn("ATM stats show plan is not yet complete (false completion %d/%d)", l.falseCompletions, MaxFalseCompletions)
+			log.Warn("Board stats show plan is not yet complete (false completion %d/%d)", l.falseCompletions, MaxFalseCompletions)
 
 			if l.falseCompletions >= MaxFalseCompletions {
-				result.Error = fmt.Errorf("agent claimed completion %d times but ATM stats never confirmed — halting", l.falseCompletions)
+				result.Error = fmt.Errorf("agent claimed completion %d times but Board stats never confirmed — halting", l.falseCompletions)
 				return result
 			}
 
-			feedback := fmt.Sprintf("Agent claimed completion but ATM stats show tasks remain. This is false completion attempt %d/%d. Use `atm-cli plan context %d --format text` to see which tasks are still incomplete.", l.falseCompletions, MaxFalseCompletions, l.planID)
-			if err := l.addATMFeedback(ctx, feedback); err != nil {
-				log.Error("Failed to add ATM feedback: %v", err)
+			feedback := fmt.Sprintf("Agent claimed completion but Board stats show tasks remain. This is false completion attempt %d/%d. Use `board-cli plan context %d --format text` to see which tasks are still incomplete.", l.falseCompletions, MaxFalseCompletions, l.planID)
+			if err := l.addBoardFeedback(ctx, feedback); err != nil {
+				log.Error("Failed to add Board feedback: %v", err)
 			}
 		} else {
 			// Reset false completion counter on non-completion iterations
@@ -239,15 +239,15 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 	log.Debug("Building prompt for iteration %d", l.ctx.Iteration)
 
-	// Fetch fresh context from ATM as structured text (for prompt injection)
+	// Fetch fresh context from Board as structured text (for prompt injection)
 	var contextText string
-	if l.atm != nil && l.planID > 0 {
+	if l.board != nil && l.planID > 0 {
 		var err error
-		contextText, err = l.atm.PlanContextText(l.planID)
+		contextText, err = l.board.PlanContextText(l.planID)
 		if err != nil {
-			return nil, fmt.Errorf("fetching ATM plan context (plan %d): %w", l.planID, err)
+			return nil, fmt.Errorf("fetching Board plan context (plan %d): %w", l.planID, err)
 		}
-		log.Debug("Fetched ATM plan context text (%d bytes)", len(contextText))
+		log.Debug("Fetched Board plan context text (%d bytes)", len(contextText))
 	}
 
 	// Build the prompt
@@ -278,8 +278,8 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 
 	log.Debug("Claude execution completed (duration: %v, complete: %v)", result.Duration, result.IsComplete)
 
-	// Add progress to ATM
-	if l.atm != nil && l.planID > 0 {
+	// Add progress to Board
+	if l.board != nil && l.planID > 0 {
 		progressBody := fmt.Sprintf("Iteration %d completed in %v.", l.ctx.Iteration, result.Duration)
 		if result.IsComplete {
 			progressBody += " Completion marker detected."
@@ -288,8 +288,8 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 			progressBody += fmt.Sprintf(" Blocker: %s", result.Blocker.Description)
 		}
 
-		if _, err := l.atm.AddProgress(l.planID, "ralph", progressBody); err != nil {
-			log.Warn("Failed to add ATM progress: %v", err)
+		if _, err := l.board.AddProgress(l.planID, "ralph", progressBody); err != nil {
+			log.Warn("Failed to add Board progress: %v", err)
 		}
 	}
 
@@ -313,11 +313,11 @@ func (l *IterationLoop) buildPrompt(contextText string) (string, error) {
 		"PLAN_ID":        fmt.Sprintf("%d", l.planID),
 	}
 
-	// Inject ATM plan context as structured text
+	// Inject Board plan context as structured text
 	if contextText != "" {
-		overrides["ATM_CONTEXT"] = contextText
+		overrides["BOARD_CONTEXT"] = contextText
 	} else {
-		overrides["ATM_CONTEXT"] = "[No plan context available. Run `atm-cli plan context " + fmt.Sprintf("%d", l.planID) + " --format text` to fetch it manually.]"
+		overrides["BOARD_CONTEXT"] = "[No plan context available. Run `board-cli plan context " + fmt.Sprintf("%d", l.planID) + " --format text` to fetch it manually.]"
 	}
 
 	// Build the main prompt
@@ -368,23 +368,23 @@ func (l *IterationLoop) commitChanges() error {
 	return nil
 }
 
-// isATMComplete checks if the plan is complete via ATM stats.
-// Fail-closed: returns false if ATM is unreachable (retries 3 times).
-func (l *IterationLoop) isATMComplete(ctx context.Context) bool {
-	if l.atm == nil || l.planID == 0 {
-		// No ATM configured, treat completion marker as sufficient
+// isBoardComplete checks if the plan is complete via Board stats.
+// Fail-closed: returns false if Board is unreachable (retries 3 times).
+func (l *IterationLoop) isBoardComplete(ctx context.Context) bool {
+	if l.board == nil || l.planID == 0 {
+		// No Board configured, treat completion marker as sufficient
 		return true
 	}
 
 	// Retry up to 3 times with backoff
-	var agentCtx *atm.AgentContext
+	var agentCtx *board.AgentContext
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
-		agentCtx, err = l.atm.PlanContext(l.planID)
+		agentCtx, err = l.board.PlanContext(l.planID)
 		if err == nil {
 			break
 		}
-		log.Warn("ATM completion check attempt %d/3 failed: %v", attempt, err)
+		log.Warn("Board completion check attempt %d/3 failed: %v", attempt, err)
 		if attempt < 3 {
 			select {
 			case <-ctx.Done():
@@ -394,29 +394,29 @@ func (l *IterationLoop) isATMComplete(ctx context.Context) bool {
 		}
 	}
 	if err != nil {
-		log.Error("Failed to verify ATM completion after 3 attempts: %v", err)
-		// Fail-closed: do NOT trust the completion marker when ATM is unreachable
+		log.Error("Failed to verify Board completion after 3 attempts: %v", err)
+		// Fail-closed: do NOT trust the completion marker when Board is unreachable
 		return false
 	}
 
 	stats := agentCtx.Stats
 	if stats.TotalTasks == 0 {
-		// No tasks tracked in ATM, trust the completion marker
+		// No tasks tracked in Board, trust the completion marker
 		return true
 	}
 
 	completed := stats.Done + stats.Skipped
-	log.Debug("ATM stats: %d/%d tasks done (done=%d, skipped=%d)",
+	log.Debug("Board stats: %d/%d tasks done (done=%d, skipped=%d)",
 		completed, stats.TotalTasks, stats.Done, stats.Skipped)
 
 	return completed == stats.TotalTasks
 }
 
-// addATMFeedback adds feedback to the plan via ATM.
-func (l *IterationLoop) addATMFeedback(ctx context.Context, reason string) error {
-	if l.atm == nil || l.planID == 0 {
+// addBoardFeedback adds feedback to the plan via Board.
+func (l *IterationLoop) addBoardFeedback(ctx context.Context, reason string) error {
+	if l.board == nil || l.planID == 0 {
 		return nil
 	}
-	_, err := l.atm.AddFeedback(l.planID, "ralph-verification", reason)
+	_, err := l.board.AddFeedback(l.planID, "ralph-verification", reason)
 	return err
 }

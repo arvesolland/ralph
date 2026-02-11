@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arvesolland/ralph/internal/atm"
+	"github.com/arvesolland/ralph/internal/board"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/prompt"
@@ -101,7 +101,7 @@ func TestIterationLoop_Run_CompletesSuccessfully(t *testing.T) {
 
 	ctx := NewContext(1, "feat/test", "main", 10)
 
-	// No ATM client configured, so completion marker is trusted directly
+	// No Board client configured, so completion marker is trusted directly
 	mockRunner := &MockRunner{
 		Responses: []MockResponse{
 			{TextContent: "Working on task 1..."},
@@ -274,8 +274,8 @@ func TestNewIterationLoop_CustomTimeout(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_CompletesWithNoATM(t *testing.T) {
-	// Without ATM client, completion marker should be trusted directly
+func TestIterationLoop_CompletesWithNoBoard(t *testing.T) {
+	// Without Board client, completion marker should be trusted directly
 	tempDir := t.TempDir()
 	gitRepo := setupTestGitRepo(t, tempDir)
 
@@ -288,7 +288,7 @@ func TestIterationLoop_CompletesWithNoATM(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		// No ATM client
+		// No Board client
 		Context:          ctx,
 		Config:           config.Defaults(),
 		Runner:           mockRunner,
@@ -301,7 +301,7 @@ func TestIterationLoop_CompletesWithNoATM(t *testing.T) {
 	result := loop.Run(context.Background())
 
 	if !result.Completed {
-		t.Errorf("Expected completion with no ATM, error: %v", result.Error)
+		t.Errorf("Expected completion with no Board, error: %v", result.Error)
 	}
 	if result.Iterations != 1 {
 		t.Errorf("Expected 1 iteration, got %d", result.Iterations)
@@ -312,15 +312,15 @@ func TestIterationLoop_CompletesWithNoATM(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_ATMContextFailure_HardError(t *testing.T) {
-	// PlanContextText failure should be a hard error that terminates the iteration
+func TestIterationLoop_BoardContextFailure_HardError(t *testing.T) {
+	// PlanContextText failure should be a hard error that terminates the iteration (Board)
 	tempDir := t.TempDir()
 	gitRepo := setupTestGitRepo(t, tempDir)
 
 	ctx := NewContext(42, "feat/test", "main", 10)
 
-	mockATM := atm.NewMockATM()
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "", fmt.Errorf("connection refused")
 	}
 
@@ -331,7 +331,7 @@ func TestIterationLoop_ATMContextFailure_HardError(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		ATM:              mockATM,
+		Board:              mockBoard,
 		PlanID:           42,
 		Context:          ctx,
 		Config:           config.Defaults(),
@@ -348,10 +348,10 @@ func TestIterationLoop_ATMContextFailure_HardError(t *testing.T) {
 		t.Error("Expected loop to not complete")
 	}
 	if result.Error == nil {
-		t.Fatal("Expected error from ATM context failure")
+		t.Fatal("Expected error from Board context failure")
 	}
-	if !strings.Contains(result.Error.Error(), "fetching ATM plan context") {
-		t.Errorf("Expected ATM context error, got: %v", result.Error)
+	if !strings.Contains(result.Error.Error(), "fetching Board plan context") {
+		t.Errorf("Expected Board context error, got: %v", result.Error)
 	}
 	// Runner should not have been called since PlanContextText failed first
 	if len(mockRunner.RecordedOpts) != 0 {
@@ -359,20 +359,20 @@ func TestIterationLoop_ATMContextFailure_HardError(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_ATMCompletionCheck_AllDone(t *testing.T) {
-	// When ATM stats show all tasks done, loop should complete
+func TestIterationLoop_BoardCompletionCheck_AllDone(t *testing.T) {
+	// When Board stats show all tasks done, loop should complete
 	tempDir := t.TempDir()
 	gitRepo := setupTestGitRepo(t, tempDir)
 
 	ctx := NewContext(42, "feat/test", "main", 10)
 
-	mockATM := atm.NewMockATM()
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Plan Context\nAll tasks listed here.", nil
 	}
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Stats: atm.Stats{
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{
 				TotalTasks: 3,
 				Done:       2,
 				Skipped:    1,
@@ -387,7 +387,7 @@ func TestIterationLoop_ATMCompletionCheck_AllDone(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		ATM:              mockATM,
+		Board:              mockBoard,
 		PlanID:           42,
 		Context:          ctx,
 		Config:           config.Defaults(),
@@ -408,20 +408,20 @@ func TestIterationLoop_ATMCompletionCheck_AllDone(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_ATMCompletionCheck_NotDone(t *testing.T) {
-	// When ATM stats show tasks remain, should be a false completion and AddFeedback called
+func TestIterationLoop_BoardCompletionCheck_NotDone(t *testing.T) {
+	// When Board stats show tasks remain, should be a false completion and AddFeedback called
 	tempDir := t.TempDir()
 	gitRepo := setupTestGitRepo(t, tempDir)
 
 	ctx := NewContext(42, "feat/test", "main", 2)
 
-	mockATM := atm.NewMockATM()
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Plan Context", nil
 	}
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Stats: atm.Stats{
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{
 				TotalTasks: 5,
 				Done:       2,
 				Skipped:    0,
@@ -430,9 +430,9 @@ func TestIterationLoop_ATMCompletionCheck_NotDone(t *testing.T) {
 	}
 
 	var feedbackCalls []string
-	mockATM.AddFeedbackFunc = func(planID int, author, body string) (*atm.Feedback, error) {
+	mockBoard.AddFeedbackFunc = func(planID int, author, body string) (*board.Feedback, error) {
 		feedbackCalls = append(feedbackCalls, body)
-		return &atm.Feedback{}, nil
+		return &board.Feedback{}, nil
 	}
 
 	mockRunner := &MockRunner{
@@ -443,7 +443,7 @@ func TestIterationLoop_ATMCompletionCheck_NotDone(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		ATM:              mockATM,
+		Board:              mockBoard,
 		PlanID:           42,
 		Context:          ctx,
 		Config:           config.Defaults(),
@@ -475,14 +475,14 @@ func TestIterationLoop_FalseCompletionCircuitBreaker(t *testing.T) {
 
 	ctx := NewContext(42, "feat/test", "main", 100)
 
-	mockATM := atm.NewMockATM()
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Plan", nil
 	}
 	// Always report incomplete
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
-		return &atm.AgentContext{
-			Stats: atm.Stats{TotalTasks: 3, Done: 1},
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 3, Done: 1},
 		}, nil
 	}
 
@@ -494,7 +494,7 @@ func TestIterationLoop_FalseCompletionCircuitBreaker(t *testing.T) {
 	mockRunner := &MockRunner{Responses: responses}
 
 	loop := NewIterationLoop(LoopConfig{
-		ATM:              mockATM,
+		Board:              mockBoard,
 		PlanID:           42,
 		Context:          ctx,
 		Config:           config.Defaults(),
@@ -521,20 +521,20 @@ func TestIterationLoop_FalseCompletionCircuitBreaker(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_ATMCompletionCheck_Unreachable(t *testing.T) {
+func TestIterationLoop_BoardCompletionCheck_Unreachable(t *testing.T) {
 	// When PlanContext fails all 3 retries, should fail-closed (not trust completion marker)
 	tempDir := t.TempDir()
 	gitRepo := setupTestGitRepo(t, tempDir)
 
 	ctx := NewContext(42, "feat/test", "main", 2)
 
-	mockATM := atm.NewMockATM()
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Plan", nil
 	}
 	// PlanContext always fails (unreachable)
 	planContextCalls := 0
-	mockATM.PlanContextFunc = func(planID int) (*atm.AgentContext, error) {
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
 		planContextCalls++
 		return nil, fmt.Errorf("connection timeout")
 	}
@@ -547,7 +547,7 @@ func TestIterationLoop_ATMCompletionCheck_Unreachable(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		ATM:              mockATM,
+		Board:              mockBoard,
 		PlanID:           42,
 		Context:          ctx,
 		Config:           config.Defaults(),
@@ -564,9 +564,9 @@ func TestIterationLoop_ATMCompletionCheck_Unreachable(t *testing.T) {
 
 	result := loop.Run(cancelCtx)
 
-	// Should NOT complete (fail-closed: ATM unreachable means don't trust marker)
+	// Should NOT complete (fail-closed: Board unreachable means don't trust marker)
 	if result.Completed {
-		t.Error("Expected loop to not complete when ATM is unreachable (fail-closed)")
+		t.Error("Expected loop to not complete when Board is unreachable (fail-closed)")
 	}
 	// PlanContext should have been called multiple times (retries)
 	if planContextCalls < 2 {
@@ -574,20 +574,20 @@ func TestIterationLoop_ATMCompletionCheck_Unreachable(t *testing.T) {
 	}
 }
 
-func TestIterationLoop_ATMProgressTracking(t *testing.T) {
+func TestIterationLoop_BoardProgressTracking(t *testing.T) {
 	// AddProgress should be called after each iteration; failure is non-fatal
 	tempDir := t.TempDir()
 	gitRepo := setupTestGitRepo(t, tempDir)
 
 	ctx := NewContext(42, "feat/test", "main", 2)
 
-	mockATM := atm.NewMockATM()
-	mockATM.PlanContextTextFunc = func(planID int) (string, error) {
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
 		return "# Plan", nil
 	}
 
 	var progressCalls []string
-	mockATM.AddProgressFunc = func(planID int, author, body string) (*atm.Progress, error) {
+	mockBoard.AddProgressFunc = func(planID int, author, body string) (*board.Progress, error) {
 		progressCalls = append(progressCalls, body)
 		return nil, fmt.Errorf("progress write failed") // Non-fatal error
 	}
@@ -600,7 +600,7 @@ func TestIterationLoop_ATMProgressTracking(t *testing.T) {
 	}
 
 	loop := NewIterationLoop(LoopConfig{
-		ATM:              mockATM,
+		Board:              mockBoard,
 		PlanID:           42,
 		Context:          ctx,
 		Config:           config.Defaults(),

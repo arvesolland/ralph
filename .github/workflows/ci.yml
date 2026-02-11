@@ -55,8 +55,8 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     # Integration tests require Claude CLI in PATH.
-    # Uses fake atm-cli binary (built from test/integration/fake_atm/)
-    # and a fake ATM HTTP server for task management.
+    # Uses fake board-cli binary (built from test/integration/fakeboard/)
+    # and a fake Board server for task management.
     if: false  # Disabled - requires Claude CLI in CI
 
     steps:

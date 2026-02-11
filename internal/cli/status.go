@@ -21,8 +21,8 @@ const (
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Display project status from ATM",
-	Long: `Display the current project status from the ATM task management service.
+	Short: "Display project status from Board",
+	Long: `Display the current project status from the Board task management service.
 
 Shows:
 - Project information
@@ -45,16 +45,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Determine project slug
-	projectSlug := cfg.ATM.ProjectSlug
+	projectSlug := cfg.Board.ProjectSlug
 	if projectSlug == "" {
-		return fmt.Errorf("atm.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
+		return fmt.Errorf("board.project_slug not configured; run 'ralph init' or set it in .ralph/config.yaml")
 	}
 
-	// Create ATM client
-	atmClient := cfg.ATMClient()
+	// Create Board client
+	boardClient := cfg.BoardClient()
 
 	// Fetch project context
-	agentCtx, err := atmClient.ProjectContext(projectSlug)
+	agentCtx, err := boardClient.ProjectContext(projectSlug)
 	if err != nil {
 		return fmt.Errorf("fetching project context: %w", err)
 	}

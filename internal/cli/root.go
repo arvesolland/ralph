@@ -24,10 +24,10 @@ var rootCmd = &cobra.Command{
 implementing the "Ralph Wiggum technique" - fresh context per iteration
 with progress persisted in files and git.
 
-Ralph manages plan-based development workflows backed by the ATM task
+Ralph manages plan-based development workflows backed by the Board task
 management service. An AI agent executes tasks iteratively, with each
 iteration getting a fresh context window while progress is tracked
-via ATM and git commits.`,
+via Board and git commits.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Configure logging based on flags
 		logger := log.Default().(*log.ConsoleLogger)

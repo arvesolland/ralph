@@ -1,6 +1,6 @@
-// Package main implements a fake atm-cli binary for integration testing.
-// It reads/writes a JSON state file specified by FAKEATM_STATE_PATH,
-// producing the same CLI interface and output format as the real atm-cli.
+// Package main implements a fake board-cli binary for integration testing.
+// It reads/writes a JSON state file specified by FAKEBOARD_STATE_PATH,
+// producing the same CLI interface and output format as the real board-cli.
 package main
 
 import (
@@ -11,9 +11,9 @@ import (
 )
 
 func main() {
-	statePath := os.Getenv("FAKEATM_STATE_PATH")
+	statePath := os.Getenv("FAKEBOARD_STATE_PATH")
 	if statePath == "" {
-		fatal("FAKEATM_STATE_PATH environment variable is required")
+		fatal("FAKEBOARD_STATE_PATH environment variable is required")
 	}
 
 	args := os.Args[1:]
@@ -22,7 +22,7 @@ func main() {
 	args = stripGlobalFlags(args)
 
 	if len(args) < 2 {
-		fatal("usage: fakeatm <group> <action> [args...] [--flags]")
+		fatal("usage: fakeboard <group> <action> [args...] [--flags]")
 	}
 
 	group := args[0]

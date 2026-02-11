@@ -1,16 +1,16 @@
-package atm
+package board
 
-// MockCall records a method call on MockATM.
+// MockCall records a method call on MockBoard.
 type MockCall struct {
 	Method string
 	Args   []interface{}
 }
 
-// MockATM is a test double for the ATM interface.
+// MockBoard is a test double for the Board interface.
 // Each method has a corresponding XxxFunc field; if set, it is called.
 // Otherwise a sensible zero-value is returned (nil/empty, nil error).
 // All calls are recorded in Calls.
-type MockATM struct {
+type MockBoard struct {
 	Calls []MockCall
 
 	ProjectContextFunc  func(slug string) (*AgentContext, error)
@@ -33,19 +33,19 @@ type MockATM struct {
 	UpdatePlanFunc      func(id int, fields map[string]string) (*Plan, error)
 }
 
-// Compile-time check that MockATM implements ATM.
-var _ ATM = (*MockATM)(nil)
+// Compile-time check that MockBoard implements Board.
+var _ Board = (*MockBoard)(nil)
 
-// NewMockATM returns a new MockATM with no hooks set.
-func NewMockATM() *MockATM {
-	return &MockATM{}
+// NewMockBoard returns a new MockBoard with no hooks set.
+func NewMockBoard() *MockBoard {
+	return &MockBoard{}
 }
 
-func (m *MockATM) record(method string, args ...interface{}) {
+func (m *MockBoard) record(method string, args ...interface{}) {
 	m.Calls = append(m.Calls, MockCall{Method: method, Args: args})
 }
 
-func (m *MockATM) ProjectContext(slug string) (*AgentContext, error) {
+func (m *MockBoard) ProjectContext(slug string) (*AgentContext, error) {
 	m.record("ProjectContext", slug)
 	if m.ProjectContextFunc != nil {
 		return m.ProjectContextFunc(slug)
@@ -53,7 +53,7 @@ func (m *MockATM) ProjectContext(slug string) (*AgentContext, error) {
 	return &AgentContext{}, nil
 }
 
-func (m *MockATM) PlanContext(planID int) (*AgentContext, error) {
+func (m *MockBoard) PlanContext(planID int) (*AgentContext, error) {
 	m.record("PlanContext", planID)
 	if m.PlanContextFunc != nil {
 		return m.PlanContextFunc(planID)
@@ -61,7 +61,7 @@ func (m *MockATM) PlanContext(planID int) (*AgentContext, error) {
 	return &AgentContext{}, nil
 }
 
-func (m *MockATM) PlanContextText(planID int) (string, error) {
+func (m *MockBoard) PlanContextText(planID int) (string, error) {
 	m.record("PlanContextText", planID)
 	if m.PlanContextTextFunc != nil {
 		return m.PlanContextTextFunc(planID)
@@ -69,7 +69,7 @@ func (m *MockATM) PlanContextText(planID int) (string, error) {
 	return "", nil
 }
 
-func (m *MockATM) ListPlans(projectSlug, status string) ([]Plan, error) {
+func (m *MockBoard) ListPlans(projectSlug, status string) ([]Plan, error) {
 	m.record("ListPlans", projectSlug, status)
 	if m.ListPlansFunc != nil {
 		return m.ListPlansFunc(projectSlug, status)
@@ -77,7 +77,7 @@ func (m *MockATM) ListPlans(projectSlug, status string) ([]Plan, error) {
 	return nil, nil
 }
 
-func (m *MockATM) GetPlan(id int) (*Plan, error) {
+func (m *MockBoard) GetPlan(id int) (*Plan, error) {
 	m.record("GetPlan", id)
 	if m.GetPlanFunc != nil {
 		return m.GetPlanFunc(id)
@@ -85,7 +85,7 @@ func (m *MockATM) GetPlan(id int) (*Plan, error) {
 	return nil, nil
 }
 
-func (m *MockATM) UpdatePlanStatus(id int, status string) (*Plan, error) {
+func (m *MockBoard) UpdatePlanStatus(id int, status string) (*Plan, error) {
 	m.record("UpdatePlanStatus", id, status)
 	if m.UpdatePlanStatusFunc != nil {
 		return m.UpdatePlanStatusFunc(id, status)
@@ -93,7 +93,7 @@ func (m *MockATM) UpdatePlanStatus(id int, status string) (*Plan, error) {
 	return nil, nil
 }
 
-func (m *MockATM) ListTasks(planID int, opts *TaskListOpts) ([]Task, error) {
+func (m *MockBoard) ListTasks(planID int, opts *TaskListOpts) ([]Task, error) {
 	m.record("ListTasks", planID, opts)
 	if m.ListTasksFunc != nil {
 		return m.ListTasksFunc(planID, opts)
@@ -101,7 +101,7 @@ func (m *MockATM) ListTasks(planID int, opts *TaskListOpts) ([]Task, error) {
 	return nil, nil
 }
 
-func (m *MockATM) GetTask(id int) (*Task, error) {
+func (m *MockBoard) GetTask(id int) (*Task, error) {
 	m.record("GetTask", id)
 	if m.GetTaskFunc != nil {
 		return m.GetTaskFunc(id)
@@ -109,7 +109,7 @@ func (m *MockATM) GetTask(id int) (*Task, error) {
 	return nil, nil
 }
 
-func (m *MockATM) ClaimTask(id int, assignee string) (*Task, error) {
+func (m *MockBoard) ClaimTask(id int, assignee string) (*Task, error) {
 	m.record("ClaimTask", id, assignee)
 	if m.ClaimTaskFunc != nil {
 		return m.ClaimTaskFunc(id, assignee)
@@ -117,7 +117,7 @@ func (m *MockATM) ClaimTask(id int, assignee string) (*Task, error) {
 	return nil, nil
 }
 
-func (m *MockATM) StartTask(id int) (*Task, error) {
+func (m *MockBoard) StartTask(id int) (*Task, error) {
 	m.record("StartTask", id)
 	if m.StartTaskFunc != nil {
 		return m.StartTaskFunc(id)
@@ -125,7 +125,7 @@ func (m *MockATM) StartTask(id int) (*Task, error) {
 	return nil, nil
 }
 
-func (m *MockATM) CompleteTask(id int) (*Task, error) {
+func (m *MockBoard) CompleteTask(id int) (*Task, error) {
 	m.record("CompleteTask", id)
 	if m.CompleteTaskFunc != nil {
 		return m.CompleteTaskFunc(id)
@@ -133,7 +133,7 @@ func (m *MockATM) CompleteTask(id int) (*Task, error) {
 	return nil, nil
 }
 
-func (m *MockATM) BlockTask(id int, reason string) (*Task, error) {
+func (m *MockBoard) BlockTask(id int, reason string) (*Task, error) {
 	m.record("BlockTask", id, reason)
 	if m.BlockTaskFunc != nil {
 		return m.BlockTaskFunc(id, reason)
@@ -141,7 +141,7 @@ func (m *MockATM) BlockTask(id int, reason string) (*Task, error) {
 	return nil, nil
 }
 
-func (m *MockATM) SkipTask(id int, reason string) (*Task, error) {
+func (m *MockBoard) SkipTask(id int, reason string) (*Task, error) {
 	m.record("SkipTask", id, reason)
 	if m.SkipTaskFunc != nil {
 		return m.SkipTaskFunc(id, reason)
@@ -149,7 +149,7 @@ func (m *MockATM) SkipTask(id int, reason string) (*Task, error) {
 	return nil, nil
 }
 
-func (m *MockATM) AddProgress(planID int, author, body string) (*Progress, error) {
+func (m *MockBoard) AddProgress(planID int, author, body string) (*Progress, error) {
 	m.record("AddProgress", planID, author, body)
 	if m.AddProgressFunc != nil {
 		return m.AddProgressFunc(planID, author, body)
@@ -157,7 +157,7 @@ func (m *MockATM) AddProgress(planID int, author, body string) (*Progress, error
 	return nil, nil
 }
 
-func (m *MockATM) AddFeedback(planID int, author, body string) (*Feedback, error) {
+func (m *MockBoard) AddFeedback(planID int, author, body string) (*Feedback, error) {
 	m.record("AddFeedback", planID, author, body)
 	if m.AddFeedbackFunc != nil {
 		return m.AddFeedbackFunc(planID, author, body)
@@ -165,7 +165,7 @@ func (m *MockATM) AddFeedback(planID int, author, body string) (*Feedback, error
 	return nil, nil
 }
 
-func (m *MockATM) CheckCriterion(id int) (*Criterion, error) {
+func (m *MockBoard) CheckCriterion(id int) (*Criterion, error) {
 	m.record("CheckCriterion", id)
 	if m.CheckCriterionFunc != nil {
 		return m.CheckCriterionFunc(id)
@@ -173,7 +173,7 @@ func (m *MockATM) CheckCriterion(id int) (*Criterion, error) {
 	return nil, nil
 }
 
-func (m *MockATM) UncheckCriterion(id int) (*Criterion, error) {
+func (m *MockBoard) UncheckCriterion(id int) (*Criterion, error) {
 	m.record("UncheckCriterion", id)
 	if m.UncheckCriterionFunc != nil {
 		return m.UncheckCriterionFunc(id)
@@ -181,7 +181,7 @@ func (m *MockATM) UncheckCriterion(id int) (*Criterion, error) {
 	return nil, nil
 }
 
-func (m *MockATM) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
+func (m *MockBoard) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
 	m.record("UpdatePlan", id, fields)
 	if m.UpdatePlanFunc != nil {
 		return m.UpdatePlanFunc(id, fields)

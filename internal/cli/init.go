@@ -185,57 +185,57 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// ATM configuration — only prompt for fields that are empty
-	hasATMConfig := cfg.ATM.ProjectSlug != "" || cfg.ATM.APIURL != "" || cfg.ATM.APIToken != ""
-	if hasATMConfig {
+	// Board configuration — only prompt for fields that are empty
+	hasBoardConfig := cfg.Board.ProjectSlug != "" || cfg.Board.APIURL != "" || cfg.Board.APIToken != ""
+	if hasBoardConfig {
 		fmt.Println()
-		log.Info("ATM configuration (existing values preserved)")
-		if cfg.ATM.ProjectSlug != "" {
-			log.Info("  Project slug: %s", cfg.ATM.ProjectSlug)
+		log.Info("Board configuration (existing values preserved)")
+		if cfg.Board.ProjectSlug != "" {
+			log.Info("  Project slug: %s", cfg.Board.ProjectSlug)
 		}
-		if cfg.ATM.APIURL != "" {
-			log.Info("  API URL: %s", cfg.ATM.APIURL)
+		if cfg.Board.APIURL != "" {
+			log.Info("  API URL: %s", cfg.Board.APIURL)
 		}
-		if cfg.ATM.APIToken != "" {
+		if cfg.Board.APIToken != "" {
 			log.Info("  API token: (set)")
 		}
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 
-	if cfg.ATM.ProjectSlug == "" {
+	if cfg.Board.ProjectSlug == "" {
 		fmt.Println()
-		log.Info("ATM Task Management Configuration")
+		log.Info("Board Task Management Configuration")
 		log.Info("(Leave blank to skip - can be configured later in .ralph/config.yaml)")
 		fmt.Println()
 
-		fmt.Print("ATM Project Slug: ")
+		fmt.Print("Board Project Slug: ")
 		if slug, err := reader.ReadString('\n'); err == nil {
 			slug = strings.TrimSpace(slug)
 			if slug != "" {
-				cfg.ATM.ProjectSlug = slug
+				cfg.Board.ProjectSlug = slug
 				log.Info("  Project slug: %s", slug)
 			}
 		}
 	}
 
-	if cfg.ATM.APIURL == "" && !hasATMConfig {
-		fmt.Print("ATM API URL (e.g., https://atm.example.com/api): ")
+	if cfg.Board.APIURL == "" && !hasBoardConfig {
+		fmt.Print("Board API URL (e.g., https://board.example.com/api): ")
 		if apiURL, err := reader.ReadString('\n'); err == nil {
 			apiURL = strings.TrimSpace(apiURL)
 			if apiURL != "" {
-				cfg.ATM.APIURL = apiURL
+				cfg.Board.APIURL = apiURL
 				log.Info("  API URL: %s", apiURL)
 			}
 		}
 	}
 
-	if cfg.ATM.APIToken == "" && !hasATMConfig {
-		fmt.Print("ATM API Token: ")
+	if cfg.Board.APIToken == "" && !hasBoardConfig {
+		fmt.Print("Board API Token: ")
 		if token, err := reader.ReadString('\n'); err == nil {
 			token = strings.TrimSpace(token)
 			if token != "" {
-				cfg.ATM.APIToken = token
+				cfg.Board.APIToken = token
 				log.Info("  API token: (set)")
 			}
 		}
@@ -280,8 +280,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Edit .ralph/config.yaml to customize settings")
-	fmt.Println("  2. Configure ATM: set atm.project_slug in .ralph/config.yaml")
-	fmt.Println("  3. Create plans via atm-cli: atm-cli plan create <project-slug> --title <name>")
+	fmt.Println("  2. Configure Board: set board.project_slug in .ralph/config.yaml")
+	fmt.Println("  3. Create plans via board-cli: board-cli plan create <project-slug> --title <name>")
 	fmt.Println("  4. Run 'ralph worker' to start processing")
 
 	return nil

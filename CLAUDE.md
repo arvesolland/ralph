@@ -4,9 +4,9 @@ This file provides guidance to Claude Code when working on the Ralph repository.
 
 ## Overview
 
-Ralph is an autonomous AI development loop orchestration system implementing the "Ralph Wiggum technique" - fresh context per iteration with progress persisted in ATM and git.
+Ralph is an autonomous AI development loop orchestration system implementing the "Ralph Wiggum technique" - fresh context per iteration with progress persisted in Board and git.
 
-Ralph is written in Go. The codebase lives in `cmd/` and `internal/` directories following standard Go project layout. Task management is handled via the ATM (Agent Task Manager) service, accessed through the `atm-cli` binary.
+Ralph is written in Go. The codebase lives in `cmd/` and `internal/` directories following standard Go project layout. Task management is handled via Board (task management service), accessed through the `board-cli` binary.
 
 ## Commands
 
@@ -24,9 +24,9 @@ go test ./... -v        # Verbose test output
 
 # Run ralph commands
 ./ralph init --detect          # Initialize project with auto-detection
-./ralph status                 # Show ATM project status
+./ralph status                 # Show Board project status
 ./ralph run --plan <plan-id>   # Run iteration loop on a plan
-./ralph worker                 # Process ATM queue (continuous)
+./ralph worker                 # Process Board queue (continuous)
 ./ralph worker --once          # Process one plan and exit
 ./ralph cleanup                # Remove orphaned worktrees
 ./ralph version                # Show version info
@@ -48,7 +48,7 @@ cmd/ralph/              # Main entry point
 internal/
 ├── cli/                # Cobra commands (init, run, worker, status, cleanup, version)
 ├── config/             # Config loading, YAML parsing, project detection
-├── atm/                # ATM client (shells out to atm-cli binary)
+├── board/              # Board client (shells out to board-cli binary)
 ├── runner/             # Claude execution, streaming, retry logic, iteration loop
 ├── git/                # Git operations (commit, branch, worktree, status)
 ├── worktree/           # Worktree management, dependency auto-detection, hooks
@@ -58,25 +58,25 @@ internal/
 └── log/                # Structured logging with color support
 test/
 └── integration/        # End-to-end integration tests (requires Claude CLI)
-    └── fakeatm/        # Fake atm-cli binary for test isolation
+    └── fakeboard/      # Fake board-cli binary for test isolation
 ```
 
 Key packages:
-- `internal/runner/loop.go` - Main iteration loop (prompt -> Claude -> verify ATM stats -> commit)
-- `internal/worker/worker.go` - Queue processor (poll ATM -> activate -> iterate -> complete)
-- `internal/atm/client.go` - ATM client wrapping atm-cli commands
+- `internal/runner/loop.go` - Main iteration loop (prompt -> Claude -> verify Board stats -> commit)
+- `internal/worker/worker.go` - Queue processor (poll Board -> activate -> iterate -> complete)
+- `internal/board/client.go` - Board client wrapping board-cli commands
 - `internal/worktree/manager.go` - Worktree creation, cleanup, dependency installation
 
-### ATM Integration
+### Board Integration
 
-Ralph uses ATM (Agent Task Manager) as its external task management backend. The `internal/atm/` package wraps the `atm-cli` binary:
+Ralph uses Board as its external task management backend. The `internal/board/` package wraps the `board-cli` binary:
 
 - **Plan lifecycle:** ready -> active -> complete (or blocked)
 - **Task lifecycle:** todo -> claimed -> doing -> done (or blocked/skipped)
-- **Agent context:** Single-call bootstrapping via `atm-cli plan context <id>`
+- **Agent context:** Single-call bootstrapping via `board-cli plan context <id>`
 - **Progress/Feedback:** Append-only logs for inter-iteration memory
 
-The ATM client (`internal/atm/client.go`) shells out to `atm-cli` with `--api-url` and `--api-token` flags. Configuration is in `.ralph/config.yaml` under the `atm:` section.
+The Board client (`internal/board/client.go`) shells out to `board-cli` with `--api-url` and `--api-token` flags. Configuration is in `.ralph/config.yaml` under the `board:` section.
 
 ### Worktree-Based Isolation
 
@@ -127,7 +127,7 @@ Prompts use `{{PLACEHOLDER}}` syntax replaced by `prompt.Builder`:
 - `{{TEST_COMMAND}}`, `{{LINT_COMMAND}}`, `{{BUILD_COMMAND}}`, `{{DEV_COMMAND}}` - from config.yaml
 - `{{ITERATION}}`, `{{MAX_ITERATIONS}}` - iteration state
 - `{{FEATURE_BRANCH}}`, `{{BASE_BRANCH}}` - git branch info
-- `{{PLAN_ID}}`, `{{ATM_CONTEXT}}` - ATM plan data injected into prompt
+- `{{PLAN_ID}}`, `{{BOARD_CONTEXT}}` - Board plan data injected into prompt
 
 Custom prompts can be placed in `.ralph/prompts/` to override embedded defaults.
 
@@ -146,17 +146,17 @@ Each iteration gets fresh context via `context.json` (stored at `.ralph/context.
 ```
 
 Progress persists externally:
-- **ATM tasks** - Task status, acceptance criteria, progress entries, feedback
+- **Board tasks** - Task status, acceptance criteria, progress entries, feedback
 - **Git commits** - Code changes committed after each iteration
 - **context.json** - Iteration counter (only state in the worktree)
 
 ### Completion Detection
 
 1. Agent outputs `<promise>COMPLETE</promise>` when it believes all tasks are done
-2. Ralph checks ATM stats: total tasks vs (done + skipped)
-3. If ATM confirms all tasks complete, the plan is verified done
-4. If ATM shows tasks remain, it's a false completion:
-   - Ralph adds feedback to ATM explaining which tasks are still incomplete
+2. Ralph checks Board stats: total tasks vs (done + skipped)
+3. If Board confirms all tasks complete, the plan is verified done
+4. If Board shows tasks remain, it's a false completion:
+   - Ralph adds feedback to Board explaining which tasks are still incomplete
    - Consecutive false completions are tracked (counter resets on non-completion iterations)
    - After 5 consecutive false completions, Ralph halts with an error
 5. Completion triggers the configured workflow (PR creation, merge, or branch push)
@@ -176,7 +176,7 @@ Resume: What happens once resolved.
 **How it works:**
 1. Agent outputs `<blocker>` marker when stuck on human-required task
 2. Ralph detects the marker and sends Slack notification (if configured)
-3. Human provides input via ATM feedback or Slack thread reply
+3. Human provides input via Board feedback or Slack thread reply
 4. Agent reads feedback next iteration and continues
 
 ### Slack Notifications
@@ -225,10 +225,10 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/config/config.go` | Config struct, YAML loading, validation |
 | `internal/config/defaults.go` | Default configuration values |
 | `internal/config/detect.go` | Project type auto-detection |
-| `internal/atm/interface.go` | ATM interface definition |
-| `internal/atm/client.go` | ATM client (shells out to atm-cli) |
-| `internal/atm/types.go` | ATM data types (Plan, Task, Criterion, etc.) |
-| `internal/atm/mock.go` | Mock ATM client for testing |
+| `internal/board/interface.go` | Board interface definition |
+| `internal/board/client.go` | Board client (shells out to board-cli) |
+| `internal/board/types.go` | Board data types (Plan, Task, Criterion, etc.) |
+| `internal/board/mock.go` | Mock Board client for testing |
 | `internal/runner/loop.go` | Main iteration loop |
 | `internal/runner/runner.go` | Claude CLI execution with streaming |
 | `internal/runner/command.go` | Claude CLI argument builder |
@@ -240,7 +240,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `internal/worktree/manager.go` | Worktree lifecycle management |
 | `internal/worktree/deps.go` | Dependency auto-detection and installation |
 | `internal/worktree/hooks.go` | Worktree initialization hooks |
-| `internal/worker/worker.go` | Queue processor (ATM polling, plan lifecycle) |
+| `internal/worker/worker.go` | Queue processor (Board polling, plan lifecycle) |
 | `internal/worker/completion.go` | Completion modes (PR, merge, branch) |
 | `internal/prompt/templates.go` | Embedded prompt templates (go:embed) |
 | `internal/prompt/builder.go` | Prompt builder with placeholder substitution |
@@ -252,7 +252,7 @@ ralph-spec-to-plan/  # Generate plans from specs
 | `.goreleaser.yaml` | Release configuration |
 | `Makefile` | Build targets |
 | `test/integration/integration_test.go` | End-to-end integration tests |
-| `test/integration/fakeatm/` | Fake atm-cli binary for test isolation |
+| `test/integration/fakeboard/` | Fake board-cli binary for test isolation |
 
 ## Testing
 
@@ -281,7 +281,7 @@ make test-integration
 
 ### Unit Tests
 
-Unit test fixtures are in `internal/*/testdata/` directories. Tests use mock implementations (e.g., `internal/atm/mock.go`) for external dependencies.
+Unit test fixtures are in `internal/*/testdata/` directories. Tests use mock implementations (e.g., `internal/board/mock.go`) for external dependencies.
 
 ### Integration Tests
 
@@ -289,21 +289,21 @@ Integration tests are in `test/integration/` and require:
 - Built ralph binary (`make build`)
 - Claude CLI available in PATH
 
-They use a fake `atm-cli` binary (`test/integration/fakeatm/`) that stores state in a JSON file, providing full end-to-end testing without a real ATM server.
+They use a fake `board-cli` binary (`test/integration/fakeboard/`) that stores state in a JSON file, providing full end-to-end testing without a real Board server.
 
 Test cases:
 - `TestSingleTask` - Basic single task completion with `ralph run --plan`
 - `TestDependencies` - Task dependency ordering
-- `TestProgressTracking` - ATM progress entries created during execution
+- `TestProgressTracking` - Board progress entries created during execution
 - `TestOneTaskPerIteration` - Verifies agent completes one task per iteration (separate commits)
 - `TestWorkerQueue` - Worker queue processing with `ralph worker --once --merge`
 - `TestDirtyState` - Dirty main worktree handling (worktree isolation)
 - `TestWorktreeCleanup` - `ralph cleanup` command
 - `TestCorePrinciples` - Comprehensive multi-task dependency chain with worker
 - `TestSlackNotifications` - Slack Bot API notifications with mock server
-- `TestATMContextFailure` - Error handling with invalid ATM configuration
+- `TestBoardContextFailure` - Error handling with invalid Board configuration
 
-Each test creates an isolated temp workspace with git repo, local bare origin, and seeded ATM state.
+Each test creates an isolated temp workspace with git repo, local bare origin, and seeded Board state.
 
 ## Development Patterns
 
@@ -328,13 +328,13 @@ The runner package (`internal/runner/`) handles Claude CLI execution:
 - `stream.go` - Parses JSON stream from Claude CLI (`stream-json` format)
 - `retry.go` - Retry logic with exponential backoff and jitter
 - `blocker.go` - Extracts blocker information from `<blocker>` tags
-- `loop.go` - Main iteration loop with ATM completion verification
+- `loop.go` - Main iteration loop with Board completion verification
 - `context.go` - Iteration context management (context.json)
 
 ### Branch Management
 
 Plans automatically get feature branches via worktree isolation:
-- Branch name comes from ATM plan's `feature_branch` field
+- Branch name comes from Board plan's `feature_branch` field
 - Each plan runs in its own worktree at `.ralph/worktrees/<branch-name>/`
 - Main worktree stays on base branch (no stash/checkout needed)
 - Agent runs inside the worktree and is told branch name via context.json
@@ -373,10 +373,10 @@ Release configuration is in `.goreleaser.yaml`. CI/CD workflows are in `.github/
 
 ## Gotchas
 
-- **ATM is required**: Ralph needs `atm-cli` in PATH and ATM configuration in `.ralph/config.yaml`. Run `ralph init` to set up.
-- **Feature branches come from ATM**: The `feature_branch` field on the ATM plan determines the branch name. Ralph creates the worktree on that branch.
-- **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion -- ATM stats verification catches this.
-- **False completion circuit breaker**: After 5 consecutive false completions (agent claims done but ATM disagrees), Ralph halts.
+- **Board is required**: Ralph needs `board-cli` in PATH and Board configuration in `.ralph/config.yaml`. Run `ralph init` to set up.
+- **Feature branches come from Board**: The `feature_branch` field on the Board plan determines the branch name. Ralph creates the worktree on that branch.
+- **Completion marker**: Agent may mention `<promise>COMPLETE</promise>` without meaning completion -- Board stats verification catches this.
+- **False completion circuit breaker**: After 5 consecutive false completions (agent claims done but Board disagrees), Ralph halts.
 - **Worktree cleanup**: If execution is interrupted, orphaned worktrees may remain. Run `ralph cleanup`.
 - **Build artifacts**: Binary is named `ralph` (no extension on Unix, `.exe` on Windows). Add `ralph` to `.gitignore`.
 - **Embedded prompts**: Default prompts are embedded via `//go:embed` in `internal/prompt/templates.go`.
