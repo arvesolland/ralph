@@ -200,7 +200,7 @@ func (l *IterationLoop) Run(ctx context.Context) *LoopResult {
 				return result
 			}
 
-			feedback := fmt.Sprintf("Agent claimed completion but Board stats show tasks remain. This is false completion attempt %d/%d. Use `board-cli plan context %d --format text` to see which tasks are still incomplete.", l.falseCompletions, MaxFalseCompletions, l.planID)
+			feedback := fmt.Sprintf("Agent claimed completion but Board stats show tasks remain. This is false completion attempt %d/%d. Use `board plan context %d --format text` to see which tasks are still incomplete.", l.falseCompletions, MaxFalseCompletions, l.planID)
 			if err := l.addBoardFeedback(ctx, feedback); err != nil {
 				log.Error("Failed to add Board feedback: %v", err)
 			}
@@ -317,7 +317,7 @@ func (l *IterationLoop) buildPrompt(contextText string) (string, error) {
 	if contextText != "" {
 		overrides["BOARD_CONTEXT"] = contextText
 	} else {
-		overrides["BOARD_CONTEXT"] = "[No plan context available. Run `board-cli plan context " + fmt.Sprintf("%d", l.planID) + " --format text` to fetch it manually.]"
+		overrides["BOARD_CONTEXT"] = "[No plan context available. Run `board plan context " + fmt.Sprintf("%d", l.planID) + " --format text` to fetch it manually.]"
 	}
 
 	// Build the main prompt

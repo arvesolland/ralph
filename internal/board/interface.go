@@ -1,7 +1,7 @@
 package board
 
 // Board defines the interface for interacting with the Board task management API.
-// The concrete implementation is Client, which shells out to board-cli.
+// The concrete implementation is Client, which shells out to board.
 type Board interface {
 	ProjectContext(slug string) (*AgentContext, error)
 	PlanContext(planID int) (*AgentContext, error)

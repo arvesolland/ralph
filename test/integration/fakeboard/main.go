@@ -1,6 +1,6 @@
-// Package main implements a fake board-cli binary for integration testing.
+// Package main implements a fake board binary for integration testing.
 // It reads/writes a JSON state file specified by FAKEBOARD_STATE_PATH,
-// producing the same CLI interface and output format as the real board-cli.
+// producing the same CLI interface and output format as the real board.
 package main
 
 import (

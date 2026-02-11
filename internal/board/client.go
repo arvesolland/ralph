@@ -11,12 +11,12 @@ import (
 	"github.com/arvesolland/ralph/internal/retry"
 )
 
-// ExecTimeout is the timeout for board-cli commands.
+// ExecTimeout is the timeout for board commands.
 const ExecTimeout = 30 * time.Second
 
 // ClientConfig holds configuration for creating a new Client.
 type ClientConfig struct {
-	BinPath  string // Path to board-cli binary. Defaults to "board-cli".
+	BinPath  string // Path to board binary. Defaults to "board".
 	APIURL   string // Base URL for the Board API (--api-url flag).
 	APIToken string // Bearer token for authentication (--api-token flag).
 }
@@ -24,7 +24,7 @@ type ClientConfig struct {
 // Compile-time check that Client implements Board.
 var _ Board = (*Client)(nil)
 
-// Client shells out to the board-cli binary to interact with the Board API.
+// Client shells out to the board binary to interact with the Board API.
 type Client struct {
 	binPath  string
 	apiURL   string
@@ -36,7 +36,7 @@ type Client struct {
 func NewClient(cfg ClientConfig) *Client {
 	bin := cfg.BinPath
 	if bin == "" {
-		bin = "board-cli"
+		bin = "board"
 	}
 	return &Client{
 		binPath:  bin,
@@ -320,7 +320,7 @@ func (c *Client) UncheckCriterion(id int) (*Criterion, error) {
 	return &resp.Data, nil
 }
 
-// UpdatePlan updates a plan's fields via board-cli plan update.
+// UpdatePlan updates a plan's fields via board plan update.
 func (c *Client) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
 	args := []string{"plan", "update", strconv.Itoa(id)}
 	for key, value := range fields {
@@ -339,7 +339,7 @@ func (c *Client) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
 	return &resp.Data, nil
 }
 
-// exec runs the board-cli binary with global flags and the given arguments,
+// exec runs the board binary with global flags and the given arguments,
 // returning stdout on success or an error wrapping stderr on failure.
 // Commands are bounded by ExecTimeout per attempt and retried on transient failures.
 func (c *Client) exec(args ...string) ([]byte, error) {
@@ -362,12 +362,12 @@ func (c *Client) exec(args ...string) ([]byte, error) {
 		out, err := cmd.Output()
 		if err != nil {
 			if ctx.Err() == context.DeadlineExceeded {
-				return fmt.Errorf("board-cli %s: timed out after %v", args[0], ExecTimeout)
+				return fmt.Errorf("board %s: timed out after %v", args[0], ExecTimeout)
 			}
 			if exitErr, ok := err.(*exec.ExitError); ok {
-				return fmt.Errorf("board-cli %s: %s", args[0], string(exitErr.Stderr))
+				return fmt.Errorf("board %s: %s", args[0], string(exitErr.Stderr))
 			}
-			return fmt.Errorf("running board-cli: %w", err)
+			return fmt.Errorf("running board: %w", err)
 		}
 		stdout = out
 		return nil

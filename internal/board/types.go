@@ -1,4 +1,4 @@
-// Package board provides a client for the Board task management API via the board-cli binary.
+// Package board provides a client for the Board task management API via the board binary.
 package board
 
 import (

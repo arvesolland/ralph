@@ -384,7 +384,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 			return err
 		}); retryErr != nil {
 			log.Error("Failed to set plan status to blocked after %d retries: %v", blockedRetrier.Attempts(), retryErr)
-			log.Error("Manual recovery required: board-cli plan status %d --status blocked", plan.ID)
+			log.Error("Manual recovery required: board plan status %d --status blocked", plan.ID)
 		}
 
 		w.notifyError(info, loopResult.Error)
@@ -501,7 +501,7 @@ func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath str
 	}); err != nil {
 		statusUpdateFailed = true
 		log.Error("CRITICAL: Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
-		log.Error("Manual recovery required: board-cli plan status %d --status complete", plan.ID)
+		log.Error("Manual recovery required: board plan status %d --status complete", plan.ID)
 	}
 
 	// Skip worktree cleanup if Board status update failed (preserve work for manual recovery)

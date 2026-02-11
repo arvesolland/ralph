@@ -2,7 +2,7 @@
 
 // Package integration provides end-to-end tests for the Ralph CLI.
 // These tests run the actual ralph binary against test plans using real Claude CLI
-// and a fake board-cli binary for task management.
+// and a fake board binary for task management.
 //
 // Run with: go test -tags=integration -v ./test/integration/...
 //
@@ -36,10 +36,10 @@ const maxIterations = 5
 // ralphBinary is the path to the ralph binary (set in TestMain)
 var ralphBinary string
 
-// fakeBoardBinary is the path to the fake board-cli binary (set in TestMain)
+// fakeBoardBinary is the path to the fake board binary (set in TestMain)
 var fakeBoardBinary string
 
-// fakeBoardDir is the directory containing the fake binary named "board-cli".
+// fakeBoardDir is the directory containing the fake binary named "board".
 // This is prepended to PATH so the Claude agent finds it instead of the real one.
 var fakeBoardDir string
 
@@ -73,9 +73,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Build the fake board-cli binary.
-	// Named "board-cli" so it shadows the real binary when prepended to PATH.
-	// This is critical: the Claude agent shells out to "board-cli" directly.
+	// Build the fake board binary.
+	// Named "board" so it shadows the real binary when prepended to PATH.
+	// This is critical: the Claude agent shells out to "board" directly.
 	tmpDir, err := os.MkdirTemp("", "ralph-fakeboard-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: failed to create temp dir for fakeboard: %v\n", err)
@@ -84,7 +84,7 @@ func TestMain(m *testing.M) {
 	defer os.RemoveAll(tmpDir)
 
 	fakeBoardDir = tmpDir
-	fakeBoardBinary = filepath.Join(tmpDir, "board-cli")
+	fakeBoardBinary = filepath.Join(tmpDir, "board")
 
 	// Find repo root for building
 	repoRoot := ""
@@ -105,7 +105,7 @@ func TestMain(m *testing.M) {
 	buildCmd := exec.Command("go", "build", "-o", fakeBoardBinary, "./test/integration/fakeboard/")
 	buildCmd.Dir = repoRoot
 	if out, err := buildCmd.CombinedOutput(); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to build fake board-cli: %v\n%s\n", err, out)
+		fmt.Fprintf(os.Stderr, "ERROR: failed to build fake board: %v\n%s\n", err, out)
 		os.Exit(1)
 	}
 
@@ -116,7 +116,7 @@ func TestMain(m *testing.M) {
 // BOARD STATE TYPES (mirror of fakeboard/state.go, for test assertions)
 // =============================================================================
 
-// boardState is the JSON state file format used by the fake board-cli.
+// boardState is the JSON state file format used by the fake board.
 type boardState struct {
 	Projects []board.Project  `json:"projects"`
 	Plans    []board.Plan     `json:"plans"`
@@ -850,7 +850,7 @@ slack:
 	})
 
 	// Run ralph worker with mock Slack server URL via environment.
-	// Prepend fakeBoardDir to PATH so Claude agent finds our fake board-cli.
+	// Prepend fakeBoardDir to PATH so Claude agent finds our fake board.
 	cmd := exec.Command(ralphBinary, "worker", "--once", "--merge", "--max", fmt.Sprintf("%d", maxIterations), "-v")
 	cmd.Dir = ws.Path
 	slackEnv := os.Environ()
@@ -939,7 +939,7 @@ commands:
 
 board:
   project_slug: "test-project"
-  bin_path: "/nonexistent/board-cli"
+  bin_path: "/nonexistent/board"
   api_url: "http://localhost:9999"
   api_token: "test-token"
 `
@@ -1171,8 +1171,8 @@ func (ws *Workspace) RunRalph(t *testing.T, args ...string) string {
 	cmd := exec.Command(ralphBinary, args...)
 	cmd.Dir = ws.Path
 
-	// Build env with fake board-cli directory prepended to PATH.
-	// This ensures the Claude agent (which shells out to "board-cli") finds our
+	// Build env with fake board directory prepended to PATH.
+	// This ensures the Claude agent (which shells out to "board") finds our
 	// fake binary instead of the real one.
 	env := os.Environ()
 	for i, e := range env {

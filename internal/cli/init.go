@@ -281,7 +281,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Edit .ralph/config.yaml to customize settings")
 	fmt.Println("  2. Configure Board: set board.project_slug in .ralph/config.yaml")
-	fmt.Println("  3. Create plans via board-cli: board-cli plan create <project-slug> --title <name>")
+	fmt.Println("  3. Create plans via board: board plan create <project-slug> --title <name>")
 	fmt.Println("  4. Run 'ralph worker' to start processing")
 
 	return nil
