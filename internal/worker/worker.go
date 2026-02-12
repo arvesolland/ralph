@@ -568,8 +568,20 @@ func (w *Worker) SetupNotifications(ctx context.Context) func() {
 		tracker = nil
 	}
 	w.notifier = notify.NewNotifier(w.config, tracker)
+
+	// Start Socket Mode bot for listening to thread replies (adds eyes reaction, writes feedback)
+	var bot *notify.SocketModeBot
+	if w.config != nil && w.config.Slack.Channel != "" && tracker != nil {
+		bot = notify.StartBotIfConfigured(ctx, tracker, w.configDir, w.config.Slack.Channel)
+		if bot != nil {
+			log.Info("Socket Mode bot started for thread reply tracking")
+		}
+	}
+
 	return func() {
-		// ThreadTracker auto-saves on Set/Delete; no explicit save needed.
+		if bot != nil {
+			bot.Stop()
+		}
 	}
 }
 
