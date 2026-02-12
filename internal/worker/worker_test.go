@@ -451,6 +451,7 @@ func (m *MockNotifier) UpdateProgress(p notify.PlanInfo, status *notify.Progress
 	m.LastProgress = status
 	return nil
 }
+func (m *MockNotifier) Flush() {}
 
 // MockWorktreeManager implements WorktreeManager for testing.
 type MockWorktreeManager struct {

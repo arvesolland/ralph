@@ -82,6 +82,10 @@ type Notifier interface {
 	// UpdateProgress updates the parent message with current progress.
 	// This provides a "living status card" that shows the current state.
 	UpdateProgress(p PlanInfo, status *ProgressStatus) error
+
+	// Flush waits for all pending async operations to complete.
+	// Call before process exit to ensure notifications are delivered.
+	Flush()
 }
 
 // WebhookNotifier sends notifications via Slack incoming webhooks.
@@ -299,6 +303,9 @@ func (w *WebhookNotifier) UpdateProgress(p PlanInfo, status *ProgressStatus) err
 	return nil
 }
 
+// Flush is a no-op for webhooks (all sends are fire-and-forget).
+func (w *WebhookNotifier) Flush() {}
+
 // sendAsync sends the message asynchronously.
 func (w *WebhookNotifier) sendAsync(msg slackMessage) {
 	go func() {
@@ -350,6 +357,7 @@ func (n *NoopNotifier) Iteration(p PlanInfo, iteration, maxIterations int) error
 	return nil
 }
 func (n *NoopNotifier) UpdateProgress(p PlanInfo, status *ProgressStatus) error { return nil }
+func (n *NoopNotifier) Flush()                                                 {}
 
 // Ensure NoopNotifier implements Notifier.
 var _ Notifier = (*NoopNotifier)(nil)

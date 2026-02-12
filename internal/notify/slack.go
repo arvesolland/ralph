@@ -3,6 +3,7 @@ package notify
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/slack-go/slack"
@@ -16,6 +17,7 @@ type SlackNotifier struct {
 	threadTracker *ThreadTracker
 	repoName      string
 	teamURL       string
+	wg            sync.WaitGroup
 }
 
 // SlackNotifierConfig contains configuration for creating a SlackNotifier.
@@ -272,7 +274,9 @@ func (s *SlackNotifier) UpdateProgress(p PlanInfo, status *ProgressStatus) error
 	blocks := s.buildProgressBlocks(p, status)
 
 	// Update the message asynchronously
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		_, _, _, err := s.client.UpdateMessage(
 			info.ChannelID,
 			info.MessageTS,
@@ -377,7 +381,9 @@ func (s *SlackNotifier) postMessage(blocks []slack.Block) (string, string, error
 
 // postMessageInThread posts a message as a reply to the plan's thread.
 func (s *SlackNotifier) postMessageInThread(planName string, blocks []slack.Block) {
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		var threadTS string
 		if s.threadTracker != nil {
 			if info := s.threadTracker.Get(planName); info != nil {
@@ -433,6 +439,12 @@ func (s *SlackNotifier) GetThreadURL(planName string) string {
 		return ""
 	}
 	return BuildSlackThreadURL(s.teamURL, info.ChannelID, info.ThreadTS)
+}
+
+// Flush waits for all pending async Slack operations to complete.
+// Call this before process exit to ensure all notifications are delivered.
+func (s *SlackNotifier) Flush() {
+	s.wg.Wait()
 }
 
 // Ensure SlackNotifier implements Notifier.

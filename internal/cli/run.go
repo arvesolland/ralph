@@ -374,6 +374,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		if cfg.Slack.NotifyComplete {
 			_ = notifier.Complete(npi, prURL)
 		}
+		notifier.Flush()
 		return nil
 	}
 
@@ -389,6 +390,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			Message:       result.Error.Error(),
 		})
 
+		notifier.Flush()
 		if errors.Is(result.Error, context.Canceled) {
 			log.Warn("Execution interrupted by user")
 			return nil
