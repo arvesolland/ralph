@@ -324,9 +324,6 @@ func (s *SlackNotifier) buildProgressBlocks(p PlanInfo, status *ProgressStatus) 
 		}
 		progressBar := strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", 10-filled)
 		progressText = fmt.Sprintf("%s %d/%d tasks", progressBar, status.TasksDone, status.TasksTotal)
-		if status.Iteration > 0 {
-			progressText += fmt.Sprintf(" (iteration %d)", status.Iteration)
-		}
 	} else if status.MaxIterations > 0 {
 		// Fallback: iteration-based progress
 		filled := int(float64(status.Iteration) / float64(status.MaxIterations) * 10)

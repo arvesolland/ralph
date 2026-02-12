@@ -352,24 +352,36 @@ Ralph uses standard Go error handling patterns:
 
 ## Releasing
 
+After implementing a feature or fix, always commit, tag, release, and reinstall:
+
 ```bash
-# Test release build locally
-make release-snapshot
+# 1. Commit changes
+git add <files>
+git commit -m "Description of change"
 
-# Dry run (build but don't publish)
-make release-dry-run
+# 2. Tag, push, and release
+git push origin main
+git tag -a v2.X.Y -m "Release v2.X.Y"
+git push origin v2.X.Y
 
-# Create a release (requires git tag)
-git tag -a v2.0.0 -m "Release v2.0.0"
-git push origin v2.0.0
+# 3. Reinstall locally
+make install    # Installs to GOPATH/bin with version info from git tag
 
-# GoReleaser will automatically:
-# - Build binaries for all platforms (linux, darwin, windows x amd64, arm64)
-# - Create GitHub release with binaries
-# - Update Homebrew cask formula
+# 4. Verify
+ralph version
 ```
 
-Release configuration is in `.goreleaser.yaml`. CI/CD workflows are in `.github/workflows/`.
+Use patch version bumps (v2.3.1 -> v2.3.2) for fixes, minor bumps (v2.3.x -> v2.4.0) for features.
+
+GoReleaser will automatically build binaries for all platforms and create a GitHub release. Release configuration is in `.goreleaser.yaml`. CI/CD workflows are in `.github/workflows/`.
+
+```bash
+# Test release build locally (optional)
+make release-snapshot
+
+# Dry run (build but don't publish, optional)
+make release-dry-run
+```
 
 ## Gotchas
 

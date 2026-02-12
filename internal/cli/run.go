@@ -229,6 +229,18 @@ func runRun(cmd *cobra.Command, args []string) error {
 		if err := notifier.Start(npi); err != nil {
 			log.Debug("Failed to send start notification: %v", err)
 		}
+
+		// Immediately update the status card with task stats from Board
+		progress := &notify.ProgressStatus{
+			Iteration:     0,
+			MaxIterations: runMaxIterations,
+			Phase:         notify.PhaseInitializing,
+		}
+		if agentCtx, statsErr := boardClient.PlanContext(plan.ID); statsErr == nil {
+			progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
+			progress.TasksTotal = agentCtx.Stats.TotalTasks
+		}
+		_ = notifier.UpdateProgress(npi, progress)
 	}
 
 	// Create Claude runner

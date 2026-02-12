@@ -277,6 +277,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 	log.Info("Processing plan: %s (branch: %s)", info.Name, info.Branch)
 
 	// Send start notification (seeds thread from Board if available, saves to Board after creation)
+	// This also immediately updates the card with task stats from Board.
 	w.sendStartNotification(plan, info)
 
 	// Call start callback
@@ -611,8 +612,15 @@ func (w *Worker) sendStartNotification(plan *board.Plan, info *PlanInfo) {
 				// Update the living status card instead of creating a new thread
 				progress := &notify.ProgressStatus{
 					Iteration:     0,
-					MaxIterations: 0,
+					MaxIterations: w.maxIterations,
 					Phase:         notify.PhaseInitializing,
+				}
+				// Fetch task stats so the initial message shows "0/5 tasks" instead of "0/200"
+				if w.board != nil {
+					if agentCtx, statsErr := w.board.PlanContext(plan.ID); statsErr == nil {
+						progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
+						progress.TasksTotal = agentCtx.Stats.TotalTasks
+					}
 				}
 				_ = w.notifier.UpdateProgress(np, progress)
 				return
@@ -639,6 +647,20 @@ func (w *Worker) sendStartNotification(plan *board.Plan, info *PlanInfo) {
 			}
 		}
 	}
+
+	// Immediately update the status card with task stats from Board
+	progress := &notify.ProgressStatus{
+		Iteration:     0,
+		MaxIterations: w.maxIterations,
+		Phase:         notify.PhaseInitializing,
+	}
+	if w.board != nil {
+		if agentCtx, statsErr := w.board.PlanContext(plan.ID); statsErr == nil {
+			progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
+			progress.TasksTotal = agentCtx.Stats.TotalTasks
+		}
+	}
+	_ = w.notifier.UpdateProgress(np, progress)
 }
 
 func (w *Worker) sendCompleteNotification(info *PlanInfo, prURL string) {
