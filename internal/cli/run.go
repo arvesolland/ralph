@@ -216,6 +216,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 		notifier = notify.NewNotifier(cfg, tracker)
 	}
 
+	// Start Socket Mode bot for thread reply tracking (eyes reaction + feedback)
+	if cfg.Slack.Channel != "" && tracker != nil {
+		bot := notify.StartBotIfConfigured(context.Background(), tracker, configDir, cfg.Slack.Channel)
+		if bot != nil {
+			log.Info("Socket Mode bot started for thread reply tracking")
+			defer bot.Stop()
+		}
+	}
+
 	// Build PlanInfo for notifications
 	planInfo := &worker.PlanInfo{
 		ID:     plan.ID,
@@ -223,14 +232,45 @@ func runRun(cmd *cobra.Command, args []string) error {
 		Branch: branch,
 	}
 
-	// Send start notification
+	// Send start notification (seed thread from Board if available)
 	npi := notify.PlanInfo{Name: planInfo.Name, Branch: planInfo.Branch}
 	if cfg.Slack.NotifyStart {
-		if err := notifier.Start(npi); err != nil {
-			log.Debug("Failed to send start notification: %v", err)
+		threadSeeded := false
+
+		// If Board has a Slack thread URL, seed the tracker so we resume the existing thread
+		if plan.SlackThreadURL != "" {
+			channelID, threadTS, parseErr := notify.ParseSlackThreadURL(plan.SlackThreadURL)
+			if parseErr == nil {
+				if sn, ok := notifier.(*notify.SlackNotifier); ok && sn != nil {
+					_ = sn.SeedThread(npi.Name, channelID, threadTS)
+					log.Info("Resumed Slack thread from Board: %s", plan.SlackThreadURL)
+					threadSeeded = true
+				}
+			} else {
+				log.Warn("Failed to parse Slack thread URL from Board: %v", parseErr)
+			}
 		}
 
-		// Immediately update the status card with task stats from Board
+		if !threadSeeded {
+			// No existing thread — create a new one
+			if err := notifier.Start(npi); err != nil {
+				log.Debug("Failed to send start notification: %v", err)
+			}
+
+			// Save the new thread URL back to Board
+			if sn, ok := notifier.(*notify.SlackNotifier); ok && sn != nil {
+				threadURL := sn.GetThreadURL(npi.Name)
+				if threadURL != "" {
+					if _, err := boardClient.UpdatePlan(plan.ID, map[string]string{"slack-thread-url": threadURL}); err != nil {
+						log.Warn("Failed to save Slack thread URL to Board: %v", err)
+					} else {
+						log.Info("Saved Slack thread URL to Board: %s", threadURL)
+					}
+				}
+			}
+		}
+
+		// Update the status card with task stats from Board
 		progress := &notify.ProgressStatus{
 			Iteration:     0,
 			MaxIterations: runMaxIterations,
@@ -274,6 +314,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 				progress.TasksDone = agentCtx.Stats.Done + agentCtx.Stats.Skipped
 				progress.TasksTotal = agentCtx.Stats.TotalTasks
 				log.Info("Tasks: %d/%d done", progress.TasksDone, progress.TasksTotal)
+			} else {
+				log.Warn("Failed to fetch Board task stats for Slack progress: %v", err)
 			}
 			_ = notifier.UpdateProgress(npi, progress)
 			if cfg.Slack.NotifyIteration {
