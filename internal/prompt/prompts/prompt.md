@@ -35,7 +35,9 @@ Look at the **Recent feedback** section in the plan state above. If feedback exi
 If no feedback, continue to step 2.
 
 ### 2. Pick a task
-Pick the first task from the **Available tasks** section above (they are listed in dependency-safe order). If no tasks are available:
+If there are **In-progress tasks** (claimed/doing from a previous interrupted iteration), continue the first one — skip step 3 and go straight to step 4.
+
+Otherwise, pick the first task from the **Available tasks** section (listed in dependency-safe order). If no tasks are available:
 - If blocked tasks exist and you cannot unblock them, output a `<blocker>` tag (see Edge Cases) and stop.
 - If all tasks are done/skipped, go to step 10.
 
