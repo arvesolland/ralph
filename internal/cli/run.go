@@ -392,6 +392,13 @@ func runRun(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("completion: %w", err)
 		}
 
+		// Update Board with PR URL
+		if prURL != "" {
+			if _, err := boardClient.UpdatePlan(plan.ID, map[string]string{"pr-url": prURL}); err != nil {
+				log.Warn("Failed to update Board with PR URL: %v", err)
+			}
+		}
+
 		// Update Board status
 		if _, err := boardClient.UpdatePlanStatus(plan.ID, board.PlanStatusComplete); err != nil {
 			log.Error("Failed to update Board status: %v", err)

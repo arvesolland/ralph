@@ -473,6 +473,13 @@ func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath str
 		}
 		prURL = url
 
+		// Update Board with PR URL
+		if prURL != "" {
+			if _, err := w.board.UpdatePlan(plan.ID, map[string]string{"pr-url": prURL}); err != nil {
+				log.Warn("Failed to update Board with PR URL: %v", err)
+			}
+		}
+
 	case "merge":
 		baseBranch := "main"
 		if w.config != nil && w.config.Git.BaseBranch != "" {
