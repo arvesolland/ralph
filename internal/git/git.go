@@ -107,6 +107,9 @@ type Git interface {
 
 	// ListWorktrees returns information about all worktrees in the repository.
 	ListWorktrees() ([]WorktreeInfo, error)
+
+	// LastCommitMessage returns the subject line of the most recent commit.
+	LastCommitMessage() (string, error)
 }
 
 // CLIGit implements Git interface using git CLI commands.
@@ -452,6 +455,15 @@ func (g *CLIGit) RemoveWorktree(path string) error {
 		return fmt.Errorf("git worktree remove: %s: %w", stderr, err)
 	}
 	return nil
+}
+
+// LastCommitMessage returns the subject line of the most recent commit.
+func (g *CLIGit) LastCommitMessage() (string, error) {
+	msg, stderr, err := g.run("log", "-1", "--format=%s")
+	if err != nil {
+		return "", fmt.Errorf("getting last commit message: %s: %w", stderr, err)
+	}
+	return msg, nil
 }
 
 // ListWorktrees returns information about all worktrees in the repository.

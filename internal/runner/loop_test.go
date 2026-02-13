@@ -621,7 +621,7 @@ func TestIterationLoop_BoardProgressTracking(t *testing.T) {
 	if len(progressCalls) != 2 {
 		t.Errorf("Expected 2 AddProgress calls, got %d", len(progressCalls))
 	}
-	if !strings.Contains(progressCalls[0], "Iteration 1") {
+	if !strings.Contains(progressCalls[0], "[iter 1]") {
 		t.Errorf("Expected iteration info in progress body, got: %s", progressCalls[0])
 	}
 }

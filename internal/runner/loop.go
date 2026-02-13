@@ -278,28 +278,59 @@ func (l *IterationLoop) runIteration(ctx context.Context) (*Result, error) {
 
 	log.Debug("Claude execution completed (duration: %v, complete: %v)", result.Duration, result.IsComplete)
 
-	// Add progress to Board
-	if l.board != nil && l.planID > 0 {
-		progressBody := fmt.Sprintf("Iteration %d completed in %v.", l.ctx.Iteration, result.Duration)
-		if result.IsComplete {
-			progressBody += " Completion marker detected."
-		}
-		if result.Blocker != nil {
-			progressBody += fmt.Sprintf(" Blocker: %s", result.Blocker.Description)
-		}
-
-		if _, err := l.board.AddProgress(l.planID, "ralph", progressBody); err != nil {
-			log.Warn("Failed to add Board progress: %v", err)
-		}
-	}
-
-	// Commit changes
+	// Commit changes (before progress reporting so we can capture the commit message)
 	if err := l.commitChanges(); err != nil {
 		log.Error("Failed to commit changes: %v", err)
 		// Non-fatal, continue
 	}
 
+	// Add progress to Board
+	if l.board != nil && l.planID > 0 {
+		progressBody := l.buildProgressBody(result)
+		if _, err := l.board.AddProgress(l.planID, "ralph", progressBody); err != nil {
+			log.Warn("Failed to add Board progress: %v", err)
+		}
+	}
+
 	return result, nil
+}
+
+// buildProgressBody constructs a descriptive progress message for Board.
+// It uses the agent's <progress> summary if available, falls back to the
+// git commit message, and appends metadata (duration, blocker, completion).
+func (l *IterationLoop) buildProgressBody(result *Result) string {
+	// Try to extract structured progress from agent output
+	agentProgress := ExtractProgress(result.TextContent)
+
+	// Try to get the commit message the agent wrote
+	var commitMsg string
+	if l.git != nil {
+		if msg, err := l.git.LastCommitMessage(); err == nil {
+			commitMsg = msg
+		}
+	}
+
+	var body string
+
+	if agentProgress != "" {
+		// Best case: agent provided a progress summary
+		body = fmt.Sprintf("[iter %d] %s", l.ctx.Iteration, agentProgress)
+	} else if commitMsg != "" && commitMsg != fmt.Sprintf("ralph: iteration %d", l.ctx.Iteration) {
+		// Fallback: use the agent's commit message (skip Ralph's own generic commits)
+		body = fmt.Sprintf("[iter %d] %s", l.ctx.Iteration, commitMsg)
+	} else {
+		// Last resort: generic message
+		body = fmt.Sprintf("[iter %d] Iteration completed (%v).", l.ctx.Iteration, result.Duration.Round(time.Second))
+	}
+
+	if result.IsComplete {
+		body += " Plan completion signaled."
+	}
+	if result.Blocker != nil {
+		body += fmt.Sprintf(" BLOCKED: %s", result.Blocker.Description)
+	}
+
+	return body
 }
 
 // buildPrompt builds the prompt for Claude using the template builder.

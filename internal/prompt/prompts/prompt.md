@@ -37,7 +37,7 @@ If no feedback, continue to step 2.
 ### 2. Pick a task
 Pick the first task from the **Available tasks** section above (they are listed in dependency-safe order). If no tasks are available:
 - If blocked tasks exist and you cannot unblock them, output a `<blocker>` tag (see Edge Cases) and stop.
-- If all tasks are done/skipped, go to step 9.
+- If all tasks are done/skipped, go to step 10.
 
 ### 3. Start it
 ```bash
@@ -72,14 +72,28 @@ board task complete <task-id>
 git add -A && git commit -m "feat(scope): description"
 ```
 
-### 9. Check for plan completion
+### 9. Report progress
+After committing, output a brief progress summary:
+```
+<progress>
+[1-3 sentences: what you implemented/changed, any issues or workarounds, which criteria were checked. Be specific — like a good commit message with context.]
+</progress>
+```
+Example:
+```
+<progress>
+Added BoardAPIClient actor with adaptive polling, Keychain token storage, and error retry logic. Criteria 45, 46, 47 checked. Had to use URLSession.shared instead of async/await overload due to macOS 13 deployment target.
+</progress>
+```
+
+### 10. Check for plan completion
 If the Stats line shows done + skipped = total (all tasks finished):
 ```bash
 board plan context {{PLAN_ID}} --format text
 ```
 Verify everything is done, then output `<promise>COMPLETE</promise>`.
 
-### 10. Stop
+### 11. Stop
 End your response now. Do not start another task.
 
 ---

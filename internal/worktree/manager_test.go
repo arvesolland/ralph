@@ -94,6 +94,8 @@ func (m *mockGit) ListWorktrees() ([]git.WorktreeInfo, error) {
 	return m.worktrees, nil
 }
 
+func (m *mockGit) LastCommitMessage() (string, error) { return "", nil }
+
 func TestNewManager(t *testing.T) {
 	tmpDir := t.TempDir()
 	g := newMockGit(tmpDir)
