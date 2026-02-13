@@ -48,6 +48,10 @@ type ThreadInfo struct {
 	// PlanName is the name of the plan this thread is associated with.
 	PlanName string `json:"plan_name"`
 
+	// Branch is the git branch name for this plan (e.g. "feat/my-feature").
+	// Used to resolve the worktree path for feedback files.
+	Branch string `json:"branch,omitempty"`
+
 	// ThreadTS is the Slack thread timestamp (message ID).
 	ThreadTS string `json:"thread_ts"`
 

@@ -625,7 +625,7 @@ func (w *Worker) sendStartNotification(plan *board.Plan, info *PlanInfo) {
 		channelID, threadTS, err := notify.ParseSlackThreadURL(plan.SlackThreadURL)
 		if err == nil {
 			if sn, ok := w.notifier.(*notify.SlackNotifier); ok && sn != nil {
-				_ = sn.SeedThread(info.Name, channelID, threadTS)
+				_ = sn.SeedThread(info.Name, info.Branch, channelID, threadTS)
 				log.Info("Resumed Slack thread from Board: %s", plan.SlackThreadURL)
 
 				// Update the living status card instead of creating a new thread

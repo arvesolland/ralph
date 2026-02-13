@@ -143,15 +143,15 @@ func TestSocketModeBot_FindPlanByThread(t *testing.T) {
 	}
 
 	// Test finding existing thread
-	planName := bot.findPlanByThread("1234567890.123456")
-	if planName != "test-plan" {
-		t.Errorf("expected test-plan, got %s", planName)
+	foundInfo := bot.findPlanByThread("1234567890.123456")
+	if foundInfo == nil || foundInfo.PlanName != "test-plan" {
+		t.Errorf("expected test-plan, got %+v", foundInfo)
 	}
 
 	// Test non-existent thread
-	planName = bot.findPlanByThread("9999999999.999999")
-	if planName != "" {
-		t.Errorf("expected empty string for non-existent thread, got %s", planName)
+	foundInfo = bot.findPlanByThread("9999999999.999999")
+	if foundInfo != nil {
+		t.Errorf("expected nil for non-existent thread, got %+v", foundInfo)
 	}
 }
 
@@ -166,20 +166,20 @@ func TestSocketModeBot_FindPlanByThread_NilTracker(t *testing.T) {
 		t.Fatal("expected non-nil bot")
 	}
 
-	// Should return empty string when tracker is nil
-	planName := bot.findPlanByThread("1234567890.123456")
-	if planName != "" {
-		t.Errorf("expected empty string when tracker is nil, got %s", planName)
+	// Should return nil when tracker is nil
+	info := bot.findPlanByThread("1234567890.123456")
+	if info != nil {
+		t.Errorf("expected nil when tracker is nil, got %+v", info)
 	}
 }
 
 func TestSocketModeBot_WriteFeedback(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create plan bundle directory
-	bundleDir := filepath.Join(tmpDir, "test-plan")
+	// Create worktree directory (worktrees/<branch-without-feat-prefix>/)
+	bundleDir := filepath.Join(tmpDir, "worktrees", "test-plan")
 	if err := os.MkdirAll(bundleDir, 0755); err != nil {
-		t.Fatalf("failed to create bundle dir: %v", err)
+		t.Fatalf("failed to create worktree dir: %v", err)
 	}
 
 	cfg := BotConfig{
@@ -194,12 +194,13 @@ func TestSocketModeBot_WriteFeedback(t *testing.T) {
 	}
 
 	// Write feedback
-	err := bot.writeFeedback("test-plan", "U123", "Test feedback message")
+	info := &ThreadInfo{PlanName: "test-plan", Branch: "feat/test-plan"}
+	err := bot.writeFeedback(info, "U123", "Test feedback message")
 	if err != nil {
 		t.Fatalf("writeFeedback failed: %v", err)
 	}
 
-	// Verify feedback file was created in bundle directory
+	// Verify feedback file was created in worktree directory
 	feedbackPath := filepath.Join(bundleDir, "feedback.md")
 	content, err := os.ReadFile(feedbackPath)
 	if err != nil {
@@ -550,19 +551,13 @@ func contains(s, substr string) bool {
 	return false
 }
 
-func TestWriteFeedback_Bundle(t *testing.T) {
+func TestWriteFeedback_Worktree(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create plan base path with a bundle directory
-	bundleDir := filepath.Join(tmpDir, "bundle-plan")
+	// Create worktree directory
+	bundleDir := filepath.Join(tmpDir, "worktrees", "bundle-plan")
 	if err := os.MkdirAll(bundleDir, 0755); err != nil {
-		t.Fatalf("failed to create bundle dir: %v", err)
-	}
-
-	// Create plan.md inside the bundle
-	planPath := filepath.Join(bundleDir, "plan.md")
-	if err := os.WriteFile(planPath, []byte("# Test Plan\n"), 0644); err != nil {
-		t.Fatalf("failed to create plan.md: %v", err)
+		t.Fatalf("failed to create worktree dir: %v", err)
 	}
 
 	cfg := BotConfig{
@@ -578,25 +573,20 @@ func TestWriteFeedback_Bundle(t *testing.T) {
 	}
 
 	// Write feedback
-	err := bot.writeFeedback("bundle-plan", "U456", "Bundle test message")
+	info := &ThreadInfo{PlanName: "bundle-plan", Branch: "feat/bundle-plan"}
+	err := bot.writeFeedback(info, "U456", "Bundle test message")
 	if err != nil {
 		t.Fatalf("writeFeedback failed: %v", err)
 	}
 
-	// Verify feedback file is in the bundle directory
+	// Verify feedback file is in the worktree directory
 	feedbackPath := filepath.Join(bundleDir, "feedback.md")
 	content, err := os.ReadFile(feedbackPath)
 	if err != nil {
-		t.Fatalf("feedback.md should be in bundle dir: %v", err)
+		t.Fatalf("feedback.md should be in worktree dir: %v", err)
 	}
 
 	if !contains(string(content), "Bundle test message") {
 		t.Errorf("feedback should contain message, got: %s", string(content))
-	}
-
-	// Verify it was NOT written to the legacy location
-	legacyPath := filepath.Join(tmpDir, "bundle-plan.feedback.md")
-	if _, err := os.Stat(legacyPath); err == nil {
-		t.Error("feedback should NOT be at legacy path")
 	}
 }

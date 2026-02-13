@@ -92,6 +92,7 @@ func (s *SlackNotifier) Start(p PlanInfo) error {
 	if s.threadTracker != nil && ts != "" {
 		info := &ThreadInfo{
 			PlanName:      p.Name,
+			Branch:        p.Branch,
 			ThreadTS:      ts,
 			ChannelID:     s.channel,
 			MessageTS:     ts,
@@ -405,7 +406,7 @@ func (s *SlackNotifier) postMessageInThread(planName string, blocks []slack.Bloc
 
 // SeedThread pre-populates the thread tracker with an existing Slack thread.
 // This is used when resuming a plan that already has a thread URL stored in Board.
-func (s *SlackNotifier) SeedThread(planName, channelID, threadTS string) error {
+func (s *SlackNotifier) SeedThread(planName, branch, channelID, threadTS string) error {
 	if s.threadTracker == nil {
 		return nil
 	}
@@ -417,6 +418,7 @@ func (s *SlackNotifier) SeedThread(planName, channelID, threadTS string) error {
 
 	info := &ThreadInfo{
 		PlanName:  planName,
+		Branch:    branch,
 		ThreadTS:  threadTS,
 		ChannelID: channelID,
 		MessageTS: threadTS,

@@ -242,7 +242,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			channelID, threadTS, parseErr := notify.ParseSlackThreadURL(plan.SlackThreadURL)
 			if parseErr == nil {
 				if sn, ok := notifier.(*notify.SlackNotifier); ok && sn != nil {
-					_ = sn.SeedThread(npi.Name, channelID, threadTS)
+					_ = sn.SeedThread(npi.Name, npi.Branch, channelID, threadTS)
 					log.Info("Resumed Slack thread from Board: %s", plan.SlackThreadURL)
 					threadSeeded = true
 				}

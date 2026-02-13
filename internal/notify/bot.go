@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -289,38 +290,38 @@ func (b *SocketModeBot) handleMessageEvent(ev *slackevents.MessageEvent) {
 	}
 
 	// Look up the plan from the thread timestamp
-	planName := b.findPlanByThread(ev.ThreadTimeStamp)
-	if planName == "" {
+	threadInfo := b.findPlanByThread(ev.ThreadTimeStamp)
+	if threadInfo == nil {
 		log.Debug("No plan found for thread: %s (tracked threads: %d)", ev.ThreadTimeStamp, len(b.threadTracker.List()))
 		return
 	}
 
 	// Write the message to the feedback file
-	if err := b.writeFeedback(planName, ev.User, ev.Text); err != nil {
+	if err := b.writeFeedback(threadInfo, ev.User, ev.Text); err != nil {
 		log.Error("Failed to write feedback: %v", err)
 		return
 	}
 
-	log.Info("Received thread reply for plan %s from user %s", planName, ev.User)
+	log.Info("Received thread reply for plan %s from user %s", threadInfo.PlanName, ev.User)
 
 	// Add emoji reaction to acknowledge receipt
 	b.addReaction(ev.Channel, ev.TimeStamp, "eyes")
 }
 
-// findPlanByThread looks up the plan name from a thread timestamp.
-func (b *SocketModeBot) findPlanByThread(threadTS string) string {
+// findPlanByThread looks up the thread info from a thread timestamp.
+func (b *SocketModeBot) findPlanByThread(threadTS string) *ThreadInfo {
 	if b.threadTracker == nil {
-		return ""
+		return nil
 	}
 
 	// Get all threads and find matching one
 	for _, info := range b.threadTracker.List() {
 		if info.ThreadTS == threadTS {
-			return info.PlanName
+			return info
 		}
 	}
 
-	return ""
+	return nil
 }
 
 // addReaction adds an emoji reaction to a message.
@@ -339,9 +340,9 @@ func (b *SocketModeBot) addReaction(channel, timestamp, emoji string) {
 	}
 }
 
-// writeFeedback writes a thread reply to the plan's feedback file.
-func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
-	log.Debug("writeFeedback: planName=%s userID=%s text=%q basePath=%s", planName, userID, text, b.planBasePath)
+// writeFeedback writes a thread reply to the plan's worktree feedback file.
+func (b *SocketModeBot) writeFeedback(info *ThreadInfo, userID, text string) error {
+	log.Debug("writeFeedback: planName=%s branch=%s userID=%s text=%q basePath=%s", info.PlanName, info.Branch, userID, text, b.planBasePath)
 
 	// Get user info for display name
 	userName := userID
@@ -355,9 +356,11 @@ func (b *SocketModeBot) writeFeedback(planName, userID, text string) error {
 		}
 	}
 
-	// Determine feedback file path - feedback goes in the bundle directory
-	bundleDir := filepath.Join(b.planBasePath, planName)
-	log.Debug("writeFeedback: using bundle at %s", bundleDir)
+	// Determine feedback file path - write to the worktree directory
+	// Worktrees are at <basePath>/worktrees/<branch-without-feat-prefix>/
+	worktreeDir := strings.TrimPrefix(info.Branch, "feat/")
+	bundleDir := filepath.Join(b.planBasePath, "worktrees", worktreeDir)
+	log.Debug("writeFeedback: using worktree at %s", bundleDir)
 	feedbackPath := filepath.Join(bundleDir, "feedback.md")
 
 	// Build feedback entry

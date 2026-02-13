@@ -78,7 +78,7 @@ release-dry-run:
 
 # Install the binary to GOPATH/bin
 install:
-	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(GOPATH)/bin/$(BINARY_NAME) $(MAIN_PATH)
+	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(shell go env GOPATH)/bin/$(BINARY_NAME) $(MAIN_PATH)
 
 # Show help
 help:
