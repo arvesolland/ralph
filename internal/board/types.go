@@ -94,7 +94,7 @@ type Task struct {
 	CompletedAt        string      `json:"completed_at"`
 	Children           []Task      `json:"children,omitempty"`
 	AcceptanceCriteria []Criterion `json:"acceptance_criteria,omitempty"`
-	BlockedBy          []Task      `json:"blocked_by,omitempty"`
+	BlockedBy          []int       `json:"blocked_by,omitempty"`
 	CreatedAt          string      `json:"created_at"`
 	UpdatedAt          string      `json:"updated_at"`
 }

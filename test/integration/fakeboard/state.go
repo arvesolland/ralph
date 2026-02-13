@@ -174,10 +174,7 @@ func SeedTask(s *State, planID int, title, description string, deps []int) board
 		CreatedAt:   now(),
 		UpdatedAt:   now(),
 	}
-	// Store dependency info as BlockedBy references (IDs only).
-	for _, depID := range deps {
-		t.BlockedBy = append(t.BlockedBy, board.Task{ID: depID})
-	}
+	t.BlockedBy = deps
 	s.NextTaskID++
 	s.Tasks = append(s.Tasks, t)
 	return t
@@ -336,8 +333,8 @@ func isAvailable(s *State, t *board.Task) bool {
 	if t.Status != board.TaskStatusTodo {
 		return false
 	}
-	for _, dep := range t.BlockedBy {
-		dt := findTask(s, dep.ID)
+	for _, depID := range t.BlockedBy {
+		dt := findTask(s, depID)
 		if dt == nil {
 			return false
 		}
@@ -370,19 +367,9 @@ func blockedTasks(s *State, planID int) []board.Task {
 	return result
 }
 
-// enrichTask adds acceptance_criteria and blocked_by data to a task.
+// enrichTask adds acceptance_criteria data to a task.
 func enrichTask(s *State, t board.Task) board.Task {
 	t.AcceptanceCriteria = criteriaForTask(s, t.ID)
-	// BlockedBy is already stored on the task as ID references.
-	// Enrich with full task data for the response.
-	var enrichedDeps []board.Task
-	for _, dep := range t.BlockedBy {
-		dt := findTask(s, dep.ID)
-		if dt != nil {
-			enrichedDeps = append(enrichedDeps, *dt)
-		}
-	}
-	t.BlockedBy = enrichedDeps
 	return t
 }
 
