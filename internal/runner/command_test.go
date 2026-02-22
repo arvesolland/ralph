@@ -247,6 +247,50 @@ func TestBuildCommand_ZeroMaxTokens(t *testing.T) {
 	}
 }
 
+func TestFilterEnv(t *testing.T) {
+	env := []string{
+		"HOME=/home/user",
+		"PATH=/usr/bin",
+		"ANTHROPIC_API_KEY=sk-ant-secret",
+		"SHELL=/bin/bash",
+	}
+
+	filtered := filterEnv(env, "ANTHROPIC_API_KEY")
+
+	if len(filtered) != 3 {
+		t.Fatalf("expected 3 entries, got %d: %v", len(filtered), filtered)
+	}
+	for _, e := range filtered {
+		if strings.HasPrefix(e, "ANTHROPIC_API_KEY=") {
+			t.Error("ANTHROPIC_API_KEY should have been removed")
+		}
+	}
+}
+
+func TestFilterEnv_NotPresent(t *testing.T) {
+	env := []string{"HOME=/home/user", "PATH=/usr/bin"}
+	filtered := filterEnv(env, "ANTHROPIC_API_KEY")
+
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(filtered))
+	}
+}
+
+func TestBuildCommand_FiltersAnthropicAPIKey(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+
+	cmd := BuildCommand("test", Options{})
+
+	for _, e := range cmd.Env {
+		if strings.HasPrefix(e, "ANTHROPIC_API_KEY=") {
+			t.Error("BuildCommand should filter ANTHROPIC_API_KEY from env")
+		}
+	}
+	if len(cmd.Env) == 0 {
+		t.Error("expected cmd.Env to be set (non-nil)")
+	}
+}
+
 func TestBuildCommand_EmptyAllowedTools(t *testing.T) {
 	// Empty slice should not add the flag
 	opts := Options{

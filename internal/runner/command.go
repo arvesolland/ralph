@@ -2,6 +2,7 @@
 package runner
 
 import (
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -56,6 +57,10 @@ func BuildCommand(prompt string, opts Options) *exec.Cmd {
 	if opts.WorkDir != "" {
 		cmd.Dir = opts.WorkDir
 	}
+
+	// Filter environment to remove ANTHROPIC_API_KEY so Claude Code
+	// uses subscription auth (Claude AI Max) instead of API key auth.
+	cmd.Env = filterEnv(os.Environ(), "ANTHROPIC_API_KEY")
 
 	// Note: Prompt is passed via stdin by the caller
 	// This avoids shell escaping issues with complex prompts
@@ -138,6 +143,18 @@ func itoa(n int) string {
 	}
 
 	return string(buf[i:])
+}
+
+// filterEnv returns a copy of env with the named variable removed.
+func filterEnv(env []string, name string) []string {
+	prefix := name + "="
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }
 
 // CommandString returns the command as a string for logging/debugging.
