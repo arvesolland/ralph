@@ -360,6 +360,21 @@ func (l *IterationLoop) buildPrompt(contextText string) (string, error) {
 		overrides["BOARD_CONTEXT"] = "[No plan context available. Run `board plan context " + fmt.Sprintf("%d", l.planID) + " --format text` to fetch it manually.]"
 	}
 
+	// Read and consume override instructions
+	overrideContent, err := l.readAndConsumeOverride()
+	if err != nil {
+		log.Warn("Failed to read override file: %v", err)
+	}
+	if overrideContent != "" {
+		overrides["OVERRIDE_INSTRUCTIONS"] = fmt.Sprintf(
+			"\n---\n\n## OVERRIDE INSTRUCTIONS (HIGH PRIORITY)\n\n%s\n\nThese instructions from the Foreman orchestrator take precedence over the standard workflow. Follow them carefully.\n",
+			overrideContent,
+		)
+		log.Info("Injecting override instructions (%d bytes) into prompt", len(overrideContent))
+	} else {
+		overrides["OVERRIDE_INSTRUCTIONS"] = ""
+	}
+
 	// Build the main prompt
 	content, err := l.promptBuilder.Build("prompt.md", overrides)
 	if err != nil {
