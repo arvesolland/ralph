@@ -16,6 +16,7 @@ import (
 	"github.com/arvesolland/ralph/internal/board"
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
+	"github.com/arvesolland/ralph/internal/knowledge"
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/notify"
 	"github.com/arvesolland/ralph/internal/prompt"
@@ -319,6 +320,29 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 		PromptBuilder:    w.promptBuilder,
 		WorktreePath:     worktreePath,
 		IterationTimeout: w.iterationTimeout,
+		OnBeforeIteration: func() {
+			// Extract lessons from human feedback and write to learnings file
+			lessons, err := knowledge.ExtractLessons(w.board, plan.ID)
+			if err != nil {
+				log.Warn("Failed to extract lessons: %v", err)
+				return
+			}
+			if len(lessons) == 0 {
+				return
+			}
+			if err := knowledge.AppendLessons(worktreePath, lessons); err != nil {
+				log.Warn("Failed to write lessons: %v", err)
+				return
+			}
+			log.Info("Wrote %d lesson(s) to %s", len(lessons), knowledge.LearningsPath(worktreePath))
+
+			// On first iteration, ensure CLAUDE.md references the learnings file
+			if execCtx.Iteration == 1 {
+				if err := knowledge.EnsureReference(worktreePath); err != nil {
+					log.Warn("Failed to add CLAUDE.md reference: %v", err)
+				}
+			}
+		},
 		OnIteration: func(iteration int, result *runner.Result) {
 			// Update living status card with task stats
 			progress := &notify.ProgressStatus{
