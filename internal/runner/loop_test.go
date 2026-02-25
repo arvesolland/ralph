@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -623,6 +624,353 @@ func TestIterationLoop_BoardProgressTracking(t *testing.T) {
 	}
 	if !strings.Contains(progressCalls[0], "[iter 1]") {
 		t.Errorf("Expected iteration info in progress body, got: %s", progressCalls[0])
+	}
+}
+
+// setupOverrideFile creates the .ralph/steering/ directory and writes content to override.md.
+func setupOverrideFile(t *testing.T, dir string, content string) {
+	t.Helper()
+	steeringPath := filepath.Join(dir, steeringDir)
+	if err := os.MkdirAll(steeringPath, 0o755); err != nil {
+		t.Fatalf("Failed to create steering directory: %v", err)
+	}
+	overridePath := filepath.Join(steeringPath, overrideFilename)
+	if err := os.WriteFile(overridePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("Failed to write override file: %v", err)
+	}
+}
+
+func TestReadAndConsumeOverride_NoFile(t *testing.T) {
+	dir := t.TempDir()
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != "" {
+		t.Errorf("Expected empty string, got: %q", content)
+	}
+}
+
+func TestReadAndConsumeOverride_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	setupOverrideFile(t, dir, "")
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != "" {
+		t.Errorf("Expected empty string, got: %q", content)
+	}
+
+	// File should NOT be renamed (still exists as override.md)
+	overridePath := filepath.Join(dir, steeringDir, overrideFilename)
+	if _, err := os.Stat(overridePath); os.IsNotExist(err) {
+		t.Error("Expected empty override file to still exist (not consumed)")
+	}
+}
+
+func TestReadAndConsumeOverride_WhitespaceOnly(t *testing.T) {
+	dir := t.TempDir()
+	setupOverrideFile(t, dir, "  \n\t\n  ")
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != "" {
+		t.Errorf("Expected empty string for whitespace-only file, got: %q", content)
+	}
+}
+
+func TestReadAndConsumeOverride_ValidFile(t *testing.T) {
+	dir := t.TempDir()
+	overrideContent := "Do NOT use the existing API client.\nCreate a new standalone HTTP client."
+	setupOverrideFile(t, dir, overrideContent)
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != overrideContent {
+		t.Errorf("Expected override content %q, got: %q", overrideContent, content)
+	}
+
+	// Original file should no longer exist
+	overridePath := filepath.Join(dir, steeringDir, overrideFilename)
+	if _, err := os.Stat(overridePath); !os.IsNotExist(err) {
+		t.Error("Expected original override.md to be removed after consumption")
+	}
+
+	// A .consumed file should exist in the steering directory
+	steeringPath := filepath.Join(dir, steeringDir)
+	entries, err := os.ReadDir(steeringPath)
+	if err != nil {
+		t.Fatalf("Failed to read steering directory: %v", err)
+	}
+	found := false
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "override.md.consumed.") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected a file matching override.md.consumed.* in steering directory")
+	}
+}
+
+func TestReadAndConsumeOverride_WithHeaders(t *testing.T) {
+	dir := t.TempDir()
+	overrideContent := "# Override Instructions (from Foreman)\n# Severity: REDIRECT\n\nActual instructions here"
+	setupOverrideFile(t, dir, overrideContent)
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != overrideContent {
+		t.Errorf("Expected full content including headers, got: %q", content)
+	}
+}
+
+func TestBuildPrompt_WithoutOverride(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctx := NewContext(42, "feat/test", "main", 10)
+	builder := prompt.NewBuilder(config.Defaults(), "", "")
+
+	loop := NewIterationLoop(LoopConfig{
+		PlanID:        42,
+		Context:       ctx,
+		Config:        config.Defaults(),
+		PromptBuilder: builder,
+		WorktreePath:  tempDir,
+	})
+
+	contextText := "Project: TestProject\nPlan: #42 Test Plan\nStats: 3 total | 1 done"
+
+	result, err := loop.buildPrompt(contextText)
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+
+	// Board context should be injected
+	if !strings.Contains(result, "Project: TestProject") {
+		t.Error("Expected Board context to be present in prompt")
+	}
+
+	// No OVERRIDE INSTRUCTIONS section should appear
+	if strings.Contains(result, "OVERRIDE INSTRUCTIONS") {
+		t.Error("Expected no OVERRIDE INSTRUCTIONS section when no override file exists")
+	}
+
+	// Standard prompt sections should be present
+	if !strings.Contains(result, "## Workflow") {
+		t.Error("Expected ## Workflow section in prompt")
+	}
+	if !strings.Contains(result, "## Plan State") {
+		t.Error("Expected ## Plan State section in prompt")
+	}
+}
+
+func TestBuildPrompt_WithOverride(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctx := NewContext(42, "feat/test", "main", 10)
+	builder := prompt.NewBuilder(config.Defaults(), "", "")
+
+	loop := NewIterationLoop(LoopConfig{
+		PlanID:        42,
+		Context:       ctx,
+		Config:        config.Defaults(),
+		PromptBuilder: builder,
+		WorktreePath:  tempDir,
+	})
+
+	// Create override file
+	overrideText := "Do NOT use the existing API client.\nCreate a new standalone HTTP client."
+	setupOverrideFile(t, tempDir, overrideText)
+
+	contextText := "Project: TestProject\nPlan: #42 Test Plan"
+
+	result, err := loop.buildPrompt(contextText)
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+
+	// Override content should appear in the rendered prompt
+	if !strings.Contains(result, "## OVERRIDE INSTRUCTIONS (HIGH PRIORITY)") {
+		t.Error("Expected OVERRIDE INSTRUCTIONS header in prompt")
+	}
+	if !strings.Contains(result, overrideText) {
+		t.Error("Expected override content to appear in prompt")
+	}
+	if !strings.Contains(result, "These instructions from the Foreman orchestrator") {
+		t.Error("Expected priority notice in prompt")
+	}
+
+	// Override file should have been consumed (renamed)
+	overridePath := filepath.Join(tempDir, steeringDir, overrideFilename)
+	if _, err := os.Stat(overridePath); !os.IsNotExist(err) {
+		t.Error("Expected override file to be consumed (renamed) after buildPrompt")
+	}
+
+	// A .consumed file should exist
+	steeringPath := filepath.Join(tempDir, steeringDir)
+	entries, err := os.ReadDir(steeringPath)
+	if err != nil {
+		t.Fatalf("Failed to read steering directory: %v", err)
+	}
+	found := false
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "override.md.consumed.") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected consumed override file in steering directory")
+	}
+}
+
+func TestBuildPrompt_WithOverrideAndContext(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctx := NewContext(42, "feat/test", "main", 10)
+	builder := prompt.NewBuilder(config.Defaults(), "", "")
+
+	loop := NewIterationLoop(LoopConfig{
+		PlanID:        42,
+		Context:       ctx,
+		Config:        config.Defaults(),
+		PromptBuilder: builder,
+		WorktreePath:  tempDir,
+	})
+
+	// Create override file
+	overrideText := "Focus on error handling first."
+	setupOverrideFile(t, tempDir, overrideText)
+
+	contextText := "Project: TestProject\nPlan: #42 Test Plan\nStats: 5 total | 2 done"
+
+	result, err := loop.buildPrompt(contextText)
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+
+	// Both Board context and override should be present
+	if !strings.Contains(result, "Project: TestProject") {
+		t.Error("Expected Board context in prompt")
+	}
+	if !strings.Contains(result, "OVERRIDE INSTRUCTIONS") {
+		t.Error("Expected OVERRIDE INSTRUCTIONS in prompt")
+	}
+	if !strings.Contains(result, overrideText) {
+		t.Error("Expected override content in prompt")
+	}
+
+	// Verify order: Board context should appear before override instructions
+	boardIdx := strings.Index(result, "Project: TestProject")
+	overrideIdx := strings.Index(result, "OVERRIDE INSTRUCTIONS")
+	workflowIdx := strings.Index(result, "## Workflow")
+
+	if boardIdx >= overrideIdx {
+		t.Errorf("Expected Board context (idx %d) before override (idx %d)", boardIdx, overrideIdx)
+	}
+	if overrideIdx >= workflowIdx {
+		t.Errorf("Expected override (idx %d) before Workflow section (idx %d)", overrideIdx, workflowIdx)
+	}
+}
+
+func TestBuildPrompt_SetsLastOverrideApplied(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctx := NewContext(42, "feat/test", "main", 10)
+	builder := prompt.NewBuilder(config.Defaults(), "", "")
+
+	loop := NewIterationLoop(LoopConfig{
+		PlanID:        42,
+		Context:       ctx,
+		Config:        config.Defaults(),
+		PromptBuilder: builder,
+		WorktreePath:  tempDir,
+	})
+
+	// Without override file, lastOverrideApplied should be false
+	_, err := loop.buildPrompt("some context")
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+	if loop.lastOverrideApplied {
+		t.Error("Expected lastOverrideApplied to be false when no override file exists")
+	}
+
+	// With override file, lastOverrideApplied should be true
+	setupOverrideFile(t, tempDir, "Override instructions here")
+	_, err = loop.buildPrompt("some context")
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+	if !loop.lastOverrideApplied {
+		t.Error("Expected lastOverrideApplied to be true when override file exists")
+	}
+
+	// Next call without override should reset to false
+	_, err = loop.buildPrompt("some context")
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+	if loop.lastOverrideApplied {
+		t.Error("Expected lastOverrideApplied to be reset to false on next call without override")
+	}
+}
+
+func TestBuildProgressBody_WithOverride(t *testing.T) {
+	ctx := NewContext(42, "feat/test", "main", 10)
+
+	loop := NewIterationLoop(LoopConfig{
+		Context: ctx,
+	})
+
+	result := &Result{
+		TextContent: "Worked on task 1",
+		Duration:    5 * time.Second,
+	}
+
+	// Without override
+	loop.lastOverrideApplied = false
+	body := loop.buildProgressBody(result)
+	if strings.Contains(body, "[Override:") {
+		t.Error("Expected no override marker when lastOverrideApplied is false")
+	}
+
+	// With override
+	loop.lastOverrideApplied = true
+	body = loop.buildProgressBody(result)
+	if !strings.Contains(body, "[Override: steering instructions applied this iteration]") {
+		t.Errorf("Expected override marker in progress body, got: %s", body)
 	}
 }
 

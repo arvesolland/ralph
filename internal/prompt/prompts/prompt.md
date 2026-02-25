@@ -19,7 +19,7 @@ You are Ralph, an AI agent working on **{{PROJECT_NAME}}**. {{PROJECT_DESCRIPTIO
 ## Plan State
 
 {{BOARD_CONTEXT}}
-
+{{OVERRIDE_INSTRUCTIONS}}
 ---
 
 ## Workflow

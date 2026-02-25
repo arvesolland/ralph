@@ -4,6 +4,9 @@ package runner
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/arvesolland/ralph/internal/board"
@@ -36,6 +39,12 @@ type LoopResult struct {
 
 // MaxFalseCompletions is the number of consecutive false completion claims before halting.
 const MaxFalseCompletions = 5
+
+// steeringDir is the directory within the worktree where steering files are stored.
+const steeringDir = ".ralph/steering"
+
+// overrideFilename is the name of the override instructions file.
+const overrideFilename = "override.md"
 
 // IterationLoop manages the main execution loop for plan completion.
 // It orchestrates: prompt building -> Claude execution -> verification -> commit.
@@ -84,6 +93,9 @@ type IterationLoop struct {
 
 	// onAfterCommit is called after a successful commit (for pushing to remote)
 	onAfterCommit func()
+
+	// lastOverrideApplied tracks whether override instructions were consumed this iteration
+	lastOverrideApplied bool
 }
 
 // LoopConfig holds configuration for creating an IterationLoop.
@@ -323,6 +335,9 @@ func (l *IterationLoop) buildProgressBody(result *Result) string {
 		body = fmt.Sprintf("[iter %d] Iteration completed (%v).", l.ctx.Iteration, result.Duration.Round(time.Second))
 	}
 
+	if l.lastOverrideApplied {
+		body += " [Override: steering instructions applied this iteration]"
+	}
 	if result.IsComplete {
 		body += " Plan completion signaled."
 	}
@@ -349,6 +364,23 @@ func (l *IterationLoop) buildPrompt(contextText string) (string, error) {
 		overrides["BOARD_CONTEXT"] = contextText
 	} else {
 		overrides["BOARD_CONTEXT"] = "[No plan context available. Run `board plan context " + fmt.Sprintf("%d", l.planID) + " --format text` to fetch it manually.]"
+	}
+
+	// Read and consume override instructions
+	l.lastOverrideApplied = false
+	overrideContent, err := l.readAndConsumeOverride()
+	if err != nil {
+		log.Warn("Failed to read override file: %v", err)
+	}
+	if overrideContent != "" {
+		l.lastOverrideApplied = true
+		overrides["OVERRIDE_INSTRUCTIONS"] = fmt.Sprintf(
+			"\n---\n\n## OVERRIDE INSTRUCTIONS (HIGH PRIORITY)\n\n%s\n\nThese instructions from the Foreman orchestrator take precedence over the standard workflow. Follow them carefully.\n",
+			overrideContent,
+		)
+		log.Info("Injecting override instructions (%d bytes) into prompt", len(overrideContent))
+	} else {
+		overrides["OVERRIDE_INSTRUCTIONS"] = ""
 	}
 
 	// Build the main prompt
@@ -450,4 +482,31 @@ func (l *IterationLoop) addBoardFeedback(ctx context.Context, reason string) err
 	}
 	_, err := l.board.AddFeedback(l.planID, "ralph-verification", reason)
 	return err
+}
+
+// readAndConsumeOverride reads the override instructions file from the worktree's
+// steering directory. If the file exists and is non-empty, its contents are returned
+// and the file is renamed to .consumed.<unix-timestamp> to prevent re-reading.
+// Returns empty string and nil error if the file does not exist or is empty.
+func (l *IterationLoop) readAndConsumeOverride() (string, error) {
+	overridePath := filepath.Join(l.worktreePath, steeringDir, overrideFilename)
+	content, err := os.ReadFile(overridePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Debug("No override instructions found")
+			return "", nil
+		}
+		return "", fmt.Errorf("reading override file: %w", err)
+	}
+	if len(strings.TrimSpace(string(content))) == 0 {
+		return "", nil
+	}
+	log.Info("Override instructions detected (%d bytes) from %s", len(content), overridePath)
+	consumedPath := overridePath + fmt.Sprintf(".consumed.%d", time.Now().Unix())
+	if err := os.Rename(overridePath, consumedPath); err != nil {
+		log.Warn("Failed to consume override file (will re-read next iteration): %v", err)
+	} else {
+		log.Info("Override file consumed: %s -> %s", overridePath, consumedPath)
+	}
+	return string(content), nil
 }
