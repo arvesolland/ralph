@@ -904,6 +904,76 @@ func TestBuildPrompt_WithOverrideAndContext(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_SetsLastOverrideApplied(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctx := NewContext(42, "feat/test", "main", 10)
+	builder := prompt.NewBuilder(config.Defaults(), "", "")
+
+	loop := NewIterationLoop(LoopConfig{
+		PlanID:        42,
+		Context:       ctx,
+		Config:        config.Defaults(),
+		PromptBuilder: builder,
+		WorktreePath:  tempDir,
+	})
+
+	// Without override file, lastOverrideApplied should be false
+	_, err := loop.buildPrompt("some context")
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+	if loop.lastOverrideApplied {
+		t.Error("Expected lastOverrideApplied to be false when no override file exists")
+	}
+
+	// With override file, lastOverrideApplied should be true
+	setupOverrideFile(t, tempDir, "Override instructions here")
+	_, err = loop.buildPrompt("some context")
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+	if !loop.lastOverrideApplied {
+		t.Error("Expected lastOverrideApplied to be true when override file exists")
+	}
+
+	// Next call without override should reset to false
+	_, err = loop.buildPrompt("some context")
+	if err != nil {
+		t.Fatalf("buildPrompt failed: %v", err)
+	}
+	if loop.lastOverrideApplied {
+		t.Error("Expected lastOverrideApplied to be reset to false on next call without override")
+	}
+}
+
+func TestBuildProgressBody_WithOverride(t *testing.T) {
+	ctx := NewContext(42, "feat/test", "main", 10)
+
+	loop := NewIterationLoop(LoopConfig{
+		Context: ctx,
+	})
+
+	result := &Result{
+		TextContent: "Worked on task 1",
+		Duration:    5 * time.Second,
+	}
+
+	// Without override
+	loop.lastOverrideApplied = false
+	body := loop.buildProgressBody(result)
+	if strings.Contains(body, "[Override:") {
+		t.Error("Expected no override marker when lastOverrideApplied is false")
+	}
+
+	// With override
+	loop.lastOverrideApplied = true
+	body = loop.buildProgressBody(result)
+	if !strings.Contains(body, "[Override: steering instructions applied this iteration]") {
+		t.Errorf("Expected override marker in progress body, got: %s", body)
+	}
+}
+
 // setupTestGitRepo creates a git repo for testing.
 func setupTestGitRepo(t *testing.T, dir string) git.Git {
 	t.Helper()

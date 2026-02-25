@@ -93,6 +93,9 @@ type IterationLoop struct {
 
 	// onAfterCommit is called after a successful commit (for pushing to remote)
 	onAfterCommit func()
+
+	// lastOverrideApplied tracks whether override instructions were consumed this iteration
+	lastOverrideApplied bool
 }
 
 // LoopConfig holds configuration for creating an IterationLoop.
@@ -332,6 +335,9 @@ func (l *IterationLoop) buildProgressBody(result *Result) string {
 		body = fmt.Sprintf("[iter %d] Iteration completed (%v).", l.ctx.Iteration, result.Duration.Round(time.Second))
 	}
 
+	if l.lastOverrideApplied {
+		body += " [Override: steering instructions applied this iteration]"
+	}
 	if result.IsComplete {
 		body += " Plan completion signaled."
 	}
@@ -361,11 +367,13 @@ func (l *IterationLoop) buildPrompt(contextText string) (string, error) {
 	}
 
 	// Read and consume override instructions
+	l.lastOverrideApplied = false
 	overrideContent, err := l.readAndConsumeOverride()
 	if err != nil {
 		log.Warn("Failed to read override file: %v", err)
 	}
 	if overrideContent != "" {
+		l.lastOverrideApplied = true
 		overrides["OVERRIDE_INSTRUCTIONS"] = fmt.Sprintf(
 			"\n---\n\n## OVERRIDE INSTRUCTIONS (HIGH PRIORITY)\n\n%s\n\nThese instructions from the Foreman orchestrator take precedence over the standard workflow. Follow them carefully.\n",
 			overrideContent,
@@ -485,6 +493,7 @@ func (l *IterationLoop) readAndConsumeOverride() (string, error) {
 	content, err := os.ReadFile(overridePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			log.Debug("No override instructions found")
 			return "", nil
 		}
 		return "", fmt.Errorf("reading override file: %w", err)
@@ -492,11 +501,12 @@ func (l *IterationLoop) readAndConsumeOverride() (string, error) {
 	if len(strings.TrimSpace(string(content))) == 0 {
 		return "", nil
 	}
+	log.Info("Override instructions detected (%d bytes) from %s", len(content), overridePath)
 	consumedPath := overridePath + fmt.Sprintf(".consumed.%d", time.Now().Unix())
 	if err := os.Rename(overridePath, consumedPath); err != nil {
-		log.Warn("Failed to consume override file: %v", err)
+		log.Warn("Failed to consume override file (will re-read next iteration): %v", err)
 	} else {
-		log.Info("Override instructions consumed from %s", overridePath)
+		log.Info("Override file consumed: %s -> %s", overridePath, consumedPath)
 	}
 	return string(content), nil
 }
