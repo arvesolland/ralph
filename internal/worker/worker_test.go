@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -978,6 +979,114 @@ func TestCompletePlan_NonRetryableErrorFailsFast(t *testing.T) {
 	// Worktree should NOT be cleaned up (status update failed)
 	if wtMgr.RemoveCalls != 0 {
 		t.Errorf("Expected 0 worktree Remove calls, got %d", wtMgr.RemoveCalls)
+	}
+}
+
+func TestProcessPlan_KnowledgeExtraction(t *testing.T) {
+	// Verifies that the OnBeforeIteration callback extracts lessons from Board
+	// feedback and writes them to .claude/learnings.md in the worktree.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/knowledge-test")
+
+	// Create a CLAUDE.md in the worktree so EnsureReference can add to it
+	claudeMDPath := filepath.Join(wtDir, "CLAUDE.md")
+	if err := os.WriteFile(claudeMDPath, []byte("# Project\n\nSome instructions.\n"), 0644); err != nil {
+		t.Fatalf("Failed to write CLAUDE.md: %v", err)
+	}
+
+	mockBoard := board.NewMockBoard()
+
+	// PlanContextText for prompt building
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Context", nil
+	}
+
+	// PlanContext returns human feedback for knowledge extraction
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
+			RecentFeedback: []board.Feedback{
+				{
+					PlanID:    planID,
+					Author:    "arve",
+					Body:      "Always use structured logging instead of fmt.Println",
+					CreatedAt: "2026-02-25",
+				},
+				{
+					PlanID:    planID,
+					Author:    "ralph", // system — should be excluded
+					Body:      "iteration 1 completed",
+					CreatedAt: "2026-02-25",
+				},
+			},
+		}, nil
+	}
+
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		return &board.Plan{ID: id, Title: "Knowledge Test", FeatureBranch: "feat/knowledge-test", Status: status}, nil
+	}
+
+	mockRunner := &MockBoardRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			return &runner.Result{
+				TextContent: "Done\n<promise>COMPLETE</promise>",
+				IsComplete:  true,
+				Duration:    100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-knowledge-test", wtDir)
+
+	cfg := config.Defaults()
+	w := NewWorker(WorkerConfig{
+		Board:            mockBoard,
+		ProjectSlug:      "test-project",
+		Config:           cfg,
+		WorktreeManager:  wtMgr,
+		Git:              git.NewGit(tmpDir),
+		MainWorktreePath: tmpDir,
+		Runner:           mockRunner,
+		PromptBuilder:    prompt.NewBuilder(cfg, "", ""),
+		MaxIterations:    5,
+		CompletionMode:   "branch",
+	})
+
+	plan := &board.Plan{ID: 60, Title: "Knowledge Test", FeatureBranch: "feat/knowledge-test"}
+	info := &PlanInfo{ID: 60, Name: "Knowledge Test", Branch: "feat/knowledge-test"}
+
+	err := w.processPlan(context.Background(), plan, info)
+	if err != nil {
+		t.Fatalf("processPlan() error = %v", err)
+	}
+
+	// Verify .claude/learnings.md was created with the human feedback lesson
+	learningsPath := filepath.Join(wtDir, ".claude", "learnings.md")
+	content, err := os.ReadFile(learningsPath)
+	if err != nil {
+		t.Fatalf("Failed to read learnings file: %v", err)
+	}
+
+	learnings := string(content)
+	if !strings.Contains(learnings, "Always use structured logging") {
+		t.Errorf("Learnings file should contain human feedback lesson, got:\n%s", learnings)
+	}
+	if strings.Contains(learnings, "iteration 1 completed") {
+		t.Error("Learnings file should NOT contain system-authored (ralph) feedback")
+	}
+
+	// Verify CLAUDE.md now references the learnings file
+	claudeContent, err := os.ReadFile(claudeMDPath)
+	if err != nil {
+		t.Fatalf("Failed to read CLAUDE.md: %v", err)
+	}
+	if !strings.Contains(string(claudeContent), "Operational Learnings") {
+		t.Errorf("CLAUDE.md should reference learnings file, got:\n%s", string(claudeContent))
 	}
 }
 
