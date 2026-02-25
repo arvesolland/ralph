@@ -24,3 +24,6 @@ test/workspaces/
 # OS files
 .DS_Store
 .ralph/
+
+# Steering override files (written by Foreman, consumed by Ralph)
+.ralph/steering/
