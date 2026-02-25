@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -623,6 +624,134 @@ func TestIterationLoop_BoardProgressTracking(t *testing.T) {
 	}
 	if !strings.Contains(progressCalls[0], "[iter 1]") {
 		t.Errorf("Expected iteration info in progress body, got: %s", progressCalls[0])
+	}
+}
+
+// setupOverrideFile creates the .ralph/steering/ directory and writes content to override.md.
+func setupOverrideFile(t *testing.T, dir string, content string) {
+	t.Helper()
+	steeringPath := filepath.Join(dir, steeringDir)
+	if err := os.MkdirAll(steeringPath, 0o755); err != nil {
+		t.Fatalf("Failed to create steering directory: %v", err)
+	}
+	overridePath := filepath.Join(steeringPath, overrideFilename)
+	if err := os.WriteFile(overridePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("Failed to write override file: %v", err)
+	}
+}
+
+func TestReadAndConsumeOverride_NoFile(t *testing.T) {
+	dir := t.TempDir()
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != "" {
+		t.Errorf("Expected empty string, got: %q", content)
+	}
+}
+
+func TestReadAndConsumeOverride_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	setupOverrideFile(t, dir, "")
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != "" {
+		t.Errorf("Expected empty string, got: %q", content)
+	}
+
+	// File should NOT be renamed (still exists as override.md)
+	overridePath := filepath.Join(dir, steeringDir, overrideFilename)
+	if _, err := os.Stat(overridePath); os.IsNotExist(err) {
+		t.Error("Expected empty override file to still exist (not consumed)")
+	}
+}
+
+func TestReadAndConsumeOverride_WhitespaceOnly(t *testing.T) {
+	dir := t.TempDir()
+	setupOverrideFile(t, dir, "  \n\t\n  ")
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != "" {
+		t.Errorf("Expected empty string for whitespace-only file, got: %q", content)
+	}
+}
+
+func TestReadAndConsumeOverride_ValidFile(t *testing.T) {
+	dir := t.TempDir()
+	overrideContent := "Do NOT use the existing API client.\nCreate a new standalone HTTP client."
+	setupOverrideFile(t, dir, overrideContent)
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != overrideContent {
+		t.Errorf("Expected override content %q, got: %q", overrideContent, content)
+	}
+
+	// Original file should no longer exist
+	overridePath := filepath.Join(dir, steeringDir, overrideFilename)
+	if _, err := os.Stat(overridePath); !os.IsNotExist(err) {
+		t.Error("Expected original override.md to be removed after consumption")
+	}
+
+	// A .consumed file should exist in the steering directory
+	steeringPath := filepath.Join(dir, steeringDir)
+	entries, err := os.ReadDir(steeringPath)
+	if err != nil {
+		t.Fatalf("Failed to read steering directory: %v", err)
+	}
+	found := false
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "override.md.consumed.") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected a file matching override.md.consumed.* in steering directory")
+	}
+}
+
+func TestReadAndConsumeOverride_WithHeaders(t *testing.T) {
+	dir := t.TempDir()
+	overrideContent := "# Override Instructions (from Foreman)\n# Severity: REDIRECT\n\nActual instructions here"
+	setupOverrideFile(t, dir, overrideContent)
+
+	loop := NewIterationLoop(LoopConfig{
+		WorktreePath: dir,
+	})
+
+	content, err := loop.readAndConsumeOverride()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if content != overrideContent {
+		t.Errorf("Expected full content including headers, got: %q", content)
 	}
 }
 
