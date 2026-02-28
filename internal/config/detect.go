@@ -4,7 +4,9 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // DetectedConfig contains auto-detected project configuration.
@@ -310,6 +312,41 @@ func detectGradle(dir string) (*DetectedConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// DetectDefaultBranch detects the default branch for the git repository at dir.
+// It tries git symbolic-ref refs/remotes/origin/HEAD first, then falls back to
+// git remote show origin, and finally defaults to "main".
+func DetectDefaultBranch(dir string) string {
+	// Try git symbolic-ref refs/remotes/origin/HEAD
+	// Output looks like: refs/remotes/origin/main
+	cmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+	cmd.Dir = dir
+	if out, err := cmd.Output(); err == nil {
+		ref := strings.TrimSpace(string(out))
+		// Parse "refs/remotes/origin/main" -> "main"
+		if parts := strings.SplitN(ref, "refs/remotes/origin/", 2); len(parts) == 2 && parts[1] != "" {
+			return parts[1]
+		}
+	}
+
+	// Fallback: git remote show origin | grep "HEAD branch"
+	cmd = exec.Command("git", "remote", "show", "origin")
+	cmd.Dir = dir
+	if out, err := cmd.Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "HEAD branch:") {
+				branch := strings.TrimSpace(strings.TrimPrefix(line, "HEAD branch:"))
+				if branch != "" && branch != "(unknown)" {
+					return branch
+				}
+			}
+		}
+	}
+
+	// Final fallback
+	return "main"
 }
 
 // fileExists checks if a file exists.

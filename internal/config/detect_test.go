@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -207,5 +209,89 @@ func TestDetect_NonExistentDir(t *testing.T) {
 	// Non-existent directory should return empty config (not error)
 	if cfg.Language != "" {
 		t.Errorf("expected empty language, got '%s'", cfg.Language)
+	}
+}
+
+// initGitRepo creates a git repo with initial commit in the given dir.
+func initGitRepo(t *testing.T, dir, branch string) {
+	t.Helper()
+	cmds := [][]string{
+		{"git", "init", "-b", branch},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		{"git", "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+}
+
+func TestDetectDefaultBranch_Main(t *testing.T) {
+	// Create a bare "remote" repo with main as default
+	bare := t.TempDir()
+	initGitRepo(t, bare, "main")
+
+	// Create a clone so origin/HEAD is set
+	clone := t.TempDir()
+	cmd := exec.Command("git", "clone", bare, clone)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("clone failed: %v\n%s", err, out)
+	}
+
+	branch := DetectDefaultBranch(clone)
+	if branch != "main" {
+		t.Errorf("expected 'main', got '%s'", branch)
+	}
+}
+
+func TestDetectDefaultBranch_Master(t *testing.T) {
+	// Create a bare "remote" repo with master as default
+	bare := t.TempDir()
+	initGitRepo(t, bare, "master")
+
+	// Create a clone so origin/HEAD is set
+	clone := t.TempDir()
+	cmd := exec.Command("git", "clone", bare, clone)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("clone failed: %v\n%s", err, out)
+	}
+
+	branch := DetectDefaultBranch(clone)
+	if branch != "master" {
+		t.Errorf("expected 'master', got '%s'", branch)
+	}
+}
+
+func TestDetectDefaultBranch_NoRemote(t *testing.T) {
+	// Create a local repo with no remote
+	dir := t.TempDir()
+	initGitRepo(t, dir, "develop")
+
+	branch := DetectDefaultBranch(dir)
+	if branch != "main" {
+		t.Errorf("expected fallback 'main', got '%s'", branch)
+	}
+}
+
+func TestDetectDefaultBranch_NotGitDir(t *testing.T) {
+	// Create a plain directory (not a git repo)
+	dir := t.TempDir()
+
+	branch := DetectDefaultBranch(dir)
+	if branch != "main" {
+		t.Errorf("expected fallback 'main', got '%s'", branch)
+	}
+}
+
+func TestDetectDefaultBranch_NonExistentDir(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "ralph-nonexistent-test-dir-xyz")
+
+	branch := DetectDefaultBranch(dir)
+	if branch != "main" {
+		t.Errorf("expected fallback 'main', got '%s'", branch)
 	}
 }

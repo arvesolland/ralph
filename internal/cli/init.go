@@ -110,6 +110,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg = config.Defaults()
 	}
 
+	// Auto-detect git default branch — always run (even without --detect)
+	// Only fill in if not already set by existing config
+	if cfg.Git.BaseBranch == "" || cfg.Git.BaseBranch == "main" {
+		detectedBranch := config.DetectDefaultBranch(cwd)
+		if detectedBranch != cfg.Git.BaseBranch {
+			cfg.Git.BaseBranch = detectedBranch
+			log.Info("Detected default branch: %s", detectedBranch)
+		}
+	} else {
+		log.Info("Base branch: %s (kept existing)", cfg.Git.BaseBranch)
+	}
+
 	// Auto-detect if flag is set — only fill in empty command fields
 	if detectFlag {
 		log.Info("Auto-detecting project settings...")
