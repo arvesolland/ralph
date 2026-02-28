@@ -14,6 +14,8 @@ var (
 	verbose    bool
 	quiet      bool
 	noColor    bool
+	noLogFile  bool
+	logFilePath string
 )
 
 // rootCmd represents the base command when called without any subcommands.
@@ -58,6 +60,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output (debug level)")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "suppress informational output (warnings and errors only)")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable color output")
+	rootCmd.PersistentFlags().BoolVar(&noLogFile, "no-log-file", false, "disable log file output")
+	rootCmd.PersistentFlags().StringVar(&logFilePath, "log-file", "", "custom log file path (overrides default location)")
 }
 
 // GetConfigPath returns the config path from flags.

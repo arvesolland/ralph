@@ -21,4 +21,7 @@ type Board interface {
 	CheckCriterion(id int) (*Criterion, error)
 	UncheckCriterion(id int) (*Criterion, error)
 	UpdatePlan(id int, fields map[string]string) (*Plan, error)
+	RegisterProcess(reg *ProcessRegistration) (*ProcessRegistration, error)
+	HeartbeatProcess(processID string, state string, planID *int) (*ProcessRegistration, error)
+	DeregisterProcess(processID string) error
 }

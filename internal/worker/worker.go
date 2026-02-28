@@ -19,6 +19,7 @@ import (
 	"github.com/arvesolland/ralph/internal/knowledge"
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/notify"
+	"github.com/arvesolland/ralph/internal/process"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/retry"
 	"github.com/arvesolland/ralph/internal/runner"
@@ -79,7 +80,8 @@ type WorkerConfig struct {
 	SyncInterval       time.Duration
 	PushAfterIteration bool
 	IterationTimeout   time.Duration
-	StatusRetryConfig  *retry.RetryConfig // retry config for Board status updates (default: aggressive)
+	StatusRetryConfig  *retry.RetryConfig    // retry config for Board status updates (default: aggressive)
+	ProcessRegistry    *process.Registry     // optional process registry for heartbeats
 
 	// Callbacks
 	OnPlanStart    func(info *PlanInfo)
@@ -109,6 +111,7 @@ type Worker struct {
 	pushAfterIteration bool
 	iterationTimeout   time.Duration
 	statusRetryConfig  retry.RetryConfig
+	processRegistry    *process.Registry
 
 	// Callbacks
 	onPlanStart    func(info *PlanInfo)
@@ -137,6 +140,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		syncInterval:       cfg.SyncInterval,
 		pushAfterIteration: cfg.PushAfterIteration,
 		iterationTimeout:   cfg.IterationTimeout,
+		processRegistry:    cfg.ProcessRegistry,
 		onPlanStart:        cfg.OnPlanStart,
 		onPlanComplete:     cfg.OnPlanComplete,
 		onPlanError:        cfg.OnPlanError,
@@ -344,6 +348,12 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 			}
 		},
 		OnIteration: func(iteration int, result *runner.Result) {
+			// Send process heartbeat
+			if w.processRegistry != nil {
+				planID := plan.ID
+				w.processRegistry.Heartbeat("running", &planID)
+			}
+
 			// Update living status card with task stats
 			progress := &notify.ProgressStatus{
 				Iteration:     iteration,
