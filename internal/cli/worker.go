@@ -14,6 +14,7 @@ import (
 	"github.com/arvesolland/ralph/internal/config"
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
+	"github.com/arvesolland/ralph/internal/logfile"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
 	"github.com/arvesolland/ralph/internal/worker"
@@ -153,6 +154,22 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	// Set up paths
 	configDir := filepath.Join(repoRoot, ".ralph")
 	worktreesDir := filepath.Join(configDir, "worktrees")
+
+	// Set up log file (tee stdout/stderr to file)
+	if !noLogFile {
+		logsDir := filepath.Join(configDir, "logs")
+		lf, err := logfile.New(logfile.Options{
+			LogDir:     logsDir,
+			Prefix:     logfile.WorkerPrefix(),
+			CustomPath: logFilePath,
+		})
+		if err != nil {
+			log.Warn("Failed to create log file: %v", err)
+		} else {
+			defer lf.Close()
+			log.Info("Log file: %s", lf.Path())
+		}
+	}
 
 	// Ensure worktrees directory exists
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
