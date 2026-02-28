@@ -873,7 +873,7 @@ func TestCompletePlan_RetriesStatusUpdate(t *testing.T) {
 	}
 }
 
-func TestCompletePlan_SkipsWorktreeCleanupOnStatusFailure(t *testing.T) {
+func TestCompletePlan_ReturnsErrorOnStatusFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	wtDir := filepath.Join(tmpDir, "worktree")
 	if err := os.MkdirAll(wtDir, 0755); err != nil {
@@ -911,13 +911,17 @@ func TestCompletePlan_SkipsWorktreeCleanupOnStatusFailure(t *testing.T) {
 	plan := &board.Plan{ID: 43, FeatureBranch: "feat/skip-cleanup"}
 	info := &PlanInfo{ID: 43, Name: "Skip Cleanup", Branch: "feat/skip-cleanup"}
 
-	// completePlan should return nil even when Board status update fails
+	// completePlan should return error when Board status update fails,
+	// allowing the completion circuit breaker in processPlan to track it.
 	err := w.completePlan(plan, info, wtDir)
-	if err != nil {
-		t.Fatalf("completePlan() should return nil when only Board status update fails, got: %v", err)
+	if err == nil {
+		t.Fatal("completePlan() should return error when Board status update fails")
+	}
+	if !strings.Contains(err.Error(), "board status update failed") {
+		t.Errorf("Error should mention board status update, got: %v", err)
 	}
 
-	// Worktree should NOT have been cleaned up
+	// Worktree should NOT have been cleaned up (status update failed)
 	if wtMgr.RemoveCalls != 0 {
 		t.Errorf("Expected 0 worktree Remove calls (cleanup should be skipped), got %d", wtMgr.RemoveCalls)
 	}
@@ -928,7 +932,7 @@ func TestCompletePlan_SkipsWorktreeCleanupOnStatusFailure(t *testing.T) {
 	}
 }
 
-func TestCompletePlan_NonRetryableErrorFailsFast(t *testing.T) {
+func TestCompletePlan_NonRetryableErrorReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 	wtDir := filepath.Join(tmpDir, "worktree")
 	if err := os.MkdirAll(wtDir, 0755); err != nil {
@@ -966,9 +970,10 @@ func TestCompletePlan_NonRetryableErrorFailsFast(t *testing.T) {
 	plan := &board.Plan{ID: 99, FeatureBranch: "feat/non-retryable"}
 	info := &PlanInfo{ID: 99, Name: "Non-Retryable", Branch: "feat/non-retryable"}
 
+	// completePlan returns error so the circuit breaker can track it
 	err := w.completePlan(plan, info, wtDir)
-	if err != nil {
-		t.Fatalf("completePlan() should return nil even on non-retryable error, got: %v", err)
+	if err == nil {
+		t.Fatal("completePlan() should return error when Board status update fails")
 	}
 
 	// Non-retryable error should fail after 1 attempt (no retries)
@@ -1161,6 +1166,750 @@ func TestProcessPlan_BlockedStatusUsesRetry(t *testing.T) {
 	// Should have retried the blocked status update (3 calls: 2 failures + 1 success)
 	if blockedUpdateCalls < 3 {
 		t.Errorf("Expected at least 3 blocked UpdatePlanStatus calls (with retries), got %d", blockedUpdateCalls)
+	}
+}
+
+func TestCompletePlan_StatusUpdateBeforeGitOps(t *testing.T) {
+	// Verifies that Board status transitions to complete BEFORE git operations.
+	// Uses an ordered log to track the sequence of calls.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/order-test")
+
+	mockBoard := board.NewMockBoard()
+
+	var callOrder []string
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		callOrder = append(callOrder, fmt.Sprintf("UpdatePlanStatus:%s", status))
+		return &board.Plan{ID: id, Status: status, FeatureBranch: "feat/order-test"}, nil
+	}
+	mockBoard.AddProgressFunc = func(planID int, author, body string) (*board.Progress, error) {
+		callOrder = append(callOrder, "AddProgress")
+		return nil, nil
+	}
+
+	// Use a mock git that records when push happens
+	mockGit := &mockGitForCompletion{
+		pushError: nil,
+		workDir:   wtDir,
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-order-test", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := &Worker{
+		board:             mockBoard,
+		config:            cfg,
+		worktreeManager:   wtMgr,
+		notifier:          &notify.NoopNotifier{},
+		completionMode:    "branch",
+		git:               mockGit,
+		statusRetryConfig: fastCfg,
+	}
+
+	plan := &board.Plan{ID: 70, FeatureBranch: "feat/order-test"}
+	info := &PlanInfo{ID: 70, Name: "Order Test", Branch: "feat/order-test"}
+
+	err := w.completePlan(plan, info, wtDir)
+	if err != nil {
+		t.Fatalf("completePlan() error = %v", err)
+	}
+
+	// Verify ordering: status update must come first
+	if len(callOrder) < 2 {
+		t.Fatalf("Expected at least 2 calls, got %d: %v", len(callOrder), callOrder)
+	}
+	if callOrder[0] != "UpdatePlanStatus:complete" {
+		t.Errorf("First call should be UpdatePlanStatus:complete, got %q", callOrder[0])
+	}
+	if callOrder[1] != "AddProgress" {
+		t.Errorf("Second call should be AddProgress, got %q", callOrder[1])
+	}
+}
+
+func TestCompletePlan_GitFailureAfterStatusUpdate(t *testing.T) {
+	// Verifies that git operation failure after successful status update
+	// does NOT cause completePlan to return an error. The plan stays complete
+	// in Board and the worker moves on.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	// Don't set up a git repo — push will fail, simulating git failure
+
+	mockBoard := board.NewMockBoard()
+
+	var statusUpdated bool
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		if status == board.PlanStatusComplete {
+			statusUpdated = true
+		}
+		return &board.Plan{ID: id, Status: status, FeatureBranch: "feat/git-fail"}, nil
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-git-fail", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+
+	// Test merge mode — checkout will fail because no git repo
+	w := &Worker{
+		board:             mockBoard,
+		config:            cfg,
+		worktreeManager:   wtMgr,
+		notifier:          &notify.NoopNotifier{},
+		completionMode:    "merge",
+		git:               git.NewGit(wtDir), // no actual git repo → merge will fail
+		statusRetryConfig: fastCfg,
+	}
+
+	plan := &board.Plan{ID: 80, FeatureBranch: "feat/git-fail"}
+	info := &PlanInfo{ID: 80, Name: "Git Fail", Branch: "feat/git-fail"}
+
+	// completePlan should return nil even when git operations fail
+	err := w.completePlan(plan, info, wtDir)
+	if err != nil {
+		t.Fatalf("completePlan() should return nil when git fails after status update, got: %v", err)
+	}
+
+	// Board status should have been updated to complete
+	if !statusUpdated {
+		t.Error("Expected Board status to be updated to complete")
+	}
+
+	// Worktree should still be cleaned up (status succeeded)
+	if wtMgr.RemoveCalls != 1 {
+		t.Errorf("Expected 1 worktree Remove call, got %d", wtMgr.RemoveCalls)
+	}
+}
+
+func TestCompletePlan_WorkerMovesOnAfterGitFailure(t *testing.T) {
+	// End-to-end test: verifies that processPlan returns nil (worker moves on)
+	// even when git operations fail during completion.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	// Minimal git repo for runner context but no remote (push will fail)
+	initCmd := "git init && git config user.email test@test.com && git config user.name Test && " +
+		"git commit --allow-empty -m 'initial' && " +
+		"git checkout -b feat/moveon-test"
+	cmd := exec.Command("sh", "-c", initCmd)
+	cmd.Dir = wtDir
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Context", nil
+	}
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
+		}, nil
+	}
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		return &board.Plan{ID: id, Title: "Move On Test", FeatureBranch: "feat/moveon-test", Status: status}, nil
+	}
+
+	mockRunner := &MockBoardRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			return &runner.Result{
+				TextContent: "Done\n<promise>COMPLETE</promise>",
+				IsComplete:  true,
+				Duration:    100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-moveon-test", wtDir)
+
+	var completeCalled bool
+	cfg := config.Defaults()
+	w := NewWorker(WorkerConfig{
+		Board:            mockBoard,
+		ProjectSlug:      "test-project",
+		Config:           cfg,
+		WorktreeManager:  wtMgr,
+		Git:              git.NewGit(tmpDir),
+		MainWorktreePath: tmpDir,
+		Runner:           mockRunner,
+		PromptBuilder:    prompt.NewBuilder(cfg, "", ""),
+		MaxIterations:    5,
+		CompletionMode:   "branch", // push will fail — no remote
+		OnPlanComplete: func(info *PlanInfo, result *runner.LoopResult) {
+			completeCalled = true
+		},
+	})
+
+	plan := &board.Plan{ID: 90, Title: "Move On Test", FeatureBranch: "feat/moveon-test"}
+	info := &PlanInfo{ID: 90, Name: "Move On Test", Branch: "feat/moveon-test"}
+
+	// processPlan should return nil (worker moves on to next plan)
+	err := w.processPlan(context.Background(), plan, info)
+	if err != nil {
+		t.Fatalf("processPlan() should return nil when git fails after completion, got: %v", err)
+	}
+
+	// onPlanComplete callback should have been called
+	if !completeCalled {
+		t.Error("Expected onPlanComplete callback to be called")
+	}
+}
+
+func TestWorker_Run_NonRetryableError_SkipsRetry(t *testing.T) {
+	// When RunOnce returns a non-retryable error, the worker should NOT wait
+	// and retry. It should move on immediately (continue to next iteration).
+	mockBoard := board.NewMockBoard()
+
+	callCount := 0
+	mockBoard.ProjectContextFunc = func(slug string) (*board.AgentContext, error) {
+		callCount++
+		if callCount == 1 {
+			// First call: return a non-retryable error (unauthorized)
+			return nil, fmt.Errorf("unauthorized: invalid API token")
+		}
+		// Second call: return empty queue so worker stops
+		return &board.AgentContext{Plan: board.Plan{ID: 0}}, nil
+	}
+	mockBoard.ListPlansFunc = func(projectSlug, status string) ([]board.Plan, error) {
+		return []board.Plan{}, nil
+	}
+
+	cfg := config.Defaults()
+	w := NewWorker(WorkerConfig{
+		Board:            mockBoard,
+		ProjectSlug:      "test-project",
+		Config:           cfg,
+		MainWorktreePath: "/tmp",
+		PollInterval:     100 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := w.Run(ctx)
+	// Should eventually return context deadline exceeded (after empty queue polling)
+	if err != context.DeadlineExceeded {
+		// Worker may return ErrInterrupted or context error; both acceptable
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			t.Logf("Run() returned: %v (expected context timeout)", err)
+		}
+	}
+
+	// The key assertion: we made at least 2 calls, meaning the worker moved on
+	// from the non-retryable error without blocking forever
+	if callCount < 2 {
+		t.Errorf("Expected at least 2 ProjectContext calls (non-retryable error should be skipped), got %d", callCount)
+	}
+}
+
+func TestWorker_Run_RetryableError_Retries(t *testing.T) {
+	// When RunOnce returns a retryable error, the worker should wait and retry.
+	mockBoard := board.NewMockBoard()
+
+	callCount := 0
+	mockBoard.ProjectContextFunc = func(slug string) (*board.AgentContext, error) {
+		callCount++
+		if callCount <= 2 {
+			// First two calls: return a retryable error (connection refused)
+			return nil, fmt.Errorf("connection refused")
+		}
+		// Third call: return empty queue
+		return &board.AgentContext{Plan: board.Plan{ID: 0}}, nil
+	}
+	mockBoard.ListPlansFunc = func(projectSlug, status string) ([]board.Plan, error) {
+		return []board.Plan{}, nil
+	}
+
+	cfg := config.Defaults()
+	w := NewWorker(WorkerConfig{
+		Board:            mockBoard,
+		ProjectSlug:      "test-project",
+		Config:           cfg,
+		MainWorktreePath: "/tmp",
+		PollInterval:     50 * time.Millisecond, // Short poll for test speed
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_ = w.Run(ctx)
+
+	// Should have retried and eventually gotten to the empty queue
+	if callCount < 3 {
+		t.Errorf("Expected at least 3 ProjectContext calls (retryable errors should be retried), got %d", callCount)
+	}
+}
+
+func TestWorker_Run_ConsecutiveErrors_CircuitBreaker(t *testing.T) {
+	// After DefaultMaxConsecutiveErrs identical errors, the worker should
+	// stop retrying and move on.
+	mockBoard := board.NewMockBoard()
+
+	callCount := 0
+	mockBoard.ProjectContextFunc = func(slug string) (*board.AgentContext, error) {
+		callCount++
+		if callCount <= DefaultMaxConsecutiveErrs+1 {
+			// Return the same retryable error repeatedly
+			return nil, fmt.Errorf("connection refused: same error")
+		}
+		// After circuit breaker trips, return empty queue
+		return &board.AgentContext{Plan: board.Plan{ID: 0}}, nil
+	}
+	mockBoard.ListPlansFunc = func(projectSlug, status string) ([]board.Plan, error) {
+		return []board.Plan{}, nil
+	}
+
+	cfg := config.Defaults()
+	w := NewWorker(WorkerConfig{
+		Board:            mockBoard,
+		ProjectSlug:      "test-project",
+		Config:           cfg,
+		MainWorktreePath: "/tmp",
+		PollInterval:     50 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_ = w.Run(ctx)
+
+	// Should have called at least DefaultMaxConsecutiveErrs+1 times
+	// (the circuit breaker trips after the Nth identical error)
+	if callCount < DefaultMaxConsecutiveErrs+1 {
+		t.Errorf("Expected at least %d calls before circuit breaker, got %d", DefaultMaxConsecutiveErrs+1, callCount)
+	}
+}
+
+func TestProcessPlan_BlocksPlanOnWorktreeError(t *testing.T) {
+	// When worktree setup fails, processPlan should transition the plan to blocked.
+	mockBoard := board.NewMockBoard()
+
+	var blockedPlanID int
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		if status == board.PlanStatusBlocked {
+			blockedPlanID = id
+		}
+		return &board.Plan{ID: id, Status: status}, nil
+	}
+
+	// Worktree manager that always fails
+	failingWtMgr := &failingWorktreeManager{}
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := NewWorker(WorkerConfig{
+		Board:             mockBoard,
+		ProjectSlug:       "test-project",
+		Config:            cfg,
+		WorktreeManager:   failingWtMgr,
+		MainWorktreePath:  "/tmp",
+		StatusRetryConfig: &fastCfg,
+	})
+
+	plan := &board.Plan{ID: 55, Title: "Worktree Fail", FeatureBranch: "feat/wt-fail"}
+	info := &PlanInfo{ID: 55, Name: "Worktree Fail", Branch: "feat/wt-fail"}
+
+	err := w.processPlan(context.Background(), plan, info)
+	if err == nil {
+		t.Fatal("processPlan() should return error when worktree setup fails")
+	}
+
+	if blockedPlanID != 55 {
+		t.Errorf("Expected plan #55 to be blocked, got plan #%d", blockedPlanID)
+	}
+}
+
+// failingWorktreeManager always fails to create worktrees.
+type failingWorktreeManager struct{}
+
+func (f *failingWorktreeManager) Create(name, branch string) (string, error) {
+	return "", fmt.Errorf("worktree creation failed: branch not found")
+}
+
+func (f *failingWorktreeManager) Get(name string) (string, error) {
+	return "", fmt.Errorf("worktree not found")
+}
+
+func (f *failingWorktreeManager) Remove(name string, deleteBranch bool) error {
+	return nil
+}
+
+func (f *failingWorktreeManager) Exists(name string) bool {
+	return false
+}
+
+func TestBlockPlanOnError(t *testing.T) {
+	mockBoard := board.NewMockBoard()
+
+	var blockedIDs []int
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		if status == board.PlanStatusBlocked {
+			blockedIDs = append(blockedIDs, id)
+		}
+		return &board.Plan{ID: id, Status: status}, nil
+	}
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := &Worker{
+		board:             mockBoard,
+		config:            cfg,
+		notifier:          &notify.NoopNotifier{},
+		statusRetryConfig: fastCfg,
+	}
+
+	w.blockPlanOnError(42, fmt.Errorf("test error"))
+
+	if len(blockedIDs) != 1 || blockedIDs[0] != 42 {
+		t.Errorf("Expected plan #42 to be blocked, got %v", blockedIDs)
+	}
+}
+
+func TestCompletionCircuitBreaker_BlocksAfterMaxRetries(t *testing.T) {
+	// After 3 failed completion attempts for the same plan, the plan should be
+	// marked as blocked and the worker should move on (return nil).
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/cb-test")
+
+	mockBoard := board.NewMockBoard()
+
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Context", nil
+	}
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
+		}, nil
+	}
+
+	// Track status updates and progress entries
+	var statusUpdates []string
+	var progressBodies []string
+	var blockedPlanID int
+
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		statusUpdates = append(statusUpdates, status)
+		if status == board.PlanStatusComplete {
+			// Always fail the completion status update to trigger circuit breaker
+			return nil, fmt.Errorf("connection refused")
+		}
+		if status == board.PlanStatusBlocked {
+			blockedPlanID = id
+		}
+		return &board.Plan{ID: id, Title: "CB Test", FeatureBranch: "feat/cb-test", Status: status}, nil
+	}
+
+	mockBoard.AddProgressFunc = func(planID int, author, body string) (*board.Progress, error) {
+		progressBodies = append(progressBodies, body)
+		return nil, nil
+	}
+
+	mockRunner := &MockBoardRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			return &runner.Result{
+				TextContent: "Done\n<promise>COMPLETE</promise>",
+				IsComplete:  true,
+				Duration:    100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-cb-test", wtDir)
+
+	cfg := config.Defaults()
+	cfg.Worker.MaxCompletionRetries = 3
+	// Use 0 retries so completePlan fails immediately (no internal retries)
+	noRetryCfg := retry.RetryConfig{
+		MaxRetries:   0,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     5 * time.Millisecond,
+		JitterFactor: 0,
+	}
+	w := NewWorker(WorkerConfig{
+		Board:             mockBoard,
+		ProjectSlug:       "test-project",
+		Config:            cfg,
+		WorktreeManager:   wtMgr,
+		Git:               git.NewGit(tmpDir),
+		MainWorktreePath:  tmpDir,
+		Runner:            mockRunner,
+		PromptBuilder:     prompt.NewBuilder(cfg, "", ""),
+		MaxIterations:     5,
+		CompletionMode:    "branch",
+		StatusRetryConfig: &noRetryCfg,
+	})
+
+	plan := &board.Plan{ID: 100, Title: "CB Test", FeatureBranch: "feat/cb-test"}
+	info := &PlanInfo{ID: 100, Name: "CB Test", Branch: "feat/cb-test"}
+
+	// Call processPlan 3 times (simulating the worker retrying)
+	for i := 0; i < 3; i++ {
+		err := w.processPlan(context.Background(), plan, info)
+		if i < 2 {
+			// First two attempts should return error (for retry)
+			if err == nil {
+				t.Fatalf("Attempt %d: processPlan() should return error before circuit breaker trips", i+1)
+			}
+		} else {
+			// Third attempt: circuit breaker trips, returns nil to move on
+			if err != nil {
+				t.Fatalf("Attempt %d: processPlan() should return nil when circuit breaker trips, got: %v", i+1, err)
+			}
+		}
+	}
+
+	// Plan should be blocked
+	if blockedPlanID != 100 {
+		t.Errorf("Expected plan #100 to be blocked, got plan #%d", blockedPlanID)
+	}
+
+	// Progress log should contain the error messages (one per failed attempt)
+	completionFailEntries := 0
+	for _, body := range progressBodies {
+		if strings.Contains(body, "Completion failed") {
+			completionFailEntries++
+			if !strings.Contains(body, "connection refused") {
+				t.Errorf("Progress body should include error message, got: %s", body)
+			}
+		}
+	}
+	if completionFailEntries < 3 {
+		t.Errorf("Expected at least 3 completion failure progress entries, got %d (all: %v)", completionFailEntries, progressBodies)
+	}
+}
+
+func TestCompletionCircuitBreaker_ResetsOnSuccess(t *testing.T) {
+	// Verify that the completion attempt counter resets after a successful completion.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/cb-reset")
+
+	mockBoard := board.NewMockBoard()
+
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Context", nil
+	}
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
+		}, nil
+	}
+
+	// Track processPlan invocations. First invocation: all complete status
+	// updates fail (simulates persistent failure). Second invocation: succeed.
+	processPlanCall := 0
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		if status == board.PlanStatusComplete {
+			if processPlanCall == 0 {
+				// First processPlan call: always fail complete status
+				return nil, fmt.Errorf("connection refused")
+			}
+			// Second processPlan call: succeed
+		}
+		return &board.Plan{ID: id, Title: "CB Reset", FeatureBranch: "feat/cb-reset", Status: status}, nil
+	}
+
+	mockRunner := &MockBoardRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			return &runner.Result{
+				TextContent: "Done\n<promise>COMPLETE</promise>",
+				IsComplete:  true,
+				Duration:    100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-cb-reset", wtDir)
+
+	cfg := config.Defaults()
+	// Use a retry config with 0 retries so completePlan fails fast
+	noRetryCfg := retry.RetryConfig{
+		MaxRetries:   0,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     5 * time.Millisecond,
+		JitterFactor: 0,
+	}
+	w := NewWorker(WorkerConfig{
+		Board:             mockBoard,
+		ProjectSlug:       "test-project",
+		Config:            cfg,
+		WorktreeManager:   wtMgr,
+		Git:               git.NewGit(tmpDir),
+		MainWorktreePath:  tmpDir,
+		Runner:            mockRunner,
+		PromptBuilder:     prompt.NewBuilder(cfg, "", ""),
+		MaxIterations:     5,
+		CompletionMode:    "branch",
+		StatusRetryConfig: &noRetryCfg,
+	})
+
+	plan := &board.Plan{ID: 101, Title: "CB Reset", FeatureBranch: "feat/cb-reset"}
+	info := &PlanInfo{ID: 101, Name: "CB Reset", Branch: "feat/cb-reset"}
+
+	// First attempt fails (processPlanCall == 0, all complete status updates fail)
+	err := w.processPlan(context.Background(), plan, info)
+	if err == nil {
+		t.Fatal("First attempt should fail")
+	}
+
+	// Counter should be 1
+	if w.completionAttempts[101] != 1 {
+		t.Errorf("Expected 1 completion attempt, got %d", w.completionAttempts[101])
+	}
+
+	// Allow second invocation to succeed
+	processPlanCall = 1
+
+	// Second attempt succeeds
+	err = w.processPlan(context.Background(), plan, info)
+	if err != nil {
+		t.Fatalf("Second attempt should succeed, got: %v", err)
+	}
+
+	// Counter should be cleared
+	if _, exists := w.completionAttempts[101]; exists {
+		t.Error("Completion attempts should be cleared after success")
+	}
+}
+
+func TestCompletionCircuitBreaker_ConfigurableRetries(t *testing.T) {
+	// Verify that max_completion_retries from config is respected.
+	cfg := config.Defaults()
+	cfg.Worker.MaxCompletionRetries = 5
+
+	w := NewWorker(WorkerConfig{
+		Config:           cfg,
+		MainWorktreePath: "/tmp",
+	})
+
+	if w.maxCompletionRetries != 5 {
+		t.Errorf("maxCompletionRetries = %d, want 5", w.maxCompletionRetries)
+	}
+}
+
+func TestCompletionCircuitBreaker_DefaultRetries(t *testing.T) {
+	// When config doesn't specify max_completion_retries, default should be used.
+	w := NewWorker(WorkerConfig{
+		Config:           config.Defaults(),
+		MainWorktreePath: "/tmp",
+	})
+
+	if w.maxCompletionRetries != DefaultMaxCompletionRetries {
+		t.Errorf("maxCompletionRetries = %d, want %d", w.maxCompletionRetries, DefaultMaxCompletionRetries)
+	}
+}
+
+func TestCompletionCircuitBreaker_NoNewClaudeSessions(t *testing.T) {
+	// When the circuit breaker trips (returns nil), the worker should NOT
+	// re-enter processPlan and spawn a new Claude session for this plan.
+	// This test verifies that processPlan returns nil after the circuit
+	// breaker trips, which means the worker moves on to the next plan.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/no-claude")
+
+	mockBoard := board.NewMockBoard()
+
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Context", nil
+	}
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
+		}, nil
+	}
+
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		if status == board.PlanStatusComplete {
+			return nil, fmt.Errorf("connection refused")
+		}
+		return &board.Plan{ID: id, Title: "No Claude", FeatureBranch: "feat/no-claude", Status: status}, nil
+	}
+
+	runnerCalls := 0
+	mockRunner := &MockBoardRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			runnerCalls++
+			return &runner.Result{
+				TextContent: "Done\n<promise>COMPLETE</promise>",
+				IsComplete:  true,
+				Duration:    100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-no-claude", wtDir)
+
+	cfg := config.Defaults()
+	cfg.Worker.MaxCompletionRetries = 2 // Lower threshold for faster test
+	// Use 0 retries so completePlan fails immediately
+	noRetryCfg := retry.RetryConfig{
+		MaxRetries:   0,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     5 * time.Millisecond,
+		JitterFactor: 0,
+	}
+	w := NewWorker(WorkerConfig{
+		Board:             mockBoard,
+		ProjectSlug:       "test-project",
+		Config:            cfg,
+		WorktreeManager:   wtMgr,
+		Git:               git.NewGit(tmpDir),
+		MainWorktreePath:  tmpDir,
+		Runner:            mockRunner,
+		PromptBuilder:     prompt.NewBuilder(cfg, "", ""),
+		MaxIterations:     5,
+		CompletionMode:    "branch",
+		StatusRetryConfig: &noRetryCfg,
+	})
+
+	plan := &board.Plan{ID: 102, Title: "No Claude", FeatureBranch: "feat/no-claude"}
+	info := &PlanInfo{ID: 102, Name: "No Claude", Branch: "feat/no-claude"}
+
+	// Each processPlan call runs one Claude session (via the iteration loop).
+	// After max_completion_retries (2) fails, the 2nd call returns nil.
+	for i := 0; i < 2; i++ {
+		_ = w.processPlan(context.Background(), plan, info)
+	}
+
+	// The circuit breaker tripped on the 2nd call (returns nil).
+	// Record how many runner calls we had.
+	callsAtTrip := runnerCalls
+
+	// Counter should be cleared after blocking
+	if w.completionAttempts[102] != 0 {
+		t.Errorf("Expected completion attempts to be cleared, got %d", w.completionAttempts[102])
+	}
+
+	// Each processPlan call invoked the runner once (the iteration loop)
+	if callsAtTrip != 2 {
+		t.Errorf("Expected 2 runner calls (one per processPlan), got %d", callsAtTrip)
 	}
 }
 

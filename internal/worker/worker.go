@@ -27,8 +27,10 @@ import (
 
 // Default constants for worker configuration.
 const (
-	DefaultPollInterval  = 30 * time.Second
-	DefaultMaxIterations = 200
+	DefaultPollInterval          = 30 * time.Second
+	DefaultMaxIterations         = 200
+	DefaultMaxConsecutiveErrs    = 3
+	DefaultMaxCompletionRetries  = 3
 )
 
 // DefaultStatusRetryConfig is the retry config for critical Board status updates.
@@ -113,6 +115,10 @@ type Worker struct {
 	statusRetryConfig  retry.RetryConfig
 	processRegistry    *process.Registry
 
+	// Completion circuit breaker: tracks failed completePlan attempts per plan ID.
+	completionAttempts    map[int]int
+	maxCompletionRetries  int
+
 	// Callbacks
 	onPlanStart    func(info *PlanInfo)
 	onPlanComplete func(info *PlanInfo, result *runner.LoopResult)
@@ -169,6 +175,14 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		w.statusRetryConfig = DefaultStatusRetryConfig
 	}
 
+	// Completion circuit breaker
+	w.completionAttempts = make(map[int]int)
+	if cfg.Config != nil && cfg.Config.Worker.MaxCompletionRetries > 0 {
+		w.maxCompletionRetries = cfg.Config.Worker.MaxCompletionRetries
+	} else {
+		w.maxCompletionRetries = DefaultMaxCompletionRetries
+	}
+
 	return w
 }
 
@@ -181,6 +195,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
+
+	var consecutiveErrCount int
+	var lastErrMsg string
 
 	for {
 		select {
@@ -198,7 +215,15 @@ func (w *Worker) Run(ctx context.Context) error {
 
 		// Try to process one plan
 		err := w.RunOnce(ctx)
+		if err == nil {
+			consecutiveErrCount = 0
+			lastErrMsg = ""
+			continue
+		}
+
 		if err == ErrQueueEmpty {
+			consecutiveErrCount = 0
+			lastErrMsg = ""
 			log.Debug("Queue empty, waiting %v before next poll", w.pollInterval)
 			select {
 			case <-ctx.Done():
@@ -210,17 +235,46 @@ func (w *Worker) Run(ctx context.Context) error {
 				continue
 			}
 		}
-		if err != nil {
-			log.Error("Worker error: %v", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case sig := <-sigCh:
-				log.Info("Worker received signal: %v", sig)
-				return ErrInterrupted
-			case <-time.After(w.pollInterval):
-				continue
-			}
+
+		log.Error("Worker error: %v", err)
+
+		// Track consecutive identical errors
+		errMsg := err.Error()
+		if errMsg == lastErrMsg {
+			consecutiveErrCount++
+		} else {
+			consecutiveErrCount = 1
+			lastErrMsg = errMsg
+		}
+
+		// For non-retryable errors, log and continue to next plan immediately.
+		// The plan should already be blocked by processPlan, so just move on.
+		if !retry.IsRetryable(err) {
+			log.Warn("Non-retryable error, moving to next plan: %v", err)
+			consecutiveErrCount = 0
+			lastErrMsg = ""
+			continue
+		}
+
+		// Circuit breaker: if the same error repeats too many times, stop retrying
+		if consecutiveErrCount >= DefaultMaxConsecutiveErrs {
+			log.Error("Circuit breaker: %d consecutive identical errors, moving to next plan", consecutiveErrCount)
+			consecutiveErrCount = 0
+			lastErrMsg = ""
+			continue
+		}
+
+		// Retryable error: wait and retry
+		log.Info("Retryable error (%d/%d consecutive), waiting %v before retry",
+			consecutiveErrCount, DefaultMaxConsecutiveErrs, w.pollInterval)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case sig := <-sigCh:
+			log.Info("Worker received signal: %v", sig)
+			return ErrInterrupted
+		case <-time.After(w.pollInterval):
+			continue
 		}
 	}
 }
@@ -293,11 +347,13 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 	// Ensure worktree exists
 	worktreePath, err := w.ensureWorktree(plan)
 	if err != nil {
-		w.notifyError(info, err)
+		setupErr := fmt.Errorf("ensuring worktree: %w", err)
+		w.blockPlanOnError(plan.ID, setupErr)
+		w.notifyError(info, setupErr)
 		if w.onPlanError != nil {
-			w.onPlanError(info, err)
+			w.onPlanError(info, setupErr)
 		}
-		return fmt.Errorf("ensuring worktree: %w", err)
+		return setupErr
 	}
 
 	log.Info("Using worktree: %s", worktreePath)
@@ -305,11 +361,13 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 	// Create or load execution context
 	execCtx, err := w.loadOrCreateContext(plan, worktreePath)
 	if err != nil {
-		w.notifyError(info, err)
+		setupErr := fmt.Errorf("loading context: %w", err)
+		w.blockPlanOnError(plan.ID, setupErr)
+		w.notifyError(info, setupErr)
 		if w.onPlanError != nil {
-			w.onPlanError(info, err)
+			w.onPlanError(info, setupErr)
 		}
-		return fmt.Errorf("loading context: %w", err)
+		return setupErr
 	}
 
 	// Create the iteration loop
@@ -392,13 +450,43 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 
 		// Complete the plan
 		if err := w.completePlan(plan, info, worktreePath); err != nil {
-			log.Error("Failed to complete plan: %v", err)
+			// Track completion failures for circuit breaker
+			w.completionAttempts[plan.ID]++
+			attempts := w.completionAttempts[plan.ID]
+
+			log.Error("Failed to complete plan (attempt %d/%d): %v", attempts, w.maxCompletionRetries, err)
+
+			// Log the error to Board progress
+			progressMsg := fmt.Sprintf("Completion failed (attempt %d/%d): %v", attempts, w.maxCompletionRetries, err)
+			if _, progressErr := w.board.AddProgress(plan.ID, "ralph", progressMsg); progressErr != nil {
+				log.Warn("Failed to log completion failure to Board: %v", progressErr)
+			}
+
+			if attempts >= w.maxCompletionRetries {
+				// Circuit breaker tripped: block the plan instead of retrying
+				log.Error("Completion circuit breaker: %d failed attempts for plan #%d, marking as blocked", attempts, plan.ID)
+				blockMsg := fmt.Sprintf("Completion failed %d times: %v", attempts, err)
+				w.blockPlanOnError(plan.ID, fmt.Errorf("%s", blockMsg))
+				delete(w.completionAttempts, plan.ID)
+
+				w.notifyError(info, fmt.Errorf("completion circuit breaker: %s", blockMsg))
+				if w.onPlanError != nil {
+					w.onPlanError(info, err)
+				}
+				// Return nil so the worker moves on to the next plan
+				// instead of retrying this plan
+				return nil
+			}
+
 			w.notifyError(info, err)
 			if w.onPlanError != nil {
 				w.onPlanError(info, err)
 			}
 			return fmt.Errorf("completing plan: %w", err)
 		}
+
+		// Completion succeeded — clear the counter
+		delete(w.completionAttempts, plan.ID)
 
 		// Call complete callback
 		if w.onPlanComplete != nil {
@@ -413,14 +501,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 		log.Error("Plan failed: %s - %v", info.Name, loopResult.Error)
 
 		// Mark plan as blocked in Board (with retry)
-		blockedRetrier := retry.NewRetrier(w.statusRetryConfig)
-		if retryErr := blockedRetrier.Do(func() error {
-			_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusBlocked)
-			return err
-		}); retryErr != nil {
-			log.Error("Failed to set plan status to blocked after %d retries: %v", blockedRetrier.Attempts(), retryErr)
-			log.Error("Manual recovery required: board plan status %d --status blocked", plan.ID)
-		}
+		w.blockPlanOnError(plan.ID, loopResult.Error)
 
 		w.notifyError(info, loopResult.Error)
 		if w.onPlanError != nil {
@@ -496,21 +577,43 @@ func (w *Worker) loadOrCreateContext(plan *board.Plan, worktreePath string) (*ru
 }
 
 // completePlan handles the completion workflow (PR creation or merge).
+// Board status is updated to complete BEFORE git operations so that even if
+// git fails (push, merge, PR creation) the plan is not retried in an infinite loop.
 func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath string) error {
+	// Step 1: Update Board status to complete FIRST (critical path, with retry).
+	// This must happen before any git operations so the plan is never re-activated
+	// if merge/PR/push fails.
+	r := retry.NewRetrier(w.statusRetryConfig)
+	if err := r.Do(func() error {
+		_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusComplete)
+		return err
+	}); err != nil {
+		log.Error("Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
+		// Return error so the completion circuit breaker in processPlan can track it.
+		// The circuit breaker will block the plan after max_completion_retries failures.
+		return fmt.Errorf("board status update failed: %w", err)
+	}
+
+	// Step 2: Add progress log entry for completion
+	if _, err := w.board.AddProgress(plan.ID, "ralph", fmt.Sprintf("Plan completed. Running %s completion.", w.completionMode)); err != nil {
+		log.Warn("Failed to add completion progress entry: %v", err)
+	}
+
+	// Step 3: Perform git operations (non-fatal after status update).
+	// Git failures are logged as warnings because the plan IS complete in Board.
 	var prURL string
 
 	switch w.completionMode {
 	case "pr":
 		url, err := w.completePR(plan, info, worktreePath)
 		if err != nil {
-			return err
-		}
-		prURL = url
-
-		// Update Board with PR URL
-		if prURL != "" {
-			if _, err := w.board.UpdatePlan(plan.ID, map[string]string{"pr-url": prURL}); err != nil {
-				log.Warn("Failed to update Board with PR URL: %v", err)
+			log.Warn("Git operation failed after plan completion: %v", err)
+		} else {
+			prURL = url
+			if prURL != "" {
+				if _, err := w.board.UpdatePlan(plan.ID, map[string]string{"pr-url": prURL}); err != nil {
+					log.Warn("Failed to update Board with PR URL: %v", err)
+				}
 			}
 		}
 
@@ -520,7 +623,7 @@ func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath str
 			baseBranch = w.config.Git.BaseBranch
 		}
 		if err := CompleteMerge(info.Branch, baseBranch, w.git); err != nil {
-			return fmt.Errorf("merge completion: %w", err)
+			log.Warn("Git operation failed after plan completion: %v", err)
 		}
 
 	case "branch":
@@ -530,33 +633,19 @@ func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath str
 		}
 		wtGit := git.NewGit(worktreePath)
 		if err := CompleteBranch(info.Branch, baseBranch, wtGit); err != nil {
-			return fmt.Errorf("branch completion: %w", err)
+			log.Warn("Git operation failed after plan completion: %v", err)
 		}
 	}
 
-	// Update Board status to complete with retry (critical path)
-	r := retry.NewRetrier(w.statusRetryConfig)
-	statusUpdateFailed := false
-	if err := r.Do(func() error {
-		_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusComplete)
-		return err
-	}); err != nil {
-		statusUpdateFailed = true
-		log.Error("CRITICAL: Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
-		log.Error("Manual recovery required: board plan status %d --status complete", plan.ID)
-	}
-
-	// Skip worktree cleanup if Board status update failed (preserve work for manual recovery)
-	if statusUpdateFailed {
-		log.Warn("Skipping worktree cleanup because Board status update failed (preserving work for recovery)")
-	} else if w.worktreeManager != nil {
+	// Step 4: Clean up worktree (status update succeeded, safe to remove)
+	if w.worktreeManager != nil {
 		name := branchToWorktreeName(info.Branch)
 		if err := w.worktreeManager.Remove(name, false); err != nil {
 			log.Warn("Failed to remove worktree: %v", err)
 		}
 	}
 
-	// Send completion notification
+	// Step 5: Send completion notification
 	w.sendCompleteNotification(info, prURL)
 
 	return nil
@@ -642,6 +731,20 @@ func toNotifyBlocker(b *runner.Blocker) *notify.Blocker {
 		Action:      b.Action,
 		Resume:      b.Resume,
 		Hash:        b.Hash,
+	}
+}
+
+// blockPlanOnError transitions a plan to blocked status with retry.
+func (w *Worker) blockPlanOnError(planID int, err error) {
+	r := retry.NewRetrier(w.statusRetryConfig)
+	if retryErr := r.Do(func() error {
+		_, err := w.board.UpdatePlanStatus(planID, board.PlanStatusBlocked)
+		return err
+	}); retryErr != nil {
+		log.Error("Failed to set plan status to blocked after %d retries: %v", r.Attempts(), retryErr)
+		log.Error("Manual recovery required: board plan status %d --status blocked", planID)
+	} else {
+		log.Info("Plan #%d transitioned to blocked: %v", planID, err)
 	}
 }
 

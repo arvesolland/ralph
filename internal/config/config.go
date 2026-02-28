@@ -82,8 +82,9 @@ type RunnerConfig struct {
 
 // WorkerRunConfig contains worker runtime settings.
 type WorkerRunConfig struct {
-	Sync         bool   `yaml:"sync"`          // Pull from remote before each queue check
-	SyncInterval string `yaml:"sync_interval"` // Minimum time between syncs (e.g., "60s")
+	Sync                  bool   `yaml:"sync"`                    // Pull from remote before each queue check
+	SyncInterval          string `yaml:"sync_interval"`           // Minimum time between syncs (e.g., "60s")
+	MaxCompletionRetries  int    `yaml:"max_completion_retries"`  // Max times completePlan can fail before plan is blocked (default 3)
 }
 
 // Load reads and parses a YAML config file.
@@ -263,6 +264,9 @@ func mergeConfig(dst, src *Config) {
 	}
 	if src.Worker.SyncInterval != "" {
 		dst.Worker.SyncInterval = src.Worker.SyncInterval
+	}
+	if src.Worker.MaxCompletionRetries > 0 {
+		dst.Worker.MaxCompletionRetries = src.Worker.MaxCompletionRetries
 	}
 
 	// Board
