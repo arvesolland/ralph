@@ -305,3 +305,73 @@ func TestWorkerPrefix(t *testing.T) {
 		t.Errorf("WorkerPrefix() = %q, want %q", got, "worker")
 	}
 }
+
+func TestLogFile_OutputMatchesStdout(t *testing.T) {
+	// Verifies that the log file captures the exact same content written to stdout.
+	// This is important for Foreman and other tools that tail log files remotely.
+	dir := t.TempDir()
+	logsDir := filepath.Join(dir, "logs")
+
+	// Capture what goes to the original stdout by redirecting it to a file
+	captureFile := filepath.Join(dir, "captured-stdout.txt")
+	capture, err := os.Create(captureFile)
+	if err != nil {
+		t.Fatalf("creating capture file: %v", err)
+	}
+
+	origStdout := os.Stdout
+	os.Stdout = capture
+
+	lf, err := New(Options{
+		LogDir: logsDir,
+		Prefix: "match-test",
+	})
+	if err != nil {
+		os.Stdout = origStdout
+		t.Fatalf("New() error: %v", err)
+	}
+
+	// Write multiple lines to stdout (now piped through tee)
+	messages := []string{
+		"line one: starting process\n",
+		"line two: iteration 1 complete\n",
+		"line three: all tasks done\n",
+	}
+	for _, msg := range messages {
+		fmt.Fprint(os.Stdout, msg)
+	}
+
+	// Close logfile (restores original stdout to capture file, drains pipes)
+	lf.Close()
+
+	// Close and restore real stdout
+	capture.Close()
+	os.Stdout = origStdout
+
+	// Read both outputs
+	logContent, err := os.ReadFile(lf.Path())
+	if err != nil {
+		t.Fatalf("reading log file: %v", err)
+	}
+
+	capturedContent, err := os.ReadFile(captureFile)
+	if err != nil {
+		t.Fatalf("reading captured stdout: %v", err)
+	}
+
+	// Both should contain the same messages
+	for _, msg := range messages {
+		trimmed := strings.TrimSpace(msg)
+		if !strings.Contains(string(logContent), trimmed) {
+			t.Errorf("log file missing message %q, content: %s", trimmed, string(logContent))
+		}
+		if !strings.Contains(string(capturedContent), trimmed) {
+			t.Errorf("stdout missing message %q, content: %s", trimmed, string(capturedContent))
+		}
+	}
+
+	// Content should be identical
+	if string(logContent) != string(capturedContent) {
+		t.Errorf("log file and stdout content differ:\nlog file:  %q\nstdout:    %q", string(logContent), string(capturedContent))
+	}
+}

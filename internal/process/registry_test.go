@@ -226,3 +226,112 @@ func TestProcessID(t *testing.T) {
 		t.Error("ProcessID() should match internal processID")
 	}
 }
+
+func TestFullLifecycle_Register_Heartbeat_Deregister(t *testing.T) {
+	mock := board.NewMockBoard()
+
+	var callOrder []string
+
+	mock.RegisterProcessFunc = func(reg *board.ProcessRegistration) (*board.ProcessRegistration, error) {
+		callOrder = append(callOrder, "register")
+		if reg.Mode != "worker" {
+			t.Errorf("Register: Mode = %q, want %q", reg.Mode, "worker")
+		}
+		if reg.LogFile != "/tmp/worker.log" {
+			t.Errorf("Register: LogFile = %q, want %q", reg.LogFile, "/tmp/worker.log")
+		}
+		return reg, nil
+	}
+
+	mock.HeartbeatProcessFunc = func(processID, state string, planID *int) (*board.ProcessRegistration, error) {
+		callOrder = append(callOrder, "heartbeat")
+		if state != "running" {
+			t.Errorf("Heartbeat: state = %q, want %q", state, "running")
+		}
+		if planID == nil || *planID != 10 {
+			t.Errorf("Heartbeat: planID = %v, want 10", planID)
+		}
+		return &board.ProcessRegistration{ProcessID: processID, State: state, PlanID: planID}, nil
+	}
+
+	mock.DeregisterProcessFunc = func(processID string) error {
+		callOrder = append(callOrder, "deregister")
+		return nil
+	}
+
+	r := New(mock, "worker", "/tmp/worker.log")
+
+	// Step 1: Register
+	r.Register()
+	if !r.registered {
+		t.Fatal("should be registered after Register()")
+	}
+
+	// Step 2: Heartbeat
+	planID := 10
+	r.Heartbeat("running", &planID)
+
+	// Step 3: Deregister
+	r.Deregister()
+	if r.registered {
+		t.Fatal("should not be registered after Deregister()")
+	}
+
+	// Verify call order
+	if len(callOrder) != 3 {
+		t.Fatalf("expected 3 calls, got %d: %v", len(callOrder), callOrder)
+	}
+	if callOrder[0] != "register" {
+		t.Errorf("callOrder[0] = %q, want %q", callOrder[0], "register")
+	}
+	if callOrder[1] != "heartbeat" {
+		t.Errorf("callOrder[1] = %q, want %q", callOrder[1], "heartbeat")
+	}
+	if callOrder[2] != "deregister" {
+		t.Errorf("callOrder[2] = %q, want %q", callOrder[2], "deregister")
+	}
+
+	// Verify heartbeat is no-op after deregister
+	r.Heartbeat("running", &planID)
+	if len(callOrder) != 3 {
+		t.Errorf("heartbeat should be no-op after deregister, got %d calls", len(callOrder))
+	}
+}
+
+func TestDeregister_ErrorIsNonFatal(t *testing.T) {
+	mock := board.NewMockBoard()
+	mock.RegisterProcessFunc = func(reg *board.ProcessRegistration) (*board.ProcessRegistration, error) {
+		return reg, nil
+	}
+	mock.DeregisterProcessFunc = func(processID string) error {
+		return fmt.Errorf("network error")
+	}
+
+	r := New(mock, "run", "")
+	r.Register()
+	r.Deregister() // should not panic despite error
+
+	// registered should be set to false even when deregister API call fails
+	if r.registered {
+		t.Error("registered flag should be cleared even on deregister error")
+	}
+}
+
+func TestHeartbeat_ErrorIsNonFatal(t *testing.T) {
+	mock := board.NewMockBoard()
+	mock.RegisterProcessFunc = func(reg *board.ProcessRegistration) (*board.ProcessRegistration, error) {
+		return reg, nil
+	}
+	mock.HeartbeatProcessFunc = func(processID, state string, planID *int) (*board.ProcessRegistration, error) {
+		return nil, fmt.Errorf("heartbeat failed")
+	}
+
+	r := New(mock, "worker", "")
+	r.Register()
+	r.Heartbeat("running", nil) // should not panic despite error
+
+	// Should still be registered (heartbeat failure doesn't change state)
+	if !r.registered {
+		t.Error("should still be registered after heartbeat failure")
+	}
+}
