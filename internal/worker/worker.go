@@ -27,9 +27,10 @@ import (
 
 // Default constants for worker configuration.
 const (
-	DefaultPollInterval       = 30 * time.Second
-	DefaultMaxIterations      = 200
-	DefaultMaxConsecutiveErrs = 3
+	DefaultPollInterval          = 30 * time.Second
+	DefaultMaxIterations         = 200
+	DefaultMaxConsecutiveErrs    = 3
+	DefaultMaxCompletionRetries  = 3
 )
 
 // DefaultStatusRetryConfig is the retry config for critical Board status updates.
@@ -114,6 +115,10 @@ type Worker struct {
 	statusRetryConfig  retry.RetryConfig
 	processRegistry    *process.Registry
 
+	// Completion circuit breaker: tracks failed completePlan attempts per plan ID.
+	completionAttempts    map[int]int
+	maxCompletionRetries  int
+
 	// Callbacks
 	onPlanStart    func(info *PlanInfo)
 	onPlanComplete func(info *PlanInfo, result *runner.LoopResult)
@@ -168,6 +173,14 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		w.statusRetryConfig = *cfg.StatusRetryConfig
 	} else {
 		w.statusRetryConfig = DefaultStatusRetryConfig
+	}
+
+	// Completion circuit breaker
+	w.completionAttempts = make(map[int]int)
+	if cfg.Config != nil && cfg.Config.Worker.MaxCompletionRetries > 0 {
+		w.maxCompletionRetries = cfg.Config.Worker.MaxCompletionRetries
+	} else {
+		w.maxCompletionRetries = DefaultMaxCompletionRetries
 	}
 
 	return w
@@ -437,13 +450,43 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 
 		// Complete the plan
 		if err := w.completePlan(plan, info, worktreePath); err != nil {
-			log.Error("Failed to complete plan: %v", err)
+			// Track completion failures for circuit breaker
+			w.completionAttempts[plan.ID]++
+			attempts := w.completionAttempts[plan.ID]
+
+			log.Error("Failed to complete plan (attempt %d/%d): %v", attempts, w.maxCompletionRetries, err)
+
+			// Log the error to Board progress
+			progressMsg := fmt.Sprintf("Completion failed (attempt %d/%d): %v", attempts, w.maxCompletionRetries, err)
+			if _, progressErr := w.board.AddProgress(plan.ID, "ralph", progressMsg); progressErr != nil {
+				log.Warn("Failed to log completion failure to Board: %v", progressErr)
+			}
+
+			if attempts >= w.maxCompletionRetries {
+				// Circuit breaker tripped: block the plan instead of retrying
+				log.Error("Completion circuit breaker: %d failed attempts for plan #%d, marking as blocked", attempts, plan.ID)
+				blockMsg := fmt.Sprintf("Completion failed %d times: %v", attempts, err)
+				w.blockPlanOnError(plan.ID, fmt.Errorf("%s", blockMsg))
+				delete(w.completionAttempts, plan.ID)
+
+				w.notifyError(info, fmt.Errorf("completion circuit breaker: %s", blockMsg))
+				if w.onPlanError != nil {
+					w.onPlanError(info, err)
+				}
+				// Return nil so the worker moves on to the next plan
+				// instead of retrying this plan
+				return nil
+			}
+
 			w.notifyError(info, err)
 			if w.onPlanError != nil {
 				w.onPlanError(info, err)
 			}
 			return fmt.Errorf("completing plan: %w", err)
 		}
+
+		// Completion succeeded — clear the counter
+		delete(w.completionAttempts, plan.ID)
 
 		// Call complete callback
 		if w.onPlanComplete != nil {
@@ -545,11 +588,10 @@ func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath str
 		_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusComplete)
 		return err
 	}); err != nil {
-		log.Error("CRITICAL: Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
-		log.Error("Manual recovery required: board plan status %d --status complete", plan.ID)
-		// Preserve worktree for manual recovery
-		log.Warn("Skipping worktree cleanup because Board status update failed (preserving work for recovery)")
-		return nil
+		log.Error("Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
+		// Return error so the completion circuit breaker in processPlan can track it.
+		// The circuit breaker will block the plan after max_completion_retries failures.
+		return fmt.Errorf("board status update failed: %w", err)
 	}
 
 	// Step 2: Add progress log entry for completion

@@ -35,5 +35,8 @@ func Defaults() *Config {
 		Completion: CompletionConfig{
 			Mode: "pr",
 		},
+		Worker: WorkerRunConfig{
+			MaxCompletionRetries: 3,
+		},
 	}
 }
