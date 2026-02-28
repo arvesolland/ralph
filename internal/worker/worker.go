@@ -496,21 +496,44 @@ func (w *Worker) loadOrCreateContext(plan *board.Plan, worktreePath string) (*ru
 }
 
 // completePlan handles the completion workflow (PR creation or merge).
+// Board status is updated to complete BEFORE git operations so that even if
+// git fails (push, merge, PR creation) the plan is not retried in an infinite loop.
 func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath string) error {
+	// Step 1: Update Board status to complete FIRST (critical path, with retry).
+	// This must happen before any git operations so the plan is never re-activated
+	// if merge/PR/push fails.
+	r := retry.NewRetrier(w.statusRetryConfig)
+	if err := r.Do(func() error {
+		_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusComplete)
+		return err
+	}); err != nil {
+		log.Error("CRITICAL: Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
+		log.Error("Manual recovery required: board plan status %d --status complete", plan.ID)
+		// Preserve worktree for manual recovery
+		log.Warn("Skipping worktree cleanup because Board status update failed (preserving work for recovery)")
+		return nil
+	}
+
+	// Step 2: Add progress log entry for completion
+	if _, err := w.board.AddProgress(plan.ID, "ralph", fmt.Sprintf("Plan completed. Running %s completion.", w.completionMode)); err != nil {
+		log.Warn("Failed to add completion progress entry: %v", err)
+	}
+
+	// Step 3: Perform git operations (non-fatal after status update).
+	// Git failures are logged as warnings because the plan IS complete in Board.
 	var prURL string
 
 	switch w.completionMode {
 	case "pr":
 		url, err := w.completePR(plan, info, worktreePath)
 		if err != nil {
-			return err
-		}
-		prURL = url
-
-		// Update Board with PR URL
-		if prURL != "" {
-			if _, err := w.board.UpdatePlan(plan.ID, map[string]string{"pr-url": prURL}); err != nil {
-				log.Warn("Failed to update Board with PR URL: %v", err)
+			log.Warn("Git operation failed after plan completion: %v", err)
+		} else {
+			prURL = url
+			if prURL != "" {
+				if _, err := w.board.UpdatePlan(plan.ID, map[string]string{"pr-url": prURL}); err != nil {
+					log.Warn("Failed to update Board with PR URL: %v", err)
+				}
 			}
 		}
 
@@ -520,7 +543,7 @@ func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath str
 			baseBranch = w.config.Git.BaseBranch
 		}
 		if err := CompleteMerge(info.Branch, baseBranch, w.git); err != nil {
-			return fmt.Errorf("merge completion: %w", err)
+			log.Warn("Git operation failed after plan completion: %v", err)
 		}
 
 	case "branch":
@@ -530,33 +553,19 @@ func (w *Worker) completePlan(plan *board.Plan, info *PlanInfo, worktreePath str
 		}
 		wtGit := git.NewGit(worktreePath)
 		if err := CompleteBranch(info.Branch, baseBranch, wtGit); err != nil {
-			return fmt.Errorf("branch completion: %w", err)
+			log.Warn("Git operation failed after plan completion: %v", err)
 		}
 	}
 
-	// Update Board status to complete with retry (critical path)
-	r := retry.NewRetrier(w.statusRetryConfig)
-	statusUpdateFailed := false
-	if err := r.Do(func() error {
-		_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusComplete)
-		return err
-	}); err != nil {
-		statusUpdateFailed = true
-		log.Error("CRITICAL: Failed to set plan status to complete in Board after %d retries: %v", r.Attempts(), err)
-		log.Error("Manual recovery required: board plan status %d --status complete", plan.ID)
-	}
-
-	// Skip worktree cleanup if Board status update failed (preserve work for manual recovery)
-	if statusUpdateFailed {
-		log.Warn("Skipping worktree cleanup because Board status update failed (preserving work for recovery)")
-	} else if w.worktreeManager != nil {
+	// Step 4: Clean up worktree (status update succeeded, safe to remove)
+	if w.worktreeManager != nil {
 		name := branchToWorktreeName(info.Branch)
 		if err := w.worktreeManager.Remove(name, false); err != nil {
 			log.Warn("Failed to remove worktree: %v", err)
 		}
 	}
 
-	// Send completion notification
+	// Step 5: Send completion notification
 	w.sendCompleteNotification(info, prURL)
 
 	return nil

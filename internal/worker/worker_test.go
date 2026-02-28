@@ -1164,3 +1164,202 @@ func TestProcessPlan_BlockedStatusUsesRetry(t *testing.T) {
 	}
 }
 
+func TestCompletePlan_StatusUpdateBeforeGitOps(t *testing.T) {
+	// Verifies that Board status transitions to complete BEFORE git operations.
+	// Uses an ordered log to track the sequence of calls.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	setupWorkerTestGitRepo(t, wtDir, "feat/order-test")
+
+	mockBoard := board.NewMockBoard()
+
+	var callOrder []string
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		callOrder = append(callOrder, fmt.Sprintf("UpdatePlanStatus:%s", status))
+		return &board.Plan{ID: id, Status: status, FeatureBranch: "feat/order-test"}, nil
+	}
+	mockBoard.AddProgressFunc = func(planID int, author, body string) (*board.Progress, error) {
+		callOrder = append(callOrder, "AddProgress")
+		return nil, nil
+	}
+
+	// Use a mock git that records when push happens
+	mockGit := &mockGitForCompletion{
+		pushError: nil,
+		workDir:   wtDir,
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-order-test", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+	w := &Worker{
+		board:             mockBoard,
+		config:            cfg,
+		worktreeManager:   wtMgr,
+		notifier:          &notify.NoopNotifier{},
+		completionMode:    "branch",
+		git:               mockGit,
+		statusRetryConfig: fastCfg,
+	}
+
+	plan := &board.Plan{ID: 70, FeatureBranch: "feat/order-test"}
+	info := &PlanInfo{ID: 70, Name: "Order Test", Branch: "feat/order-test"}
+
+	err := w.completePlan(plan, info, wtDir)
+	if err != nil {
+		t.Fatalf("completePlan() error = %v", err)
+	}
+
+	// Verify ordering: status update must come first
+	if len(callOrder) < 2 {
+		t.Fatalf("Expected at least 2 calls, got %d: %v", len(callOrder), callOrder)
+	}
+	if callOrder[0] != "UpdatePlanStatus:complete" {
+		t.Errorf("First call should be UpdatePlanStatus:complete, got %q", callOrder[0])
+	}
+	if callOrder[1] != "AddProgress" {
+		t.Errorf("Second call should be AddProgress, got %q", callOrder[1])
+	}
+}
+
+func TestCompletePlan_GitFailureAfterStatusUpdate(t *testing.T) {
+	// Verifies that git operation failure after successful status update
+	// does NOT cause completePlan to return an error. The plan stays complete
+	// in Board and the worker moves on.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	// Don't set up a git repo — push will fail, simulating git failure
+
+	mockBoard := board.NewMockBoard()
+
+	var statusUpdated bool
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		if status == board.PlanStatusComplete {
+			statusUpdated = true
+		}
+		return &board.Plan{ID: id, Status: status, FeatureBranch: "feat/git-fail"}, nil
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-git-fail", wtDir)
+
+	cfg := config.Defaults()
+	fastCfg := fastRetryConfig()
+
+	// Test merge mode — checkout will fail because no git repo
+	w := &Worker{
+		board:             mockBoard,
+		config:            cfg,
+		worktreeManager:   wtMgr,
+		notifier:          &notify.NoopNotifier{},
+		completionMode:    "merge",
+		git:               git.NewGit(wtDir), // no actual git repo → merge will fail
+		statusRetryConfig: fastCfg,
+	}
+
+	plan := &board.Plan{ID: 80, FeatureBranch: "feat/git-fail"}
+	info := &PlanInfo{ID: 80, Name: "Git Fail", Branch: "feat/git-fail"}
+
+	// completePlan should return nil even when git operations fail
+	err := w.completePlan(plan, info, wtDir)
+	if err != nil {
+		t.Fatalf("completePlan() should return nil when git fails after status update, got: %v", err)
+	}
+
+	// Board status should have been updated to complete
+	if !statusUpdated {
+		t.Error("Expected Board status to be updated to complete")
+	}
+
+	// Worktree should still be cleaned up (status succeeded)
+	if wtMgr.RemoveCalls != 1 {
+		t.Errorf("Expected 1 worktree Remove call, got %d", wtMgr.RemoveCalls)
+	}
+}
+
+func TestCompletePlan_WorkerMovesOnAfterGitFailure(t *testing.T) {
+	// End-to-end test: verifies that processPlan returns nil (worker moves on)
+	// even when git operations fail during completion.
+	tmpDir := t.TempDir()
+	wtDir := filepath.Join(tmpDir, "worktree")
+	if err := os.MkdirAll(wtDir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	// Minimal git repo for runner context but no remote (push will fail)
+	initCmd := "git init && git config user.email test@test.com && git config user.name Test && " +
+		"git commit --allow-empty -m 'initial' && " +
+		"git checkout -b feat/moveon-test"
+	cmd := exec.Command("sh", "-c", initCmd)
+	cmd.Dir = wtDir
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	mockBoard := board.NewMockBoard()
+	mockBoard.PlanContextTextFunc = func(planID int) (string, error) {
+		return "# Context", nil
+	}
+	mockBoard.PlanContextFunc = func(planID int) (*board.AgentContext, error) {
+		return &board.AgentContext{
+			Stats: board.Stats{TotalTasks: 1, Done: 1},
+		}, nil
+	}
+	mockBoard.UpdatePlanStatusFunc = func(id int, status string) (*board.Plan, error) {
+		return &board.Plan{ID: id, Title: "Move On Test", FeatureBranch: "feat/moveon-test", Status: status}, nil
+	}
+
+	mockRunner := &MockBoardRunner{
+		RunFunc: func(ctx context.Context, p string, opts runner.Options) (*runner.Result, error) {
+			return &runner.Result{
+				TextContent: "Done\n<promise>COMPLETE</promise>",
+				IsComplete:  true,
+				Duration:    100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	wtMgr := newMockWorktreeManager()
+	wtMgr.Register("feat-moveon-test", wtDir)
+
+	var completeCalled bool
+	cfg := config.Defaults()
+	w := NewWorker(WorkerConfig{
+		Board:            mockBoard,
+		ProjectSlug:      "test-project",
+		Config:           cfg,
+		WorktreeManager:  wtMgr,
+		Git:              git.NewGit(tmpDir),
+		MainWorktreePath: tmpDir,
+		Runner:           mockRunner,
+		PromptBuilder:    prompt.NewBuilder(cfg, "", ""),
+		MaxIterations:    5,
+		CompletionMode:   "branch", // push will fail — no remote
+		OnPlanComplete: func(info *PlanInfo, result *runner.LoopResult) {
+			completeCalled = true
+		},
+	})
+
+	plan := &board.Plan{ID: 90, Title: "Move On Test", FeatureBranch: "feat/moveon-test"}
+	info := &PlanInfo{ID: 90, Name: "Move On Test", Branch: "feat/moveon-test"}
+
+	// processPlan should return nil (worker moves on to next plan)
+	err := w.processPlan(context.Background(), plan, info)
+	if err != nil {
+		t.Fatalf("processPlan() should return nil when git fails after completion, got: %v", err)
+	}
+
+	// onPlanComplete callback should have been called
+	if !completeCalled {
+		t.Error("Expected onPlanComplete callback to be called")
+	}
+}
+
