@@ -30,7 +30,10 @@ type MockBoard struct {
 	AddFeedbackFunc     func(planID int, author, body string) (*Feedback, error)
 	CheckCriterionFunc  func(id int) (*Criterion, error)
 	UncheckCriterionFunc func(id int) (*Criterion, error)
-	UpdatePlanFunc      func(id int, fields map[string]string) (*Plan, error)
+	UpdatePlanFunc          func(id int, fields map[string]string) (*Plan, error)
+	RegisterProcessFunc    func(reg *ProcessRegistration) (*ProcessRegistration, error)
+	HeartbeatProcessFunc   func(processID string, state string, planID *int) (*ProcessRegistration, error)
+	DeregisterProcessFunc  func(processID string) error
 }
 
 // Compile-time check that MockBoard implements Board.
@@ -187,4 +190,28 @@ func (m *MockBoard) UpdatePlan(id int, fields map[string]string) (*Plan, error) 
 		return m.UpdatePlanFunc(id, fields)
 	}
 	return nil, nil
+}
+
+func (m *MockBoard) RegisterProcess(reg *ProcessRegistration) (*ProcessRegistration, error) {
+	m.record("RegisterProcess", reg)
+	if m.RegisterProcessFunc != nil {
+		return m.RegisterProcessFunc(reg)
+	}
+	return reg, nil
+}
+
+func (m *MockBoard) HeartbeatProcess(processID string, state string, planID *int) (*ProcessRegistration, error) {
+	m.record("HeartbeatProcess", processID, state, planID)
+	if m.HeartbeatProcessFunc != nil {
+		return m.HeartbeatProcessFunc(processID, state, planID)
+	}
+	return &ProcessRegistration{ProcessID: processID, State: state, PlanID: planID}, nil
+}
+
+func (m *MockBoard) DeregisterProcess(processID string) error {
+	m.record("DeregisterProcess", processID)
+	if m.DeregisterProcessFunc != nil {
+		return m.DeregisterProcessFunc(processID)
+	}
+	return nil
 }

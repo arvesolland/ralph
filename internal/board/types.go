@@ -157,3 +157,14 @@ type TaskListOpts struct {
 	Status    string // Filter by task status (e.g., "todo", "doing").
 	Available bool   // Show only available (unblocked todo) tasks.
 }
+
+// ProcessRegistration represents a registered Ralph process in the Board registry.
+type ProcessRegistration struct {
+	ProcessID string `json:"process_id"`
+	Hostname  string `json:"hostname"`
+	PID       int    `json:"pid"`
+	Mode      string `json:"mode"`      // "worker" or "run"
+	State     string `json:"state"`     // "running", "stopping", "completed", "failed"
+	PlanID    *int   `json:"plan_id"`   // Current plan being worked on (nil for idle worker)
+	LogFile   string `json:"log_file"`  // Path to log file for remote tailing
+}
