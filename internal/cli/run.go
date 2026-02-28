@@ -20,6 +20,7 @@ import (
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/logfile"
 	"github.com/arvesolland/ralph/internal/notify"
+	"github.com/arvesolland/ralph/internal/process"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
 	"github.com/arvesolland/ralph/internal/worker"
@@ -152,6 +153,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	worktreesDir := filepath.Join(configDir, "worktrees")
 
 	// Set up log file (tee stdout/stderr to file)
+	var currentLogFile string
 	if !noLogFile {
 		logsDir := filepath.Join(configDir, "logs")
 		lf, err := logfile.New(logfile.Options{
@@ -163,9 +165,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 			log.Warn("Failed to create log file: %v", err)
 		} else {
 			defer lf.Close()
-			log.Info("Log file: %s", lf.Path())
+			currentLogFile = lf.Path()
+			log.Info("Log file: %s", currentLogFile)
 		}
 	}
+
+	// Register with Board process registry
+	procRegistry := process.New(boardClient, "run", currentLogFile)
+	procRegistry.Register()
+	defer procRegistry.Deregister()
 
 	// Ensure worktrees directory exists
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
@@ -317,6 +325,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 		WorktreePath:     worktreePath,
 		IterationTimeout: iterationTimeout,
 		OnIteration: func(iteration int, result *runner.Result) {
+			// Send process heartbeat
+			planID := plan.ID
+			procRegistry.Heartbeat("running", &planID)
+
 			log.Info("Iteration %d/%d complete", iteration, runMaxIterations)
 			if result.IsComplete {
 				log.Info("Completion marker detected")
@@ -388,6 +400,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	go func() {
 		sig := <-sigCh
 		log.Warn("Received signal %v, stopping after current iteration...", sig)
+		procRegistry.Deregister()
 		cancel()
 	}()
 

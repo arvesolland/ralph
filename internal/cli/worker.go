@@ -15,6 +15,7 @@ import (
 	"github.com/arvesolland/ralph/internal/git"
 	"github.com/arvesolland/ralph/internal/log"
 	"github.com/arvesolland/ralph/internal/logfile"
+	"github.com/arvesolland/ralph/internal/process"
 	"github.com/arvesolland/ralph/internal/prompt"
 	"github.com/arvesolland/ralph/internal/runner"
 	"github.com/arvesolland/ralph/internal/worker"
@@ -156,6 +157,7 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	worktreesDir := filepath.Join(configDir, "worktrees")
 
 	// Set up log file (tee stdout/stderr to file)
+	var currentLogFile string
 	if !noLogFile {
 		logsDir := filepath.Join(configDir, "logs")
 		lf, err := logfile.New(logfile.Options{
@@ -167,9 +169,15 @@ func runWorker(cmd *cobra.Command, args []string) error {
 			log.Warn("Failed to create log file: %v", err)
 		} else {
 			defer lf.Close()
-			log.Info("Log file: %s", lf.Path())
+			currentLogFile = lf.Path()
+			log.Info("Log file: %s", currentLogFile)
 		}
 	}
+
+	// Register with Board process registry
+	procRegistry := process.New(boardClient, "worker", currentLogFile)
+	procRegistry.Register()
+	defer procRegistry.Deregister()
 
 	// Ensure worktrees directory exists
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
@@ -210,6 +218,7 @@ func runWorker(cmd *cobra.Command, args []string) error {
 		SyncInterval:     syncInterval,
 		PushAfterIteration: workerPush,
 		IterationTimeout:   iterationTimeout,
+		ProcessRegistry:    procRegistry,
 		OnPlanStart: func(info *worker.PlanInfo) {
 			log.Success("=== Starting plan: %s ===", info.Name)
 			log.Info("Branch: %s", info.Branch)
@@ -244,6 +253,7 @@ func runWorker(cmd *cobra.Command, args []string) error {
 	go func() {
 		sig := <-sigCh
 		log.Warn("Received signal %v, stopping after current iteration...", sig)
+		procRegistry.Deregister()
 		cancel()
 	}()
 
