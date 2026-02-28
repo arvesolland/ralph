@@ -27,8 +27,9 @@ import (
 
 // Default constants for worker configuration.
 const (
-	DefaultPollInterval  = 30 * time.Second
-	DefaultMaxIterations = 200
+	DefaultPollInterval       = 30 * time.Second
+	DefaultMaxIterations      = 200
+	DefaultMaxConsecutiveErrs = 3
 )
 
 // DefaultStatusRetryConfig is the retry config for critical Board status updates.
@@ -182,6 +183,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 
+	var consecutiveErrCount int
+	var lastErrMsg string
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -198,7 +202,15 @@ func (w *Worker) Run(ctx context.Context) error {
 
 		// Try to process one plan
 		err := w.RunOnce(ctx)
+		if err == nil {
+			consecutiveErrCount = 0
+			lastErrMsg = ""
+			continue
+		}
+
 		if err == ErrQueueEmpty {
+			consecutiveErrCount = 0
+			lastErrMsg = ""
 			log.Debug("Queue empty, waiting %v before next poll", w.pollInterval)
 			select {
 			case <-ctx.Done():
@@ -210,17 +222,46 @@ func (w *Worker) Run(ctx context.Context) error {
 				continue
 			}
 		}
-		if err != nil {
-			log.Error("Worker error: %v", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case sig := <-sigCh:
-				log.Info("Worker received signal: %v", sig)
-				return ErrInterrupted
-			case <-time.After(w.pollInterval):
-				continue
-			}
+
+		log.Error("Worker error: %v", err)
+
+		// Track consecutive identical errors
+		errMsg := err.Error()
+		if errMsg == lastErrMsg {
+			consecutiveErrCount++
+		} else {
+			consecutiveErrCount = 1
+			lastErrMsg = errMsg
+		}
+
+		// For non-retryable errors, log and continue to next plan immediately.
+		// The plan should already be blocked by processPlan, so just move on.
+		if !retry.IsRetryable(err) {
+			log.Warn("Non-retryable error, moving to next plan: %v", err)
+			consecutiveErrCount = 0
+			lastErrMsg = ""
+			continue
+		}
+
+		// Circuit breaker: if the same error repeats too many times, stop retrying
+		if consecutiveErrCount >= DefaultMaxConsecutiveErrs {
+			log.Error("Circuit breaker: %d consecutive identical errors, moving to next plan", consecutiveErrCount)
+			consecutiveErrCount = 0
+			lastErrMsg = ""
+			continue
+		}
+
+		// Retryable error: wait and retry
+		log.Info("Retryable error (%d/%d consecutive), waiting %v before retry",
+			consecutiveErrCount, DefaultMaxConsecutiveErrs, w.pollInterval)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case sig := <-sigCh:
+			log.Info("Worker received signal: %v", sig)
+			return ErrInterrupted
+		case <-time.After(w.pollInterval):
+			continue
 		}
 	}
 }
@@ -293,11 +334,13 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 	// Ensure worktree exists
 	worktreePath, err := w.ensureWorktree(plan)
 	if err != nil {
-		w.notifyError(info, err)
+		setupErr := fmt.Errorf("ensuring worktree: %w", err)
+		w.blockPlanOnError(plan.ID, setupErr)
+		w.notifyError(info, setupErr)
 		if w.onPlanError != nil {
-			w.onPlanError(info, err)
+			w.onPlanError(info, setupErr)
 		}
-		return fmt.Errorf("ensuring worktree: %w", err)
+		return setupErr
 	}
 
 	log.Info("Using worktree: %s", worktreePath)
@@ -305,11 +348,13 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 	// Create or load execution context
 	execCtx, err := w.loadOrCreateContext(plan, worktreePath)
 	if err != nil {
-		w.notifyError(info, err)
+		setupErr := fmt.Errorf("loading context: %w", err)
+		w.blockPlanOnError(plan.ID, setupErr)
+		w.notifyError(info, setupErr)
 		if w.onPlanError != nil {
-			w.onPlanError(info, err)
+			w.onPlanError(info, setupErr)
 		}
-		return fmt.Errorf("loading context: %w", err)
+		return setupErr
 	}
 
 	// Create the iteration loop
@@ -413,14 +458,7 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 		log.Error("Plan failed: %s - %v", info.Name, loopResult.Error)
 
 		// Mark plan as blocked in Board (with retry)
-		blockedRetrier := retry.NewRetrier(w.statusRetryConfig)
-		if retryErr := blockedRetrier.Do(func() error {
-			_, err := w.board.UpdatePlanStatus(plan.ID, board.PlanStatusBlocked)
-			return err
-		}); retryErr != nil {
-			log.Error("Failed to set plan status to blocked after %d retries: %v", blockedRetrier.Attempts(), retryErr)
-			log.Error("Manual recovery required: board plan status %d --status blocked", plan.ID)
-		}
+		w.blockPlanOnError(plan.ID, loopResult.Error)
 
 		w.notifyError(info, loopResult.Error)
 		if w.onPlanError != nil {
@@ -651,6 +689,20 @@ func toNotifyBlocker(b *runner.Blocker) *notify.Blocker {
 		Action:      b.Action,
 		Resume:      b.Resume,
 		Hash:        b.Hash,
+	}
+}
+
+// blockPlanOnError transitions a plan to blocked status with retry.
+func (w *Worker) blockPlanOnError(planID int, err error) {
+	r := retry.NewRetrier(w.statusRetryConfig)
+	if retryErr := r.Do(func() error {
+		_, err := w.board.UpdatePlanStatus(planID, board.PlanStatusBlocked)
+		return err
+	}); retryErr != nil {
+		log.Error("Failed to set plan status to blocked after %d retries: %v", r.Attempts(), retryErr)
+		log.Error("Manual recovery required: board plan status %d --status blocked", planID)
+	} else {
+		log.Info("Plan #%d transitioned to blocked: %v", planID, err)
 	}
 }
 
