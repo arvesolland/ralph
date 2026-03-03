@@ -383,6 +383,17 @@ make release-snapshot
 make release-dry-run
 ```
 
+## Prod Server
+
+Ralph runs on the same DigitalOcean droplet as Foreman and Spark, managed by Laravel Forge.
+
+- **Server:** `forge@170.64.244.137`
+- **Binary:** `~/.local/bin/ralph` (in PATH via `.bashrc`)
+- **Update after release:**
+  ```bash
+  ssh forge@170.64.244.137 "curl -sL https://github.com/arvesolland/ralph/releases/download/v2.X.Y/ralph_2.X.Y_linux_amd64.tar.gz | tar xz ralph && mv ralph ~/.local/bin/ralph && ralph version"
+  ```
+
 ## Gotchas
 
 - **Board is required**: Ralph needs `board` in PATH and Board configuration in `.ralph/config.yaml`. Run `ralph init` to set up.
