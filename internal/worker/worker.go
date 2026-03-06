@@ -500,8 +500,11 @@ func (w *Worker) processPlan(ctx context.Context, plan *board.Plan, info *PlanIn
 	if loopResult.Error != nil {
 		log.Error("Plan failed: %s - %v", info.Name, loopResult.Error)
 
-		// Mark plan as blocked in Board (with retry)
-		w.blockPlanOnError(plan.ID, loopResult.Error)
+		// Don't block the plan on user-initiated termination (Ctrl+C)
+		if !errors.Is(loopResult.Error, context.Canceled) {
+			// Mark plan as blocked in Board (with retry)
+			w.blockPlanOnError(plan.ID, loopResult.Error)
+		}
 
 		w.notifyError(info, loopResult.Error)
 		if w.onPlanError != nil {
