@@ -342,14 +342,12 @@ func (c *Client) UpdatePlan(id int, fields map[string]string) (*Plan, error) {
 // RegisterProcess registers a Ralph process in the Board process registry.
 func (c *Client) RegisterProcess(reg *ProcessRegistration) (*ProcessRegistration, error) {
 	args := []string{"process", "register",
-		"--process-id", reg.ProcessID,
 		"--hostname", reg.Hostname,
 		"--pid", strconv.Itoa(reg.PID),
 		"--mode", reg.Mode,
-		"--state", reg.State,
 	}
 	if reg.PlanID != nil {
-		args = append(args, "--plan-id", strconv.Itoa(*reg.PlanID))
+		args = append(args, "--plan", strconv.Itoa(*reg.PlanID))
 	}
 	if reg.LogFile != "" {
 		args = append(args, "--log-file", reg.LogFile)
@@ -372,7 +370,7 @@ func (c *Client) RegisterProcess(reg *ProcessRegistration) (*ProcessRegistration
 func (c *Client) HeartbeatProcess(processID string, state string, planID *int) (*ProcessRegistration, error) {
 	args := []string{"process", "heartbeat", processID, "--state", state}
 	if planID != nil {
-		args = append(args, "--plan-id", strconv.Itoa(*planID))
+		args = append(args, "--plan", strconv.Itoa(*planID))
 	}
 	data, err := c.exec(args...)
 	if err != nil {
